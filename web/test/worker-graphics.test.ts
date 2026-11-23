@@ -8,7 +8,15 @@ import { createRequire } from "node:module";
 import { mock, type TestContext, test } from "node:test";
 import { format } from "node:util";
 import { brotliCompressSync } from "node:zlib";
-import { IDLE_MS, landPart, PART_HEADER, partRegion, retryPart } from "../src/engine/lazy-part.ts";
+import {
+  failPart,
+  IDLE_MS,
+  landPart,
+  PART_HEADER,
+  partReason,
+  partRegion,
+  retryPart,
+} from "../src/engine/lazy-part.ts";
 import { packGraphics } from "../src/engine/snapshot.ts";
 import type { FromWorker } from "../src/engine/types.ts";
 import { graphicsWorker } from "../src/engine/worker-graphics.ts";
@@ -191,6 +199,22 @@ test("a graph after the write answers at once: the part is not unpacked or writt
   w.g.runEnded();
 });
 
+test("a graph that finds the part failed asks the page once for another fetch, naming the copy it read; that fetch failing too is its answer", () => {
+  const w = part();
+  failPart(w.region, partReason("the graphics files could not be downloaded (offline)"));
+  w.g.startupAnswered();
+  w.g.runArrived();
+  w.g.runStarts();
+
+  assert.equal(w.wait(), "pending");
+  assert.deepEqual(w.posted, [{ graphics: "again", copy: 0 }]);
+  retryPart(w.region);
+  failPart(w.region, partReason("the graphics files could not be downloaded (offline again)"));
+  assert.match(w.wait(), /offline again/);
+  assert.deepEqual(w.posted, [{ graphics: "again", copy: 0 }], "asked once");
+  w.g.runEnded();
+});
+
 test("race 13: a graph that finds a copy damaged while the browser's decoder unpacks it: the decoder's late result is dropped, not written again", async (t) => {
   const native = heldDecoder(t);
   const w = part({ failWrites: 1, page: true });
@@ -204,7 +228,7 @@ test("race 13: a graph that finds a copy damaged while the browser's decoder unp
   native.release();
   await sleep(3 * IDLE_MS);
   assert.deepEqual(w.written, [1], "copy 1 written once");
-  assert.deepEqual(w.posted, [{ graphics: "damaged" }]);
+  assert.deepEqual(w.posted, [{ graphics: "damaged", copy: 0 }]);
 });
 
 test("one browser decode at a time: a fresh copy that lands while the decoder still runs on a damaged one waits for it, then is unpacked and written", async (t) => {
@@ -262,7 +286,7 @@ for (const brotli of [undefined, "wasm"] as const)
     await until(() => w.written.length === 2, "copy 2 written while idle");
     assert.deepEqual(w.written, [1, 2]);
     assert.equal(w.wait(), "");
-    assert.deepEqual(w.posted, [{ graphics: "damaged" }]);
+    assert.deepEqual(w.posted, [{ graphics: "damaged", copy: 0 }]);
   });
 
 test("damage the page has not acted on yet: the next graph says it, and the one after waits rather than unpack that copy again", async () => {

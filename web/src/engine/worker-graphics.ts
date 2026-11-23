@@ -92,7 +92,7 @@ export function graphicsWorker(env: GraphicsEnv) {
     // every phase a step unpacks or writes in names its copy
     rec.damage = { copy: "copy" in rec.unpack ? rec.unpack.copy : -1, why, said: false };
     if (rec.unpack.phase === "unpacking" || rec.unpack.phase === "unpacked") rec.unpack = { phase: "none" };
-    env.post({ graphics: "damaged" });
+    env.post({ graphics: "damaged", copy: rec.damage.copy });
     console.warn(`[dofile] ${why}`);
     return why;
   }
@@ -177,8 +177,11 @@ export function graphicsWorker(env: GraphicsEnv) {
             rec.damage!.said = true;
             return rec.damage!.why;
           case "ask-again":
-            if ("value" in read) rec.run.askedOn = read.value.copy;
-            env.post({ graphics: "again" });
+            // waitStep asks only after a read that gave the part
+            if ("value" in read) {
+              rec.run.askedOn = read.value.copy;
+              env.post({ graphics: "again", copy: read.value.copy });
+            }
             waitSeq(rec.part!.region!, read.seq, ms);
             return "pending";
           case "wait":

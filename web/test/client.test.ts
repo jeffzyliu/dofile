@@ -1235,7 +1235,8 @@ function lazyPage(fetch: Fetch, caches: ReturnType<typeof fakeCaches>) {
     seen.push(p);
   });
   const header = () => [...new Int32Array(got.sab!, 0, 3)]; // [state, bytes, tries]
-  const say = (graphics: string) => got.port!.onmessage!({ data: { graphics } });
+  // the worker's again or damaged, about the region's copy unless another is named
+  const say = (graphics: string, copy = header()[2]) => got.port!.onmessage!({ data: { graphics, copy } });
   return { eng, got, told, states, seen, header, say };
 }
 const partBytes = (sab: SharedArrayBuffer) => new Uint8Array(sab, PART_HEADER, PART.size).slice();
@@ -1458,6 +1459,35 @@ test("graphics part: an older build's part that failed is not fetched again when
   await until(() => page.states.at(-1) === "landed", "the new build's part landed");
   await sleep(20);
   assert.equal(f.modes.length, 3, "only the new build's part is fetched");
+});
+
+test("graphics part: an `again` or `damaged` naming a copy the page has replaced is dropped: the same damage said by two graphs, a late one after the next copy landed (race 13), a late again", async () => {
+  const caches = fakeCaches();
+  const f = partFetch([1, 2, "offline"]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "copy 0 landed");
+
+  page.say("damaged", 0);
+  page.say("damaged", 0); // a second graph of the same run
+  await f.release();
+  await until(() => page.states.at(-1) === "landed" && f.modes.length === 2, "copy 1 landed");
+  page.say("damaged", 0); // late: copy 1 is a good copy
+  await sleep(20);
+  assert.equal(f.modes.length, 2);
+  assert.deepEqual(page.header(), [PART_LANDED, PART.size, 1], "copy 1 kept");
+
+  page.say("damaged", 1); // right after a damaged copy: decision B
+  page.say("again", 1);
+  await f.release();
+  await until(() => page.states.at(-1) === "failed" && f.modes.length === 3, "copy 2 failed");
+  page.say("again", 1); // late: copy 2's failure is for the next graph to find
+  await sleep(20);
+  assert.equal(f.modes.length, 3);
+  assert.equal(page.header()[0], PART_FAILED);
+  assert.equal(page.header()[2], 2);
 });
 
 // what the listeners saw, one line each: the state, the bytes received, and the reason's first words when failed

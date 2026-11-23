@@ -463,10 +463,11 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   }
 
   // A part that failed is fetched again; the worker sees it pending, and a waiting graph waits for it. Failed has no
-  // fetch on its way: a fetch ends in the same step as its write.
-  #retryGraphics(part: GraphicsPart): void {
+  // fetch on its way: a fetch ends in the same step as its write. `copy`: the one an `again` is about (null: online).
+  #retryGraphics(part: GraphicsPart, copy: number | null): void {
     const region = this.#graphics === part ? part.region : null;
-    if (!region || readOwnPart(region).state !== "failed") return;
+    const now = region && readOwnPart(region);
+    if (!region || now?.state !== "failed" || (copy !== null && now.copy !== copy)) return;
     this.#refetch(part, region);
   }
 
@@ -480,12 +481,12 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // copy fetched right after a damaged copy is damaged too: the part fails instead, and only a graph's `again` or the
   // browser back online fetches it again (the worker's damage is tied to its copy, so without this a part that fails on
   // every copy would be fetched and unpacked in a loop).
-  #refetchDamaged(part: GraphicsPart): void {
+  #refetchDamaged(part: GraphicsPart, copy: number): void {
     const region = this.#graphics === part ? part.region : null;
     const now = region && readOwnPart(region);
-    if (!region || now?.state !== "landed") return;
-    const again = part.damagedCopy !== null && now.copy === part.damagedCopy + 1;
-    part.damagedCopy = now.copy;
+    if (!region || now?.state !== "landed" || now.copy !== copy) return;
+    const again = part.damagedCopy !== null && copy === part.damagedCopy + 1;
+    part.damagedCopy = copy;
     part.fresh = true;
     if (!again) {
       this.#refetch(part, region); // its fetch drops the copy from the Cache first
@@ -563,7 +564,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       "online",
       () => {
         part.listening = false;
-        this.#retryGraphics(part);
+        this.#retryGraphics(part, null);
       },
       { once: true },
     );
@@ -593,10 +594,11 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     return out.subarray(0, n);
   }
 
-  // A graph found the part failed ("again") or damaged. Only with a shared buffer: without one boot wrote the part.
+  // A graph found the part failed ("again") or damaged, on the copy the message names: a message about a copy the page
+  // has replaced is dropped. Only with a shared buffer: without one boot wrote the part.
   #workerSaysGraphics(part: GraphicsPart, m: Extract<FromWorker, { graphics: string }>) {
-    if (m.graphics === "damaged") this.#refetchDamaged(part);
-    else this.#retryGraphics(part);
+    if (m.graphics === "damaged") this.#refetchDamaged(part, m.copy);
+    else this.#retryGraphics(part, m.copy);
   }
 
   // ---- Lifecycle: only the effect performer calls these ----

@@ -765,10 +765,11 @@ interface LifecycleOps {                         // sent only by the transport's
   graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
-// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; a copy that
-// will not unpack or write posts {graphics: "damaged"}, and the page fetches it again past the HTTP cache, except the
-// copy fetched right after a damaged one, which fails the part until a graph's "again"; the buffer's layout, the header
-// and the states: src/engine/lazy-part.ts);
+// start files, in `sab` (a graph that finds it failed posts {graphics: "again", copy} and waits for one more fetch; a copy
+// that will not unpack or write posts {graphics: "damaged", copy}, and the page fetches it again past the HTTP cache,
+// except the copy fetched right after a damaged one, which fails the part until a graph's "again" or the browser back
+// online; each names the copy it is about, and the page drops one about a copy it has replaced, or from an ended worker;
+// the buffer's layout, the header and the states: src/engine/lazy-part.ts);
 // `sab` null (no SharedArrayBuffer): the part is a start file (`download()`), and `boot` reads it as `mount` reads the
 // heap (the snapshot's Cache, else the network), unpacks and writes it before it answers; a part that will not unpack or
 // write is deleted from the Cache and fails the start, as a damaged heap does. No {graphics} message is sent then. With
@@ -792,7 +793,7 @@ type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
 type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: number; error: string; name: string; type?: string }
                | { id: number; log: string }    // a chunk of a running run's log (OQ-1)
                | { stage: Stage }               // a start-up stage began
-               | { graphics: "again" | "damaged" };   // the lazy graphics part in `sab` (below)
+               | { graphics: "again" | "damaged"; copy: number };   // the lazy graphics part in `sab` (below)
 // `mount`'s arguments: the start's folders, and for a snapshot start the build's list (built, and the two big files)
 type MountArgs = { indexURL?: string; brotli?: string }
   & ({ snapshot: string; built: number; files: SnapshotFiles } | { snapshot?: undefined; built?: undefined; files?: undefined });
