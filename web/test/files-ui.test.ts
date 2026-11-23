@@ -17,6 +17,7 @@ const Ops = await import("../src/app/files/ops.ts");
 const Up = await import("../src/app/files/upload.ts");
 const { fileTurn } = await import("../src/app/files/turns.ts");
 const T = await import("../src/app/files/tree.ts");
+const P = await import("../src/app/paths.ts");
 const { formatSize } = await import("../src/app/bytes.ts");
 const { fileCommand } = await import("../src/stata/quote.ts");
 
@@ -133,8 +134,8 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.equal(T.rowCount("x"), "1 row");
   assert.match(T.nameProblem("a\nb.do", "", taken) ?? "", /line break/);
   assert.match(T.nameProblem("a\tb.do", "", taken) ?? "", /line break/);
-  assert.equal(T.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
-  assert.equal(T.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
+  assert.equal(P.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
+  assert.equal(P.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
   const info = (path: string, dir = false) => ({ path, dir, size: 0, mtime: 0 });
   const kept = [info("a.do"), info("data", true), info("data/c.do"), info("pkg/m.do")];
   assert.equal(T.folderOrAbove("data", kept), "data");

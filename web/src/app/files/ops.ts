@@ -5,11 +5,12 @@ import { batch } from "@preact/signals-core";
 import { StoreConflict } from "../../engine/store.ts";
 import { zipParts } from "../../engine/zip.ts";
 import { close, closeUnder, moved, retype, tabs } from "../editor/documents.ts";
+import { movedPath, within } from "../paths.ts";
 import { addBanner, banners, files, runMoved, say } from "../state.ts";
 import { store } from "../store.ts";
 import { decodeText, noteNotText } from "./open.ts";
 import { saveAs } from "./save.ts";
-import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
+import { baseName, extOf, freeName, joinPath, parentOf } from "./tree.ts";
 import { fileTurn, type Io, type Turn } from "./turns.ts";
 
 /** A failure handler for a call whose promise nobody awaits: the cause to the console, `said` to the visitor. */

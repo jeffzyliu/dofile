@@ -4,7 +4,7 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
-import { movedPath, within } from "./files/tree.ts";
+import { movedPath, within } from "./paths.ts";
 import type {
   Banner,
   BrowseRows,
