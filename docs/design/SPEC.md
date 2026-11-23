@@ -667,7 +667,9 @@ As built:
   when that is one) and no `kind`; every other failure is a client error with a `kind` (an unreachable list:
   `failed`/`download`). It checks the list's build (`checkBuild`, below) before fetching anything, fetches with
   `cache: "no-cache"`, and never caches a file whose byte count is not the listed size.
-  `download()` is the Cache's writer for the start files; the worker only reads it. A lazy snapshot's graphics part is the
+  `download()` is the Cache's writer for the start files; the worker only reads it. Without a SharedArrayBuffer (no
+  cross-origin isolation) a lazy snapshot's graphics part is a start file: `download()` fetches it with the others and
+  counts it (`total` is the whole `download`), and `cached()` checks it. With one, the part is the
   one other entry: the page's `#graphics` (client.ts) puts it in the same Cache, only once the part has arrived whole at its
   listed size and the build's heap is already there, and `download()`'s clean-up keeps it (the list names it in
   `snapshot.graphics`). `download()`'s `total` is the list's `download` less the part (what comes before the start); the
@@ -765,11 +767,10 @@ interface LifecycleOps {                         // sent only by the transport's
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
 // start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; the
 // buffer's layout, the header and the states: src/engine/lazy-part.ts);
-// `sab` null (no SharedArrayBuffer): the worker fetches the part itself once started, and the page never does (a graph
-// that finds it missing stops that fetch and makes a synchronous request); the worker tells the page how it goes, for the
-// "Graphs loading" ring and the download total: {graphics: "fetching"}, {graphics: "progress", received}, {graphics: "landed"},
-// {graphics: "failed", why}, and {graphics: "damaged"} when it dropped its copy (its next fetch skips the HTTP cache). Only a graph waits for it. Nothing of it happens
-// in the worker before `startup` is answered; then the browser's own decoder (off the thread) unpacks it once it is there,
+// `sab` null (no SharedArrayBuffer): the part is a start file (`download()`), and `boot` reads it as `mount` reads the
+// heap (the snapshot's Cache, else the network), unpacks and writes it before it answers; a part that will not unpack or
+// write is deleted from the Cache and fails the start, as a damaged heap does. No {graphics} message is sent then. With
+// `sab`, only a graph waits for the part. Nothing of it happens in the worker before `startup` is answered; then the browser's own decoder (off the thread) unpacks it once it is there,
 // and a brotli-wasm unpack, the write and the import of what a first graph needs run only once the engine has been idle
 // (no run sent or running) for 1 s, one short step per task.
 type BootArgs = { wheel: Wheel; extraWheels?: Wheel[]; interruptBuffer?: Int32Array | null;
@@ -789,8 +790,7 @@ type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
 type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: number; error: string; name: string; type?: string }
                | { id: number; log: string }    // a chunk of a running run's log (OQ-1)
                | { stage: Stage }               // a start-up stage began
-               | { graphics: "again" | "damaged" | "fetching" | "landed" }   // the lazy graphics part (below)
-               | { graphics: "progress"; received: number } | { graphics: "failed"; why: string };
+               | { graphics: "again" | "damaged" };   // the lazy graphics part in `sab` (below)
 // `mount`'s arguments: the start's folders, and for a snapshot start the build's list (built, and the two big files)
 type MountArgs = { indexURL?: string; brotli?: string }
   & ({ snapshot: string; built: number; files: SnapshotFiles } | { snapshot?: undefined; built?: undefined; files?: undefined });
