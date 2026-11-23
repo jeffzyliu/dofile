@@ -44,6 +44,9 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 **5. Sandbox and security** (`test_sandbox.py`; also parts of `test_engine`, `test_worker`, `test_mcp`)
 - Denied commands return rc 199.
 - Reads and writes outside the allowed folders are blocked; symlinks cannot leave the workdir.
+- A refusal is rc 603 that names the file and ends with the sandbox's reason, also in commands with no file-error
+  handling of their own (`type`, `hexdump`, `outfile`).
+- `c()` works with the sandbox on (on macOS it reads one system file).
 - The audit hook blocks network access and subprocesses.
 - Unsafe mode over HTTP is allowed only on loopback.
 - Each case runs in a subprocess, because audit hooks cannot be removed.
