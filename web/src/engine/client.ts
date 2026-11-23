@@ -389,8 +389,8 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   // ---- a lazy snapshot's graphics part (docs/lazy-matplotlib.md) ----
   // matplotlib is one more file (build.files.graphics). The page fetches it at the end of download(), because a worker
   // busy in Python cannot advance a fetch of its own; without a SharedArrayBuffer it is a start file instead
-  // (download()), which the worker writes at boot. The worker reads it from a SharedArrayBuffer, so a graph blocked in Python sees it land. It
-  // is cached only beside start files that are cached already. A failed fetch is tried again when a graph finds it
+  // (download()), which the worker writes at boot. The worker reads it from a SharedArrayBuffer, so a graph blocked in
+  // Python sees it land. It is cached only beside start files that are cached already. A failed fetch is tried again when a graph finds it
   // failed, and when the browser is back online.
 
   /** The part's progress, now and at each change. @returns the function that removes the listener */

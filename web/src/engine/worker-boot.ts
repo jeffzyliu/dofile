@@ -315,9 +315,9 @@ export async function startPython(
 }
 
 // Without a shared buffer (no cross-origin isolation) the graphics part is a start file: read as the heap is (the
-// snapshot's Cache first, else the network; a file: base from disk), unpacked and written before `boot` answers. A part
-// that will not unpack or write is deleted from the Cache, as a damaged heap is (loadFromSnapshot), and fails the start;
-// the next start fetches it again.
+// snapshot's Cache first, else the network; a file: base from disk), unpacked and written before `boot` answers. A
+// part that will not unpack or write is deleted from the Cache, as a damaged heap is (loadFromSnapshot), and fails the
+// start; the next start fetches it again.
 async function writePartAtStart(
   py: SnapshotPy,
   file: SnapshotFile,
@@ -326,6 +326,7 @@ async function writePartAtStart(
   const t0 = performance.now();
   const url = `${snapshotBase}${file.name}`;
   const isFile = snapshotBase.startsWith("file:"); // Node, the tests: no Cache API by design
+
   // a refusal was said already, by mount's read of the heap
   const cache = isFile
     ? undefined
@@ -373,7 +374,7 @@ export async function startEngine(
     startup: Partial<Startup>;
     part: PartSource;
     partWritten: (part: GraphicsArgs) => void;
-    lazyGraphics: (browser: Browser, part: GraphicsArgs) => void;
+    lazyGraphics: (browser: Browser, part: GraphicsArgs, sab: SharedArrayBuffer) => void;
   },
 ): Promise<{ browser: Browser; about: About }> {
   const tPackages = performance.now();
@@ -400,9 +401,9 @@ export async function startEngine(
   const about = JSON.parse(browser.start(ROOT));
   const buffer = interruptBuffer ?? null;
   if (buffer) browser.keep_breaks(() => Atomics.store(buffer, 0, 2));
-  if (graphics?.sab)
-    lazyGraphics(browser, graphics); // a lazy part: nothing else of it before `startup`
-  else if (graphics) {
+  if (graphics?.sab) {
+    lazyGraphics(browser, graphics, graphics.sab); // a lazy part: nothing else of it before `startup`
+  } else if (graphics) {
     await writePartAtStart(py, graphics.file, part);
     browser.graphics_written(); // importlib's caches
     partWritten(graphics);

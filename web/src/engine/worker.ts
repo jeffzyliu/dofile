@@ -48,9 +48,9 @@ booted.catch(() => {}); // the error reaches the page through boot's own answer
 // ---- a lazy snapshot's graphics part (docs/lazy-matplotlib.md) ----
 // matplotlib is not in the heap but in one more file (files.graphics). With a SharedArrayBuffer the page fetches it
 // (client.ts), because a worker busy in Python cannot advance a fetch of its own, and hands it over in the buffer given
-// with boot (its layout: lazy-part.ts). A graph that finds it failed posts {graphics: "again"} and waits for the page's next fetch.
-// Without one (no cross-origin isolation) it is a start file instead: boot fetches, unpacks and writes it (worker-boot.ts),
-// and only its import is left for the idle steps.
+// with boot (its layout: lazy-part.ts). A graph that finds it failed posts {graphics: "again"} and waits for the page's
+// next fetch. Without one (no cross-origin isolation) it is a start file instead: boot fetches, unpacks and writes it
+// (worker-boot.ts), and only its import is left for the idle steps.
 // Only a graph waits for the part (waitGraphics). Nothing happens before `startup` is answered, so a return visit is no
 // slower. Then the browser's own decoder unpacks it off this thread (nativeSoon); the brotli-wasm unpack, the write and
 // the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (idleStep), so a
@@ -312,9 +312,9 @@ export const table: OpTable = {
           share = { file: graphics.file, region: null };
           graphicsWritten = true;
         },
-        lazyGraphics(engine, graphics) {
+        lazyGraphics(engine, graphics, sab) {
           // the buffer is wrapped at once and not kept
-          share = { file: graphics.file, region: graphics.sab ? partRegion(graphics.sab) : null };
+          share = { file: graphics.file, region: partRegion(sab) };
           engine.lazy_graphics(waitGraphics);
         },
       }));

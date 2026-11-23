@@ -68,8 +68,8 @@ export type FromWorker =
   // /work could not take the page's version after a run (the store has the run's files): it is out of step with the
   // store. Sent right after that run's answer.
   | { folderError: string }
-  // the lazy graphics part in the shared buffer: "again" (a graph found it failed) or "damaged" (the page refetches it).
-  // Without a buffer boot writes the part and none is sent
+  // the lazy graphics part in the shared buffer: "again" (a graph found it failed) or "damaged" (the page
+  // refetches it). Without a buffer boot writes the part and none is sent
   | { graphics: "again" | "damaged" };
 
 /** Where the worker's copy of the file store failed: "open" (the storage did not open, or could not be read), "copy"
