@@ -100,6 +100,20 @@ test("on a phone the hint lines are one block, a line break before How to fix an
   );
 });
 
+test("on a phone a hint's continuation line follows its first with a space, not a line break", () => {
+  const log = text(". foo\ncommand foo is unrecognized\n  → It is not\n    a command.\nr(199);\n");
+  assert.deepEqual(
+    shape(runParts(log, phone)).filter((x) => x.startsWith("explain")),
+    ["explain:|It is not/space|a command."],
+  );
+});
+
+test("a graph's link after a last line with no line break of its own starts a line of its own", () => {
+  const streaming = text(". scatter x y\n1");
+  const parts = shape(runParts(streaming, { ...desktop, graphs: [{ ...graph(1, 1), line: undefined } as Graph] }));
+  assert.deepEqual(parts, ["echo:. scatter x y", "\\n", "out:1", "\\n", "graph 1", "\\n"]);
+});
+
 test("a phone says a wide block of output scrolls sideways, once, after its last line", () => {
   const wide = "x".repeat(49);
   const log = text(`. list\n${wide}\n${wide}\n. display 1\n1\n`);
