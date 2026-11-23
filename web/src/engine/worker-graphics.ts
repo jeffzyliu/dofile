@@ -28,6 +28,7 @@ const UNPACK_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/
  *  a shared buffer: copy 0, the first fetch). */
 type Unpack =
   | { phase: "none" }
+  | { phase: "native"; copy: number } // the browser's decoder unpacks it; a graph's unpack takes over (unpacking)
   | { phase: "unpacking"; copy: number; steps: Generator<number, Uint8Array, void>; t0: number; longest: number }
   | { phase: "unpacked"; copy: number; raw: Uint8Array; secs: number; decoder: "wasm" | "native"; longest: number }
   | { phase: "written"; copy: number }
@@ -56,10 +57,11 @@ export function graphicsWorker(env: GraphicsEnv) {
     timer: 0 as ReturnType<typeof setTimeout> | 0,
     // the unpack
     unpack: { phase: "none" } as Unpack,
-    native: false, // the browser's decoder is unpacking a copy (idle only)
+    nativeRunning: false, // the browser's decoder is unpacking a copy, which the unpack may have left since
     // copies and damage
     nativeFailedOn: null as number | null, // the copy the browser's decoder failed on
-    damage: "", // why the part did not unpack or write; said once, by the next graph
+    // the copy it was found on; said once, by a graph
+    damage: null as { copy: number; why: string; said: boolean } | null,
     // this run
     run: { askedOn: null as number | null, writtenAt: 0 }, // askedOn: the copy when it asked for a fetch again
   };
@@ -67,8 +69,8 @@ export function graphicsWorker(env: GraphicsEnv) {
   const work = (): PartWork => ({
     started: rec.started,
     phase: rec.unpack.phase,
-    native: rec.native,
-    damage: Boolean(rec.damage),
+    nativeRunning: rec.nativeRunning,
+    damagedOn: rec.damage?.copy ?? null,
     useNative: (copy) => useNative(rec.source.brotliMode, hasNativeBrotli(), rec.nativeFailedOn, copy),
     file: rec.part!.file,
   });
@@ -82,14 +84,17 @@ export function graphicsWorker(env: GraphicsEnv) {
     return readPart(rec.part!.region!, waitMs, { withBytes });
   }
 
-  // The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the
-  // graph that finds it (or else the next one) says why, and the idle steps stop until then.
+  // The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again). The
+  // damage is tied to the copy the step had: the graph that finds it, or else the next one that reads that copy, says
+  // why, and it keeps that copy (not a fresh one) from being unpacked again.
   function dropDamaged(e: unknown): string {
-    rec.damage = `the graphics files arrived damaged (${env.errorOf(e).message}); they are fetched again for the next graph`;
+    const why = `the graphics files arrived damaged (${env.errorOf(e).message}); they are fetched again for the next graph`;
+    // every phase a step unpacks or writes in names its copy
+    rec.damage = { copy: "copy" in rec.unpack ? rec.unpack.copy : -1, why, said: false };
     if (rec.unpack.phase === "unpacking" || rec.unpack.phase === "unpacked") rec.unpack = { phase: "none" };
     env.post({ graphics: "damaged" });
-    console.warn(`[dofile] ${rec.damage}`);
-    return rec.damage;
+    console.warn(`[dofile] ${why}`);
+    return why;
   }
 
   // One step of the brotli-wasm unpack (UNPACK_STEP of input); the first is given the landed part. A waiting graph and
@@ -138,11 +143,6 @@ export function graphicsWorker(env: GraphicsEnv) {
    */
   function waitGraphics(ms: number): string {
     if (written()) return "";
-    if (rec.damage) {
-      const why = rec.damage;
-      rec.damage = ""; // said once: the page is fetching the part again, the next graph waits for it
-      return why;
-    }
     const interrupt = env.interrupt();
     for (;;) {
       let read = { seq: 0, busy: true } as SeqRead<PartRead>; // set by waitStep's read
@@ -153,6 +153,7 @@ export function graphicsWorker(env: GraphicsEnv) {
             unpacked: rec.unpack.phase === "unpacked",
             unpacking: rec.unpack.phase === "unpacking",
             askedOn: rec.run.askedOn,
+            damage: rec.damage,
           },
           () => (read = readGraphics(ms, true)),
         );
@@ -172,6 +173,9 @@ export function graphicsWorker(env: GraphicsEnv) {
             // waitStep unpacks only a landed read
             if ("value" in read && read.value.state === "landed") unpackStep(read.value);
             continue;
+          case "say": // the damage on the read's copy (waitStep says it only then)
+            rec.damage!.said = true;
+            return rec.damage!.why;
           case "ask-again":
             if ("value" in read) rec.run.askedOn = read.value.copy;
             env.post({ graphics: "again" });
@@ -184,7 +188,7 @@ export function graphicsWorker(env: GraphicsEnv) {
         }
       } catch (e) {
         const why = dropDamaged(e);
-        rec.damage = ""; // this graph says it; the next one waits for the page's fresh fetch
+        rec.damage!.said = true; // this graph says it; the next one waits for the page's fresh fetch
         return why;
       }
     }
@@ -192,7 +196,9 @@ export function graphicsWorker(env: GraphicsEnv) {
 
   // The browser's own decoder (off this thread) unpacks the part as soon as it is here. A graph that comes meanwhile
   // cannot use the result: it is blocked in Python, so this thread's event loop never delivers the promise. That graph
-  // unpacks with brotli-wasm itself and the result is dropped. Does nothing where there is no native decoder (Chromium).
+  // unpacks with brotli-wasm itself (unpacking takes over from native), and the result, kept only while the unpack is
+  // still native for its copy, is dropped. The decoder still runs then: nothing starts a second one until it ends.
+  // Does nothing where there is no native decoder (Chromium).
   function nativeSoon() {
     // busy or not landed: the op graphics after the page's write calls this again
     if (!rec.part || !nativeGate(work(), () => readGraphics(0, false))) return;
@@ -204,31 +210,34 @@ export function graphicsWorker(env: GraphicsEnv) {
     const landed = rec.part && nativeGate(work(), () => readGraphics(0, true));
     if (!landed) return;
     const { copy } = landed;
-    rec.native = true;
+    rec.unpack = { phase: "native", copy };
+    rec.nativeRunning = true;
+    const still = () => rec.unpack.phase === "native" && rec.unpack.copy === copy;
     const t0 = performance.now();
     unpackNative(landed.bytes!, rec.part!.file.raw)
       .then(
         (raw) => {
-          // a graph that came meanwhile unpacked the part itself (see nativeSoon): this result is spare
+          // else a graph that came meanwhile unpacked the part itself (see nativeSoon), and may have found it damaged
           // secs: to the unpack's end; the write waits for IDLE_MS more
-          if (rec.unpack.phase === "none") {
+          if (still()) {
             rec.unpack = { phase: "unpacked", copy, raw, secs: since(t0), decoder: "native", longest: 0 };
           }
         },
         (e) => {
           console.warn(`[dofile] graphics part: native brotli failed (${e?.message ?? e}); using brotli-wasm`);
           rec.nativeFailedOn = copy; // the next step starts the brotli-wasm unpack, which says if it is damaged
+          if (still()) rec.unpack = { phase: "none" };
         },
       )
       .finally(() => {
-        rec.native = false;
+        rec.nativeRunning = false;
         idleSoon(0);
       });
   }
 
   // The one door to the part's work while idle: after `startup`, IDLE_MS after the last run.
   function idleSoon(delay = Math.max(0, rec.idleSince + IDLE_MS - performance.now())) {
-    if (!rec.started || !rec.part || rec.timer || rec.native || rec.damage || rec.unpack.phase === "warmed") return;
+    if (!rec.started || !rec.part || rec.timer || rec.nativeRunning || rec.unpack.phase === "warmed") return;
     rec.timer = setTimeout(runIdleStep, delay);
   }
 
@@ -278,7 +287,14 @@ export function graphicsWorker(env: GraphicsEnv) {
     const w =
       u.phase === "warming" ? u : { phase: "warming" as const, copy: u.copy, at: 0, t0: performance.now(), longest: 0 };
     rec.unpack = w;
-    w.at = env.browser().warm_graphics(w.at, w.at < 3 ? 1 : 20);
+    try {
+      w.at = env.browser().warm_graphics(w.at, w.at < 3 ? 1 : 20);
+    } catch (e) {
+      // not damage: the files are written; a real import error shows in the graph that needs the module
+      console.warn(`[dofile] graphics part: warm-up stopped (${env.errorOf(e).message})`);
+      rec.unpack = { phase: "warmed" };
+      return;
+    }
     w.longest = Math.max(w.longest, since(t));
     if (w.at < 0) {
       console.info(

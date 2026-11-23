@@ -96,11 +96,21 @@ export function readPart(part: SeqRegion, waitMs: number, options: { withBytes?:
 
 /** What a waiting graph does next. "wait": wait on the region's counter from the read's count, then answer "pending".
  *  A give-up carries the read's reason, the graph's answer. */
-export type WaitStep = "break" | "write" | "unpack-more" | "unpack" | "ask-again" | "wait" | { giveUp: PartReason };
+export type WaitStep =
+  | "break"
+  | "write"
+  | "unpack-more"
+  | "unpack"
+  | "say"
+  | "ask-again"
+  | "wait"
+  | { giveUp: PartReason };
 
 /**
  * The part is read through `read()`, only when needed (a copy of up to 33 MB).
  * @param askedOn - the copy when this run asked the page for another fetch, or null
+ * @param damage - the copy damage was found on, and whether a graph has said it: "say" once, for a read of that copy; a
+ * landed copy whose damage was said waits for the page's fetch (it is not unpacked again)
  */
 export function waitStep(
   w: {
@@ -108,6 +118,7 @@ export function waitStep(
     unpacked: boolean;
     unpacking: boolean;
     askedOn: number | null;
+    damage: { copy: number; said: boolean } | null;
   },
   read: () => SeqRead<PartRead>,
 ): WaitStep {
@@ -117,7 +128,9 @@ export function waitStep(
   const now = read();
   if (!("value" in now)) return "wait";
   const part = now.value;
-  if (part.state === "landed") return "unpack";
+  const damaged = w.damage?.copy === part.copy;
+  if (damaged && !w.damage?.said) return "say";
+  if (part.state === "landed") return damaged ? "wait" : "unpack";
   if (part.state === "failed") {
     // once per run; the failure of the fetch it asked for is final
     if (w.askedOn === null) return "ask-again";
@@ -126,17 +139,18 @@ export function waitStep(
   return "wait";
 }
 
-/** The unpack's phase (worker-graphics.ts keeps it with the copy it came from): none; unpacking (brotli-wasm steps);
- *  unpacked, not yet written; written; warming (its modules imported a few at a time); warmed. */
-export type UnpackPhase = "none" | "unpacking" | "unpacked" | "written" | "warming" | "warmed";
+/** The unpack's phase (worker-graphics.ts keeps it with the copy it came from): none; native (the browser's decoder
+ *  unpacks a copy off this thread); unpacking (brotli-wasm steps); unpacked, not yet written; written; warming (its
+ *  modules imported a few at a time); warmed. */
+export type UnpackPhase = "none" | "native" | "unpacking" | "unpacked" | "written" | "warming" | "warmed";
 
 /** What the native gate and the idle step know besides the part. `useNative`: useNative for a copy, with mount's mode,
  *  the decoder there is and the copy it failed on bound; `file`: the part's sizes, compressed and unpacked. */
 export type PartWork = {
   started: boolean; // `startup` was answered
   phase: UnpackPhase;
-  native: boolean; // the browser's decoder is unpacking a copy
-  damage: boolean; // damage was found and no graph has said it yet
+  nativeRunning: boolean; // the browser's decoder is unpacking a copy, which the unpack may have left since
+  damagedOn: number | null; // the copy damage was found on, said or not
   useNative: (copy: number) => boolean;
   file: { size: number; raw: number };
 };
@@ -153,13 +167,14 @@ function nativeFits(w: PartWork, now: SeqRead<PartRead>): now is { seq: number; 
 }
 
 /**
- * The native gate: the part the browser's decoder starts on, or null. Started, nothing unpacked or under way, no
- * damage left to say, then a read that fits (the part is read only past the flags).
+ * The native gate: the part the browser's decoder starts on, or null. Started, nothing unpacked or under way, the
+ * decoder not running (one 33 MB decode at a time), then a read that fits, of a copy without damage (the part is read
+ * only past the flags).
  */
 export function nativeGate(w: PartWork, read: () => SeqRead<PartRead>): LandedPart | null {
-  if (!w.started || w.phase !== "none" || w.native || w.damage) return null;
+  if (!w.started || w.phase !== "none" || w.nativeRunning) return null;
   const now = read();
-  return nativeFits(w, now) ? now.value : null;
+  return nativeFits(w, now) && now.value.copy !== w.damagedOn ? now.value : null;
 }
 
 /** How long the engine is idle before the part's next idle step.
@@ -168,7 +183,8 @@ export const IDLE_MS = 250;
 
 /** What an idle step does. "run": nothing, a run is in flight (its end comes back); "later": not idle for IDLE_MS yet;
  *  "native": the native gate (the read fits; the gate checks the flags again); "unpack": the first unpack step of the
- *  read's bytes; "none": nothing (busy or not landed: the op `graphics` after the page's write comes back). */
+ *  read's bytes; "none": nothing (busy, not landed, or damage on the read's copy: the op `graphics` after the page's
+ *  write comes back). */
 export type IdleStep = "run" | "later" | "write" | "unpack-more" | "warm" | "native" | "unpack" | "none";
 
 /**
@@ -189,11 +205,12 @@ export function idleStep(
     case "written":
     case "warming":
       return "warm";
+    case "native": // the decoder's end comes back
     case "warmed":
       return "none";
   }
   const now = read();
-  if (!("value" in now) || now.value.state !== "landed") return "none";
+  if (!("value" in now) || now.value.state !== "landed" || now.value.copy === w.damagedOn) return "none";
   return nativeFits(w, now) ? "native" : "unpack";
 }
 

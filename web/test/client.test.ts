@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildId } from "../scripts/build-id.ts";
 import { EngineClient } from "../src/engine/client.ts";
-import { PART_HEADER } from "../src/engine/lazy-part.ts";
+import { PART_FAILED, PART_HEADER, PART_LANDED } from "../src/engine/lazy-part.ts";
 import type { Answer } from "../src/engine/machine.ts";
 import type { FileStore } from "../src/engine/store.ts";
 import type { StartFiles } from "../src/engine/types.ts";
@@ -1298,6 +1298,33 @@ test("graphics part: after a damaged copy, a re-fetch that fails is retried with
   await until(() => page.states.at(-1) === "landed", "landed again");
   assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 2), "the fresh copy");
   assert.deepEqual(f.modes, ["no-cache", "reload", "reload"], "a 304 would hand back the damaged copy");
+});
+
+test("graphics part (decision B): a second damaged copy in a row starts no fetch without a graph: the part fails and is dropped from the Cache; a graph's `again` fetches it once more", async () => {
+  const caches = fakeCaches();
+  const f = partFetch([1, 2, 3]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  const landings = () => page.states.filter((s) => s === "landed").length;
+  await f.release();
+  await until(() => landings() === 1, "landed");
+  await sleep(5); // the fetch's own end (part.loading)
+  page.say("damaged"); // copy 0
+  await f.release();
+  await until(() => landings() === 2, "copy 1 landed");
+  await sleep(5);
+  page.say("damaged"); // copy 1, fetched right after the damaged copy 0
+  await sleep(20);
+  assert.equal(f.modes.length, 2, "no third fetch");
+  assert.equal(page.states.at(-1), "failed");
+  assert.deepEqual(page.header(), [PART_FAILED, page.header()[1], 1], "failed, on the same copy");
+  assert.ok(!(await cached(caches)).includes(`snapshot/${PART.name}`), "copy 1 is out of the Cache: a reload fetches");
+  page.say("again"); // a graph asks
+  await f.release();
+  await until(() => landings() === 3, "copy 2 landed");
+  assert.deepEqual(page.header(), [PART_LANDED, PART.size, 2]);
+  assert.deepEqual(f.modes, ["no-cache", "reload", "reload"], "still past the HTTP cache");
 });
 
 test("graphics part: a failed fetch writes the reason with state failed; the worker's `again` fetches it once more, and so does the browser coming back online", async (t) => {
