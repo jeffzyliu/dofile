@@ -9,8 +9,8 @@ import type { OpenTab } from "../types.ts";
 import { fromNothing, useFocusRequest } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
-import { focusTree, treeShown } from "./FilesPane";
 import { baseName, tabLabels } from "./tree.ts";
+import { focusTree, treeShown } from "./tree-state.ts";
 
 const tabId = (i: number) => `file-tab-${i}`;
 const Unsaved = () => <span class="dot" role="img" aria-label="unsaved changes" />;
