@@ -4,9 +4,9 @@
 //
 // matplotlib is not in the heap but in one more file (files.graphics). With a SharedArrayBuffer the page fetches it
 // (client.ts), because a worker busy in Python cannot advance a fetch of its own, and hands it over in the buffer given
-// with boot (its layout: lazy-part.ts). A graph that finds it failed posts {graphics: "again"} and waits for the page's
-// next fetch. Without one (no cross-origin isolation) it is a start file instead: boot fetches, unpacks and writes it
-// (worker-boot.ts), and only its import is left for the idle steps.
+// with boot (its layout: lazy-part.ts). A graph that finds it failed posts {graphics: "again", copy} and waits for the
+// page's next fetch. Without one (no cross-origin isolation) it is a start file instead: boot fetches, unpacks and writes
+// it (worker-boot.ts), and only its import is left for the idle steps.
 // Only a graph waits for the part (waitGraphics). Nothing happens before `startup` is answered, so a return visit is no
 // slower. Then the browser's own decoder unpacks it off this thread (nativeSoon); the brotli-wasm unpack, the write and
 // the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (runIdleStep), so
@@ -21,6 +21,9 @@ import { hasNativeBrotli, unpackNative, unpackSteps, writeGraphics } from "./sna
 import type { FromWorker, SnapshotFile } from "./types.ts";
 import type { Browser, GraphicsArgs, PartSource } from "./worker-boot.ts";
 import { since } from "./worker-boot.ts";
+
+/** A read of the part threw: its bytes copied out of the region are a copy a phone may not allocate. */
+class ReadFailed extends Error {}
 
 const UNPACK_STEP = 256 << 10; // input bytes: ~1.1 MB out, ~0.12 s at the 9 MB/s brotli-wasm did on an iPhone
 
@@ -81,7 +84,19 @@ export function graphicsWorker(env: GraphicsEnv) {
   // copy of the bytes (up to 33 MB) when landed. Read only while the part is not written, so there is a region
   // (without one, boot wrote it).
   function readGraphics(waitMs: number, withBytes: boolean): SeqRead<PartRead> {
-    return readPart(rec.part!.region!, waitMs, { withBytes });
+    try {
+      return readPart(rec.part!.region!, waitMs, { withBytes });
+    } catch (e) {
+      throw new ReadFailed(env.errorOf(e).message);
+    }
+  }
+
+  // A read that throws leaves the part as it was, so it is not damage: nothing is posted, and the next graph or idle
+  // step reads it again.
+  function readFailed(e: ReadFailed): string {
+    const why = `the graphics files could not be read (${e.message}); the next graph reads them again`;
+    console.warn(`[dofile] ${why}`);
+    return why;
   }
 
   // The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again). The
@@ -92,7 +107,7 @@ export function graphicsWorker(env: GraphicsEnv) {
     // every phase a step unpacks or writes in names its copy
     rec.damage = { copy: "copy" in rec.unpack ? rec.unpack.copy : -1, why, said: false };
     if (rec.unpack.phase === "unpacking" || rec.unpack.phase === "unpacked") rec.unpack = { phase: "none" };
-    env.post({ graphics: "damaged" });
+    env.post({ graphics: "damaged", copy: rec.damage.copy });
     console.warn(`[dofile] ${why}`);
     return why;
   }
@@ -177,8 +192,11 @@ export function graphicsWorker(env: GraphicsEnv) {
             rec.damage!.said = true;
             return rec.damage!.why;
           case "ask-again":
-            if ("value" in read) rec.run.askedOn = read.value.copy;
-            env.post({ graphics: "again" });
+            // waitStep asks only after a read that gave the part
+            if ("value" in read) {
+              rec.run.askedOn = read.value.copy;
+              env.post({ graphics: "again", copy: read.value.copy });
+            }
             waitSeq(rec.part!.region!, read.seq, ms);
             return "pending";
           case "wait":
@@ -187,6 +205,7 @@ export function graphicsWorker(env: GraphicsEnv) {
             return "pending";
         }
       } catch (e) {
+        if (e instanceof ReadFailed) return readFailed(e);
         const why = dropDamaged(e);
         rec.damage!.said = true; // this graph says it; the next one waits for the page's fresh fetch
         return why;
@@ -207,7 +226,14 @@ export function graphicsWorker(env: GraphicsEnv) {
 
   function startNative() {
     // the copy and its bytes from one snapshot: a failure is charged to the copy it unpacked
-    const landed = rec.part && nativeGate(work(), () => readGraphics(0, true));
+    let landed: LandedPart | null | undefined;
+    try {
+      landed = rec.part && nativeGate(work(), () => readGraphics(0, true));
+    } catch (e) {
+      // a task of its own (nativeSoon): a throw here would end the worker
+      if (e instanceof ReadFailed) return void readFailed(e);
+      throw e;
+    }
     if (!landed) return;
     const { copy } = landed;
     rec.unpack = { phase: "native", copy };
@@ -275,7 +301,8 @@ export function graphicsWorker(env: GraphicsEnv) {
           break;
       }
     } catch (e) {
-      dropDamaged(e);
+      if (e instanceof ReadFailed) readFailed(e);
+      else dropDamaged(e);
       return;
     }
     idleSoon(0);

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PartRead, PartWork, UnpackPhase } from "../src/engine/lazy-part.ts";
+import type { PartEvent, PartFacts, PartRead, PartStep, PartWork, UnpackPhase } from "../src/engine/lazy-part.ts";
 import {
   failPart,
   IDLE_MS,
@@ -12,6 +12,7 @@ import {
   partReason,
   partRegion,
   partSnapshot,
+  partStep,
   retryPart,
   useNative,
   waitStep,
@@ -90,7 +91,7 @@ test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed par
       retryPart(part); // the graph asked again at copy 0
       failPart(part, partReason("offline again"));
 
-      // the browser comes back online midway: #retryGraphics
+      // the browser comes back online midway: the page retries
       let readCount = 0;
       const online = () => {
         if (++readCount === after) retryPart(part);
@@ -233,4 +234,143 @@ test("idleStep: with nothing unpacked, a landed copy goes to the native gate whe
   );
   assert.equal(idleStep(at, readOf(pending())), "none");
   assert.equal(idleStep(at, readOf(failed())), "none");
+});
+
+test("partStep: the page's table, row by row, with the events it drops", () => {
+  const facts = (o: Partial<PartFacts> = {}): PartFacts => ({
+    fetch: null,
+    fresh: false,
+    damagedCopy: null,
+    listening: false,
+    ...o,
+  });
+  const fetchOf = (copy: number) => ({ copy, downloading: false, received: 0 });
+  const pending = (copy: number) => ({ state: "pending" as const, copy });
+  const landed = (copy: number) => ({ state: "landed" as const, copy });
+  const failed = (copy: number) => ({ state: "failed" as const, copy });
+  const bytes = new Uint8Array(1);
+  const rows: [string, Pick<PartRead, "state" | "copy">, PartFacts, PartEvent, PartStep][] = [
+    [
+      "want: a fetch of the region's copy",
+      pending(0),
+      facts(),
+      { type: "want" },
+      { effect: "fetch", facts: facts({ fetch: fetchOf(0) }) },
+    ],
+    [
+      "want, a fetch on its way",
+      pending(0),
+      facts({ fetch: fetchOf(0) }),
+      { type: "want" },
+      { effect: "none", facts: facts({ fetch: fetchOf(0) }) },
+    ],
+    ["want, landed", landed(0), facts(), { type: "want" }, { effect: "none", facts: facts() }],
+    [
+      "fetched: landed, fresh cleared",
+      pending(1),
+      facts({ fetch: fetchOf(1), fresh: true }),
+      { type: "fetched", copy: 1, bytes },
+      { effect: "land", facts: facts() },
+    ],
+    [
+      "fetch failed: failed, the online listener set",
+      pending(1),
+      facts({ fetch: fetchOf(1), fresh: true }),
+      { type: "fetch-failed", copy: 1, why: "x" },
+      { effect: "fail", facts: facts({ fresh: true, listening: true }) },
+    ],
+    [
+      "fetch failed, the listener already set",
+      pending(1),
+      facts({ fetch: fetchOf(1), listening: true }),
+      { type: "fetch-failed", copy: 1, why: "x" },
+      { effect: "fail", facts: facts({ listening: true }) },
+    ],
+    [
+      "a result for a fetch not on its way",
+      pending(1),
+      facts({ fetch: fetchOf(1) }),
+      { type: "fetched", copy: 0, bytes },
+      { effect: "none", facts: facts({ fetch: fetchOf(1) }) },
+    ],
+    [
+      "a result the region has moved past: the fetch ends, nothing written",
+      landed(1),
+      facts({ fetch: fetchOf(1) }),
+      { type: "fetched", copy: 1, bytes },
+      { effect: "none", facts: facts() },
+    ],
+    [
+      "again naming the failed copy: one copy more",
+      failed(1),
+      facts({ listening: true }),
+      { type: "again", copy: 1 },
+      { effect: "retry", facts: facts({ fetch: fetchOf(2), listening: true }) },
+    ],
+    [
+      "again naming a replaced copy",
+      failed(2),
+      facts(),
+      { type: "again", copy: 1 },
+      { effect: "none", facts: facts() },
+    ],
+    ["again, landed", landed(1), facts(), { type: "again", copy: 1 }, { effect: "none", facts: facts() }],
+    [
+      "online, failed: one copy more, the listener spent",
+      failed(1),
+      facts({ listening: true }),
+      { type: "online" },
+      { effect: "retry", facts: facts({ fetch: fetchOf(2) }) },
+    ],
+    [
+      "online, not failed: the listener spent",
+      landed(1),
+      facts({ listening: true }),
+      { type: "online" },
+      { effect: "none", facts: facts() },
+    ],
+    [
+      "damaged copy 0, none before (null, not -1)",
+      landed(0),
+      facts(),
+      { type: "damaged", copy: 0 },
+      { effect: "retry", facts: facts({ fetch: fetchOf(1), fresh: true, damagedCopy: 0 }) },
+    ],
+    [
+      "damaged, not right after a damaged copy",
+      landed(3),
+      facts({ damagedCopy: 1 }),
+      { type: "damaged", copy: 3 },
+      { effect: "retry", facts: facts({ fetch: fetchOf(4), fresh: true, damagedCopy: 3 }) },
+    ],
+    [
+      "damaged right after a damaged copy: decision B",
+      landed(2),
+      facts({ damagedCopy: 1 }),
+      { type: "damaged", copy: 2 },
+      { effect: "fail-damaged", facts: facts({ fresh: true, damagedCopy: 2, listening: true }) },
+    ],
+    [
+      "damaged naming a replaced copy (race 13)",
+      landed(1),
+      facts({ damagedCopy: 0 }),
+      { type: "damaged", copy: 0 },
+      { effect: "none", facts: facts({ damagedCopy: 0 }) },
+    ],
+    [
+      "damaged, failed by decision B already",
+      failed(2),
+      facts({ damagedCopy: 2 }),
+      { type: "damaged", copy: 2 },
+      { effect: "none", facts: facts({ damagedCopy: 2 }) },
+    ],
+    [
+      "damaged, pending",
+      pending(1),
+      facts({ fetch: fetchOf(1) }),
+      { type: "damaged", copy: 1 },
+      { effect: "none", facts: facts({ fetch: fetchOf(1) }) },
+    ],
+  ];
+  for (const [name, now, before, event, step] of rows) assert.deepEqual(partStep(now, before, event), step, name);
 });

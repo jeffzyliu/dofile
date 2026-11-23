@@ -69,8 +69,9 @@ export type FromWorker =
   // store. Sent right after that run's answer.
   | { folderError: string }
   // the lazy graphics part in the shared buffer: "again" (a graph found it failed) or "damaged" (the page
-  // refetches it). Without a buffer boot writes the part and none is sent
-  | { graphics: "again" | "damaged" };
+  // refetches it), about `copy`, the copy the graph or the unpack read. Without a buffer boot writes the part and none
+  // is sent
+  | { graphics: "again" | "damaged"; copy: number };
 
 /** Where the worker's copy of the file store failed: "open" (the storage did not open, or could not be read), "copy"
  *  (it was read, but the files could not be written into /work). */

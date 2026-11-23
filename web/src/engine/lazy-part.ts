@@ -1,5 +1,5 @@
 // A lazy snapshot's graphics part: the shared region's layout, its page writers and its reader (on seqlock.ts), and the
-// worker's decisions about the part, without their side effects (worker.ts acts on them).
+// page's and the worker's decisions about the part, without their side effects (client.ts and worker.ts act on them).
 
 import type { SeqRead, SeqReader, SeqRegion } from "./seqlock.ts";
 import { readSeq, seqRegion, writeSeq } from "./seqlock.ts";
@@ -98,6 +98,65 @@ export function readOwnPart(part: SeqRegion): PartRead {
   const now = readPart(part, 0);
   if (!("value" in now)) throw new Error("the graphics part's region is being written by another thread");
   return now.value;
+}
+
+/** Page: the fetch on its way: the copy it is for, whether the Cache missed and it downloads, the bytes received. */
+export type PartFetch = { copy: number; downloading: boolean; received: number };
+
+/** Page: its own facts about the part; the worker needs none. `fetch`: at most one. `fresh`: fetched past the HTTP cache
+ *  until a copy lands, since the worker found a copy damaged. `damagedCopy`: the copy the last `damaged` acted on named,
+ *  never cleared (copies only grow; null, not -1, which is c - 1 for copy 0). `listening`: its one `online` listener is
+ *  set. */
+export type PartFacts = { fetch: PartFetch | null; fresh: boolean; damagedCopy: number | null; listening: boolean };
+
+/** Page: what happens to the part. want: the start files are in, or the worker `started`; fetched, fetch-failed: the fetch
+ *  for `copy` ended; again, damaged: the live worker's, about `copy`; online: the part's listener heard it. */
+export type PartEvent =
+  | { type: "want" | "online" }
+  | { type: "fetched"; copy: number; bytes: Uint8Array }
+  | { type: "fetch-failed"; copy: number; why: string }
+  | { type: "again" | "damaged"; copy: number };
+
+/** Page: the effect, and the facts after it. "fetch": a fetch for `facts.fetch`; "land", "fail": the fetch's result
+ *  written; "retry": `retryPart`, then a fetch for the next copy; "fail-damaged": decision B, `failPart` on the damaged
+ *  copy and no fetch; "none": the event is dropped. `listening` turned on: the `online` listener is added. */
+export type PartStep = { effect: "none" | "fetch" | "land" | "fail" | "retry" | "fail-damaged"; facts: PartFacts };
+
+/** Page: the part's machine, one row per event. A message is about one copy, so it acts only on the region's copy, and
+ *  only in the state it implies (again: failed; damaged: landed, since decision B fails a landed copy on its own number).
+ *  @param now - the region's state and copy (readOwnPart) */
+export function partStep(now: Pick<PartRead, "state" | "copy">, facts: PartFacts, event: PartEvent): PartStep {
+  const none: PartStep = { effect: "none", facts };
+  const fetchOf = (copy: number): PartFetch => ({ copy, downloading: false, received: 0 });
+  switch (event.type) {
+    case "want":
+      if (now.state !== "pending" || facts.fetch) return none;
+      return { effect: "fetch", facts: { ...facts, fetch: fetchOf(now.copy) } };
+    case "fetched":
+    case "fetch-failed": {
+      if (facts.fetch?.copy !== event.copy) return none;
+      const ended = { ...facts, fetch: null };
+      // one fetch at a time, for the region's copy: a region moved past it cannot be met
+      if (now.state !== "pending" || now.copy !== event.copy) return { effect: "none", facts: ended };
+      if (event.type === "fetched") return { effect: "land", facts: { ...ended, fresh: false } };
+      return { effect: "fail", facts: { ...ended, listening: true } };
+    }
+    case "online":
+    case "again": {
+      const heard = event.type === "online" ? { ...facts, listening: false } : facts;
+      if (now.state !== "failed" || (event.type === "again" && event.copy !== now.copy))
+        return { ...none, facts: heard };
+      return { effect: "retry", facts: { ...heard, fetch: fetchOf(now.copy + 1) } };
+    }
+    case "damaged": {
+      if (now.state !== "landed" || event.copy !== now.copy) return none;
+      const marked = { ...facts, fresh: true, damagedCopy: now.copy };
+      // the copy fetched right after a damaged copy is damaged too (decision B): without this, damage tied to its copy
+      // would be fetched and unpacked again in a loop
+      if (facts.damagedCopy === now.copy - 1) return { effect: "fail-damaged", facts: { ...marked, listening: true } };
+      return { effect: "retry", facts: { ...marked, fetch: fetchOf(now.copy + 1) } };
+    }
+  }
 }
 
 /** What a waiting graph does next. "wait": wait on the region's counter from the read's count, then answer "pending".

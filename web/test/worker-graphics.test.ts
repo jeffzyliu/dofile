@@ -8,7 +8,15 @@ import { createRequire } from "node:module";
 import { mock, type TestContext, test } from "node:test";
 import { format } from "node:util";
 import { brotliCompressSync } from "node:zlib";
-import { IDLE_MS, landPart, PART_HEADER, partRegion, retryPart } from "../src/engine/lazy-part.ts";
+import {
+  failPart,
+  IDLE_MS,
+  landPart,
+  PART_HEADER,
+  partReason,
+  partRegion,
+  retryPart,
+} from "../src/engine/lazy-part.ts";
 import { packGraphics } from "../src/engine/snapshot.ts";
 import type { FromWorker } from "../src/engine/types.ts";
 import { graphicsWorker } from "../src/engine/worker-graphics.ts";
@@ -130,6 +138,15 @@ function part({
   };
 }
 
+/** Each copy of the part's bytes out of the region (a read with them) throws, as an allocation that fails would, until restored. */
+function failReads(t: TestContext) {
+  const slice = Uint8Array.prototype.slice;
+  return t.mock.method(Uint8Array.prototype, "slice", function (this: Uint8Array, start?: number, end?: number) {
+    if (end === SIZE) throw new RangeError("Array buffer allocation failed");
+    return slice.call(this, start, end);
+  });
+}
+
 /** The browser's decoder, each unpack held until release() (in the order they began). `started`: unpacks begun; `most`:
  *  the most under way at once. */
 function heldDecoder(t: TestContext) {
@@ -191,6 +208,22 @@ test("a graph after the write answers at once: the part is not unpacked or writt
   w.g.runEnded();
 });
 
+test("a graph that finds the part failed asks the page once for another fetch, naming the copy it read; that fetch failing too is its answer", () => {
+  const w = part();
+  failPart(w.region, partReason("the graphics files could not be downloaded (offline)"));
+  w.g.startupAnswered();
+  w.g.runArrived();
+  w.g.runStarts();
+
+  assert.equal(w.wait(), "pending");
+  assert.deepEqual(w.posted, [{ graphics: "again", copy: 0 }]);
+  retryPart(w.region);
+  failPart(w.region, partReason("the graphics files could not be downloaded (offline again)"));
+  assert.match(w.wait(), /offline again/);
+  assert.deepEqual(w.posted, [{ graphics: "again", copy: 0 }], "asked once");
+  w.g.runEnded();
+});
+
 test("race 13: a graph that finds a copy damaged while the browser's decoder unpacks it: the decoder's late result is dropped, not written again", async (t) => {
   const native = heldDecoder(t);
   const w = part({ failWrites: 1, page: true });
@@ -204,7 +237,7 @@ test("race 13: a graph that finds a copy damaged while the browser's decoder unp
   native.release();
   await sleep(3 * IDLE_MS);
   assert.deepEqual(w.written, [1], "copy 1 written once");
-  assert.deepEqual(w.posted, [{ graphics: "damaged" }]);
+  assert.deepEqual(w.posted, [{ graphics: "damaged", copy: 0 }]);
 });
 
 test("one browser decode at a time: a fresh copy that lands while the decoder still runs on a damaged one waits for it, then is unpacked and written", async (t) => {
@@ -262,7 +295,7 @@ for (const brotli of [undefined, "wasm"] as const)
     await until(() => w.written.length === 2, "copy 2 written while idle");
     assert.deepEqual(w.written, [1, 2]);
     assert.equal(w.wait(), "");
-    assert.deepEqual(w.posted, [{ graphics: "damaged" }]);
+    assert.deepEqual(w.posted, [{ graphics: "damaged", copy: 0 }]);
   });
 
 test("damage the page has not acted on yet: the next graph says it, and the one after waits rather than unpack that copy again", async () => {
@@ -277,6 +310,62 @@ test("damage the page has not acted on yet: the next graph says it, and the one 
   w.g.runEnded();
   await sleep(3 * IDLE_MS);
   assert.deepEqual(w.written, [1], "copy 1 is not unpacked or written again");
+});
+
+test("a read of the part that throws (its bytes copied out, a copy a phone may not allocate) is not damage: nothing is posted, the graph says so without promising a fetch, and the next graph draws that copy", (t) => {
+  const w = part({ brotli: "wasm", page: true });
+  w.land(1);
+  w.g.startupAnswered();
+  w.g.runArrived();
+  w.g.runStarts();
+  const slice = Uint8Array.prototype.slice;
+  const copyOut = t.mock.method(
+    Uint8Array.prototype,
+    "slice",
+    function (this: Uint8Array, start?: number, end?: number) {
+      if (end === SIZE) throw new RangeError("Array buffer allocation failed");
+      return slice.call(this, start, end);
+    },
+  );
+  const why = w.wait();
+  copyOut.mock.restore();
+  assert.match(why, /could not be read \(Array buffer allocation failed\)/);
+  assert.doesNotMatch(why, /fetched again/);
+  assert.deepEqual(w.posted, []);
+  assert.equal(w.wait(), "");
+  assert.deepEqual(w.written, [1]);
+  w.g.runEnded();
+});
+
+test("a read that throws in the browser decoder's own task is not damage and does not escape: nothing is posted, and a graph draws that copy", async (t) => {
+  const w = part({ page: true });
+  w.land(1);
+  const reads = failReads(t);
+  w.g.startupAnswered();
+  await sleep(IDLE_MS / 2);
+  reads.mock.restore();
+  assert.deepEqual(w.posted, []);
+  w.g.runArrived();
+  w.g.runStarts();
+  assert.equal(w.wait(), "");
+  assert.deepEqual(w.written, [1]);
+  w.g.runEnded();
+});
+
+test("a read that throws in an idle step is not damage: nothing is posted or written, and the next run's end unpacks and writes that copy", async (t) => {
+  const w = part({ brotli: "wasm", page: true });
+  w.land(1);
+  const reads = failReads(t);
+  w.g.startupAnswered();
+  await sleep(3 * IDLE_MS);
+  reads.mock.restore();
+  assert.deepEqual(w.posted, []);
+  assert.deepEqual(w.written, []);
+  w.g.runArrived();
+  w.g.runStarts();
+  w.g.runEnded();
+  await until(() => w.written.length === 1, "the idle steps wrote copy 1");
+  assert.deepEqual(w.posted, []);
 });
 
 test("finding 15: a warm step's throw is a warning that stops the warm-up, not damage: nothing is posted, no further step is tried, and a graph draws", async () => {
