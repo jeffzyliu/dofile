@@ -19,7 +19,7 @@ import {
 import type { SeqRead, SeqReader } from "../src/engine/seqlock.ts";
 import { readSeq } from "../src/engine/seqlock.ts";
 
-const idle = { interrupted: false, unpacked: false, unpacking: false, askedOn: null };
+const idle = { interrupted: false, unpacked: false, unpacking: false, askedOn: null, damage: null };
 const offline = partReason("offline");
 // a read that counts how often it is made
 const reader = (part: PartRead) => {
@@ -67,6 +67,17 @@ test("waitStep: a failed part is asked for again once per run; that fetch's fail
     "the asked-for fetch failed",
   );
   assert.equal(waitStep({ ...idle, askedOn: 2 }, readOf(pending(3))), "wait", "the asked-for fetch is on its way");
+});
+
+test("race 11: damage blocks only its own copy; it is said once, by a graph whose read gives that copy, and that copy is not unpacked again", () => {
+  const damage = { copy: 2, said: false };
+  assert.equal(waitStep({ ...idle, damage }, readOf(landed(2))), "say");
+  assert.equal(waitStep({ ...idle, damage }, readOf(failed(2))), "say", "a failed copy too (decision B)");
+  assert.equal(waitStep({ ...idle, damage }, readOf(landed(3))), "unpack", "the copy moved on: not said");
+  assert.equal(waitStep({ ...idle, damage }, readOf(pending(3))), "wait");
+  const said = { copy: 2, said: true };
+  assert.equal(waitStep({ ...idle, damage: said }, readOf(landed(2))), "wait", "the page's fetch moves the counter");
+  assert.equal(waitStep({ ...idle, damage: said }, readOf(failed(2))), "ask-again", "a failed part's own rules");
 });
 
 test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed part gives a whole snapshot or busy, never the reason "" (the answer for written)', () => {
@@ -136,20 +147,19 @@ const work: PartWork = {
   started: true,
   phase: "none",
   nativeRunning: false,
-  damage: false,
+  damagedOn: null,
   useNative: (copy) => copy !== 9,
   file: { size: 4, raw: 10 },
 };
 const landedBytes = (n: number, copy = 0): PartRead => ({ state: "landed", copy, bytes: new Uint8Array(n) });
 
-test("nativeGate: started, nothing unpacked or under way, no damage to say; else the part is not read", () => {
+test("nativeGate: started, nothing unpacked or under way, the decoder not running; else the part is not read", () => {
   const r = reader(landedBytes(4));
   assert.deepEqual(nativeGate(work, r.read), landedBytes(4));
   assert.equal(r.reads, 1);
   const closed: [string, Partial<PartWork>][] = [
     ["before startup is answered", { started: false }],
     ["the browser's decoder is under way", { nativeRunning: true }],
-    ["damage not yet said", { damage: true }],
     ...(["native", "unpacking", "unpacked", "written", "warming", "warmed"] as UnpackPhase[]).map(
       (phase): [string, Partial<PartWork>] => [phase, { phase }],
     ),
@@ -175,6 +185,12 @@ test("nativeGate: only a landed, brotli-sized copy the decoder has not failed on
   assert.equal(nativeGate({ ...work, file: { size: 4, raw: 4 } }, readOf(landedBytes(4))), null, "stored, not brotli");
   assert.deepEqual(nativeGate(work, readOf(landed())), landed(), "without the bytes: the copy decides");
   assert.equal(nativeGate(work, readOf(landed(9))), null, "without the bytes, the failed copy");
+  assert.equal(nativeGate({ ...work, damagedOn: 10 }, readOf(landedBytes(4, 10))), null, "race 11: damage on its copy");
+  assert.deepEqual(
+    nativeGate({ ...work, damagedOn: 10 }, readOf(landedBytes(4, 11))),
+    landedBytes(4, 11),
+    "race 11: not on a fresh one",
+  );
 });
 
 test("idleStep: a run in flight, then IDLE_MS of idle, then the phase decides; none of them reads the part", () => {
@@ -197,10 +213,19 @@ test("idleStep: a run in flight, then IDLE_MS of idle, then the phase decides; n
 test("idleStep: with nothing unpacked, a landed copy goes to the native gate when it fits, else to brotli-wasm", () => {
   const at = { ...work, runsInFlight: 0, idleFor: IDLE_MS };
   assert.equal(idleStep(at, readOf(landedBytes(4))), "native");
-  assert.equal(idleStep({ ...at, nativeRunning: true }, readOf(landedBytes(4))), "native", "the gate, not a second unpack");
+  assert.equal(
+    idleStep({ ...at, nativeRunning: true }, readOf(landedBytes(4))),
+    "native",
+    "the gate, not a second unpack",
+  );
   assert.equal(idleStep(at, readOf(landedBytes(4, 9))), "unpack", "the copy the decoder failed on");
   assert.equal(idleStep(at, readOf(landedBytes(3))), "unpack", "not brotli-sized: brotli-wasm says what is wrong");
   assert.equal(idleStep({ ...at, useNative: () => false }, readOf(landedBytes(4))), "unpack", "no native decoder");
+  for (const useNative of [() => true, () => false]) {
+    const damaged = { ...at, useNative, damagedOn: 5 };
+    assert.equal(idleStep(damaged, readOf(landedBytes(4, 5))), "none", "race 11: damage on the read's copy");
+    assert.notEqual(idleStep(damaged, readOf(landedBytes(4, 6))), "none", "race 11: not on a fresh copy");
+  }
   assert.equal(
     idleStep(at, () => ({ seq: 1, busy: true })),
     "none",

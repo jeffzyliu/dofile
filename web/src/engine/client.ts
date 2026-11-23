@@ -2,7 +2,7 @@
 // It decides nothing: the controller (app/engine.ts) calls it when the state machine says. One worker is live at a
 // time; `n` is that worker's ticket, which the transport only compares.
 
-import { failPart, landPart, PART_HEADER, partReason, partRegion, retryPart } from "./lazy-part.ts";
+import { failPart, landPart, PART_HEADER, partReason, partRegion, readPart, retryPart } from "./lazy-part.ts";
 import type { Ending, Reply } from "./machine.ts";
 import type { SeqRegion } from "./seqlock.ts";
 import { isStorageRefusal, openCache } from "./snapshot.ts";
@@ -42,6 +42,7 @@ type GraphicsPart = {
   loading: Promise<void> | null;
   progress: GraphicsProgress;
   damaged: boolean; // the worker found the last copy damaged: fetched past the HTTP cache until a copy lands
+  damagedCopy: number | null; // the copy the last `damaged` named (the region's then); never cleared: copies only grow
 };
 /** A call waiting for the worker's answer. */
 type Pending = { resolve: (value: any) => void; reject: (error: ClientError) => void; onLog?: (text: string) => void };
@@ -416,6 +417,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         loading: null,
         progress: { state: "pending", received: 0, total: file.size },
         damaged: false,
+        damagedCopy: null,
       };
     }
     return this.#graphics;
@@ -446,11 +448,27 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     });
   }
 
-  // A part the worker could not unpack: dropped from the Cache (a reload would read it again) and fetched again.
+  // A part the worker could not unpack: dropped from the Cache (a reload would read it again) and fetched again. The
+  // copy fetched right after a damaged copy is damaged too: the part fails instead, and only a graph's `again` fetches
+  // it again (the worker's damage is tied to its copy, so without this a part that fails on every copy would be fetched
+  // and unpacked in a loop).
   #refetchDamaged(part: GraphicsPart): void {
     if (this.#graphics !== part || !part.region || part.loading || part.progress.state !== "landed") return;
-    part.progress = { ...part.progress, state: "failed" }; // so that #retryGraphics takes it
+    const now = readPart(part.region, 0); // the page is the region's one writer: never busy here
+    if (!("value" in now)) return;
+    const { copy } = now.value;
+    const again = part.damagedCopy !== null && copy === part.damagedCopy + 1;
+    part.damagedCopy = copy;
     part.damaged = true;
+    if (again) {
+      const why = "the graphics files arrived damaged twice in a row; they are fetched again for the next graph";
+      failPart(part.region, partReason(why));
+      console.warn(`[dofile] graphics part: ${why}`);
+      this.#graphicsSay(part, { state: "failed", error: why });
+      this.#tellGraphics(part);
+      return;
+    }
+    part.progress = { ...part.progress, state: "failed" }; // so that #retryGraphics takes it
     this.#retryGraphics(part);
   }
 

@@ -205,3 +205,35 @@ test("one browser decode at a time: a fresh copy that lands while the decoder st
   assert.deepEqual(w.written, [1, 2]);
   assert.equal(native.most, 1);
 });
+
+for (const brotli of [undefined, "wasm"] as const)
+  test(`race 11 (${brotli ?? "native"} decoder): damage an idle step finds blocks only its copy: a graph before the fresh copy lands waits for it, not saying the damage, and the fresh copy is unpacked and written while idle`, async () => {
+    const w = part({ brotli, failWrites: 1, page: true });
+    w.land(1);
+    w.g.startupAnswered();
+    await until(() => w.posted.length === 1, "the idle steps found copy 1 damaged");
+    w.g.runArrived();
+    w.g.runStarts();
+    assert.equal(w.wait(), "pending", "the page fetches again: the graph waits");
+    w.g.runEnded();
+    w.land(2);
+    w.g.pageWrote();
+    await until(() => w.written.length === 2, "copy 2 written while idle");
+    assert.deepEqual(w.written, [1, 2]);
+    assert.equal(w.wait(), "");
+    assert.deepEqual(w.posted, [{ graphics: "damaged" }]);
+  });
+
+test("damage the page has not acted on yet: the next graph says it, and the one after waits rather than unpack that copy again", async () => {
+  const w = part({ brotli: "wasm", failWrites: 1 });
+  w.land(1);
+  w.g.startupAnswered();
+  await until(() => w.posted.length === 1, "the idle steps found copy 1 damaged");
+  w.g.runArrived();
+  w.g.runStarts();
+  assert.match(w.wait(), /arrived damaged/);
+  assert.equal(w.wait(), "pending");
+  w.g.runEnded();
+  await sleep(3 * IDLE_MS);
+  assert.deepEqual(w.written, [1], "copy 1 is not unpacked or written again");
+});

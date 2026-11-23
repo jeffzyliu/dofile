@@ -60,7 +60,7 @@ export function graphicsWorker(env: GraphicsEnv) {
     nativeRunning: false, // the browser's decoder is unpacking a copy, which the unpack may have left since
     // copies and damage
     nativeFailedOn: null as number | null, // the copy the browser's decoder failed on
-    damage: "", // why the part did not unpack or write; said once, by the next graph
+    damage: null as { copy: number; why: string; said: boolean } | null, // the copy it was found on; said once, by a graph
     // this run
     run: { askedOn: null as number | null, writtenAt: 0 }, // askedOn: the copy when it asked for a fetch again
   };
@@ -69,7 +69,7 @@ export function graphicsWorker(env: GraphicsEnv) {
     started: rec.started,
     phase: rec.unpack.phase,
     nativeRunning: rec.nativeRunning,
-    damage: Boolean(rec.damage),
+    damagedOn: rec.damage?.copy ?? null,
     useNative: (copy) => useNative(rec.source.brotliMode, hasNativeBrotli(), rec.nativeFailedOn, copy),
     file: rec.part!.file,
   });
@@ -83,14 +83,17 @@ export function graphicsWorker(env: GraphicsEnv) {
     return readPart(rec.part!.region!, waitMs, { withBytes });
   }
 
-  // The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again), the
-  // graph that finds it (or else the next one) says why, and the idle steps stop until then.
+  // The part will not unpack or write: it is dropped (the page deletes it from the Cache and fetches it again). The
+  // damage is tied to the copy the step had: the graph that finds it, or else the next one that reads that copy, says
+  // why, and it keeps that copy (not a fresh one) from being unpacked again.
   function dropDamaged(e: unknown): string {
-    rec.damage = `the graphics files arrived damaged (${env.errorOf(e).message}); they are fetched again for the next graph`;
+    const why = `the graphics files arrived damaged (${env.errorOf(e).message}); they are fetched again for the next graph`;
+    // every phase a step unpacks or writes in names its copy
+    rec.damage = { copy: "copy" in rec.unpack ? rec.unpack.copy : -1, why, said: false };
     if (rec.unpack.phase === "unpacking" || rec.unpack.phase === "unpacked") rec.unpack = { phase: "none" };
     env.post({ graphics: "damaged" });
-    console.warn(`[dofile] ${rec.damage}`);
-    return rec.damage;
+    console.warn(`[dofile] ${why}`);
+    return why;
   }
 
   // One step of the brotli-wasm unpack (UNPACK_STEP of input); the first is given the landed part. A waiting graph and
@@ -139,11 +142,6 @@ export function graphicsWorker(env: GraphicsEnv) {
    */
   function waitGraphics(ms: number): string {
     if (written()) return "";
-    if (rec.damage) {
-      const why = rec.damage;
-      rec.damage = ""; // said once: the page is fetching the part again, the next graph waits for it
-      return why;
-    }
     const interrupt = env.interrupt();
     for (;;) {
       let read = { seq: 0, busy: true } as SeqRead<PartRead>; // set by waitStep's read
@@ -154,6 +152,7 @@ export function graphicsWorker(env: GraphicsEnv) {
             unpacked: rec.unpack.phase === "unpacked",
             unpacking: rec.unpack.phase === "unpacking",
             askedOn: rec.run.askedOn,
+            damage: rec.damage,
           },
           () => (read = readGraphics(ms, true)),
         );
@@ -173,6 +172,9 @@ export function graphicsWorker(env: GraphicsEnv) {
             // waitStep unpacks only a landed read
             if ("value" in read && read.value.state === "landed") unpackStep(read.value);
             continue;
+          case "say": // the damage on the read's copy (waitStep says it only then)
+            rec.damage!.said = true;
+            return rec.damage!.why;
           case "ask-again":
             if ("value" in read) rec.run.askedOn = read.value.copy;
             env.post({ graphics: "again" });
@@ -185,7 +187,7 @@ export function graphicsWorker(env: GraphicsEnv) {
         }
       } catch (e) {
         const why = dropDamaged(e);
-        rec.damage = ""; // this graph says it; the next one waits for the page's fresh fetch
+        rec.damage!.said = true; // this graph says it; the next one waits for the page's fresh fetch
         return why;
       }
     }
@@ -233,7 +235,7 @@ export function graphicsWorker(env: GraphicsEnv) {
 
   // The one door to the part's work while idle: after `startup`, IDLE_MS after the last run.
   function idleSoon(delay = Math.max(0, rec.idleSince + IDLE_MS - performance.now())) {
-    if (!rec.started || !rec.part || rec.timer || rec.nativeRunning || rec.damage || rec.unpack.phase === "warmed") return;
+    if (!rec.started || !rec.part || rec.timer || rec.nativeRunning || rec.unpack.phase === "warmed") return;
     rec.timer = setTimeout(runIdleStep, delay);
   }
 
