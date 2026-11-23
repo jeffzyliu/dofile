@@ -4,7 +4,7 @@ import { useEffect, useState } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
 import { activeTab, tabs } from "../editor/documents.ts";
 import { runCommand } from "../run.ts";
-import { files, fresh } from "../state.ts";
+import { files, fresh } from "../state/files.ts";
 import { store } from "../store.ts";
 import { CommandBar } from "../ui/CommandBar";
 import { Icon } from "../ui/Icon";

@@ -10,8 +10,8 @@ import { saveAs } from "./files/save.ts";
 import { fileTurn, turnsOn } from "./files/turns.ts";
 import { reloadTab } from "./files/upload.ts";
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
+import { persisted, filesWriter as W } from "./state/files.ts";
 import * as S from "./state.ts";
-import { filesWriter as W } from "./state.ts";
 
 type Store = {
   list(): Promise<FileInfo[]>;
@@ -67,7 +67,7 @@ export function block() {
 // the files changed (the page's change, `row`, or a run's): the storage banner, once per visit, if the browser may
 // clear them
 function changed(row?: PendingRow) {
-  if ((row && seeding.has(row.path)) || warned || S.persisted.value !== false) return;
+  if ((row && seeding.has(row.path)) || warned || persisted.value !== false) return;
   warned = true;
   S.addBanner({ b: "storage" });
 }

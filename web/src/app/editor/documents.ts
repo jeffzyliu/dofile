@@ -8,7 +8,8 @@ import { minimalSetup } from "codemirror";
 import { baseName } from "../files/tree.ts";
 import { fileTurn } from "../files/turns.ts";
 import { movedPath, within } from "../paths.ts";
-import { addBanner, banners, dismiss, engine, lastRun, openDialog, say, showToast, wrap } from "../state.ts";
+import { engine } from "../state/engine.ts";
+import { addBanner, banners, dismiss, lastRun, openDialog, say, showToast, wrap } from "../state.ts";
 import { runOn } from "../states/predicates.ts";
 import type { OpenTab, RunHead } from "../types.ts";
 import {

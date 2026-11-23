@@ -2,7 +2,9 @@
 // say() in state.ts announces changes. "Not affiliated with StataCorp" shows from 1200 px only (app.css): under it the
 // bar has no room for it beside the longest last run. Screen readers get the full sentence (AFFILIATION).
 import { snapshotStart } from "../env";
-import { engine, graphicsPart, lastRun, memory, persisted } from "../state.ts";
+import { engine, graphicsPart } from "../state/engine.ts";
+import { persisted } from "../state/files.ts";
+import { lastRun, memory } from "../state.ts";
 import { resetsIn, since } from "./clock.ts";
 import { type StatusForm, type StatusPart, statusParts } from "./status.ts";
 

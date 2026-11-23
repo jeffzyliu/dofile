@@ -12,6 +12,8 @@ import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
 import { focusWanted } from "./app/files/tree-state.ts";
 import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
+import * as Engine from "./app/state/engine.ts";
+import * as Files from "./app/state/files.ts";
 import * as Saved from "./app/state/saved.ts";
 import * as S from "./app/state.ts";
 import { store } from "./app/store.ts";
@@ -57,7 +59,7 @@ effect(() => {
 watchWakeLock();
 // the engine's state on <html>, for the tests
 effect(() => {
-  document.documentElement.dataset.engine = S.engine.value.s;
+  document.documentElement.dataset.engine = Engine.engine.value.s;
 });
 addEventListener("beforeunload", (e) => {
   if (tabs.value.some((t) => t.dirty)) e.preventDefault();
@@ -73,9 +75,9 @@ const testHook = {
   engine: client,
   store,
   start,
-  persisted: () => S.persisted.value,
-  engineBytes: S.engineBytes,
-  state: { ...S, ...Saved, tabs, activeTab }, // one object: the signals, and the tabs from their owner
+  persisted: () => Files.persisted.value,
+  engineBytes: Engine.engineBytes,
+  state: { ...S, ...Saved, ...Files, ...Engine, tabs, activeTab }, // one object: the signals, and the tabs from their owner
   documents: documentSeeds,
   run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
   breakRun,

@@ -3,7 +3,7 @@
 // its own (states/clock.ts).
 import { effect, signal } from "@preact/signals-core";
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
-import { engine } from "../state.ts";
+import { engine } from "../state/engine.ts";
 import { engineLoading, runOn } from "../states/predicates.ts";
 import type { EngineStateOf } from "../types.ts";
 

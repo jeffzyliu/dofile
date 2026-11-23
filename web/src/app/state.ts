@@ -12,8 +12,6 @@ import type {
   DataSummary,
   Dialog,
   DialogName,
-  EngineState,
-  FileInfo,
   Graph,
   LastRun,
   Layout,
@@ -25,39 +23,6 @@ import type {
   Results,
   Theme,
 } from "./types.ts";
-
-// ---- the engine ----
-export const engineWriter = {
-  engine: signal<EngineState>({ s: "checking-lock" }),
-};
-export const engine: ReadonlySignal<EngineState> = engineWriter.engine;
-export const isolated = signal(Boolean(globalThis.crossOriginIsolated)); // set once at load
-/** Progress of the graphics part: not an engine state, so it does not go through the machine. */
-export const graphicsWriter = {
-  part: signal<import("../engine/types.ts").GraphicsProgress | null>(null), // the transport's onGraphics (engine.ts)
-};
-/** A lazy snapshot's graphics part; null with none. */
-export const graphicsPart: ReadonlySignal<import("../engine/types.ts").GraphicsProgress | null> = graphicsWriter.part;
-
-// The download size for the prompt, in bytes as a host sends them. The build writes it into the page
-// (<meta name="dofile-engine-bytes">, vite.config.ts), so it is there before any download. null: not a built page.
-function metaEngineBytes(doc: Document | undefined = globalThis.document): number | null {
-  const bytes = Number(doc?.querySelector('meta[name="dofile-engine-bytes"]')?.getAttribute("content"));
-  return bytes > 0 ? bytes : null;
-}
-export const engineBytes = metaEngineBytes();
-
-// ---- files ----
-export const filesWriter = {
-  files: signal<FileInfo[]>([]),
-  fresh: signal<Set<string>>(new Set()), // paths the last run created or changed (the "new" badge)
-  persisted: signal<boolean | null>(null), // null: unknown
-};
-export const files: ReadonlySignal<FileInfo[]> = filesWriter.files;
-/** Whether the store has a file (folders do not count): "Download all (.zip)" is disabled without one. */
-export const hasFiles = computed(() => files.value.some((f) => !f.dir));
-export const fresh: ReadonlySignal<Set<string>> = filesWriter.fresh;
-export const persisted: ReadonlySignal<boolean | null> = filesWriter.persisted;
 
 // ---- layout ----
 export const split = signal(saved.get("dofile.split") !== "0"); // kept in localStorage

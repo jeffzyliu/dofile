@@ -75,8 +75,8 @@ or {
     `graphicsWriter`
   } as $m where {
     $filename <: r".*/src/.*",
-    $filename <: not r".*/src/app/(?:state|engine)\.ts$",
-    register_diagnostic(span=$m, message="engineWriter and graphicsWriter are named only by state.ts and app/engine.ts")
+    $filename <: not r".*/src/app/(?:state/engine|engine)\.ts$",
+    register_diagnostic(span=$m, message="engineWriter and graphicsWriter are named only by state/engine.ts and app/engine.ts")
   },
   `runWriter` as $m where {
     $filename <: r".*/src/.*",
@@ -85,8 +85,8 @@ or {
   },
   `filesWriter` as $m where {
     $filename <: r".*/src/.*",
-    $filename <: not r".*/src/app/(?:state|files)\.ts$",
-    register_diagnostic(span=$m, message="filesWriter is named only by state.ts and app/files.ts")
+    $filename <: not r".*/src/app/(?:state/files|files)\.ts$",
+    register_diagnostic(span=$m, message="filesWriter is named only by state/files.ts and app/files.ts")
   },
   // The controller's queue has one way in: enqueue(), called from dispatch() and reply() only; nothing else puts an
   // event into the queue or empties it, but connectEngine().

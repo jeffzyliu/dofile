@@ -25,8 +25,8 @@ import { initial, RC_RESET, transition } from "../engine/machine.ts";
 import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
 import { BREAK_GRACE_MS } from "../engine/types.ts";
 import { block, own } from "./files.ts";
+import { engineBytes, engineWriter, graphicsWriter } from "./state/engine.ts";
 import * as S from "./state.ts";
-import { engineWriter, graphicsWriter } from "./state.ts";
 import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
 import type { EngineState, RunHead } from "./types.ts";
 import { ask as askFocus, fromAnywhere } from "./ui/focus-targets.ts";
@@ -106,7 +106,7 @@ export function connectEngine({
       }) ?? null,
   };
   wiring = {
-    env: { snapshot, canInterrupt, graceMs, engineBytes: S.engineBytes, manual },
+    env: { snapshot, canInterrupt, graceMs, engineBytes, manual },
     reader: client,
     perform: performer(client, client, lock, handles),
     handles,

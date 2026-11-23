@@ -4,4 +4,6 @@
 export const S = {
   ...(await import("../src/app/state.ts")),
   ...(await import("../src/app/state/saved.ts")),
+  ...(await import("../src/app/state/files.ts")),
+  ...(await import("../src/app/state/engine.ts")),
 };

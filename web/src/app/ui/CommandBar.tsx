@@ -2,7 +2,8 @@
 import type { fileCommand } from "../../stata/quote.ts";
 import { copyText } from "../output/clip.ts";
 import { barButton, startFirst, startOffer } from "../start.ts";
-import { engine, showToast } from "../state.ts";
+import { engine } from "../state/engine.ts";
+import { showToast } from "../state.ts";
 import { takesRun } from "../states/predicates.ts";
 
 type Props = {
