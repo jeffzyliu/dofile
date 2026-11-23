@@ -45,9 +45,12 @@ The other scripts (the screenshot run, `preview`, the `check-*` runs inside Pyod
   `namespace` or constructor parameter properties; `npm run check` enforces it). The engine's types are
   `src/engine/types.ts`; keep them and SPEC section 6 in step.
 - **Code style: `web/STYLE.md`** (comments, functions). Read it before writing or reviewing code here.
-- **State.** One module of signals, `src/app/state.ts`, except the open tabs: `src/app/editor/documents.ts` keeps one
-  record per tab, its `tabs`, `activeTab` and `selection` are computeds over them, and a tab changes only through its
-  functions (it needs no view; the editor attaches its view on mount). A signal with one owner is exported `ReadonlySignal`, so a view
+- **State.** One module of signals per owner, in `src/app/state/` (`engine.ts`, `files.ts`, `run.ts`, `layout.ts`,
+  `notices.ts`, `saved.ts`; `theme` is in `theme.ts`, the Data tab's `pickedVar` in `output/view.ts`), except the open tabs:
+  `src/app/editor/documents.ts` keeps one record per tab, its `tabs`, `activeTab` and `selection` are computeds over them,
+  and a tab changes only through its functions (it needs no view; the editor attaches its view on mount). A state module
+  imports only types, `app/paths.ts` (pure path helpers), the signals package and other state modules. The tests read
+  the modules joined as `S` (`test/state-all.ts`); the test hook's `state` is the same join. A signal with one owner is exported `ReadonlySignal`, so a view
   that assigns it fails `npm run check`. The controllers (`src/app/engine.ts`, `run.ts`, `files.ts`, `start.ts`) are `.ts`
   files that import no `.tsx`, tested in Node (`test/app-*.test.ts`, on `test/wiring.ts`; each file starts from
   `resetState()`). Views read signals and call the controllers' actions; they never call the transport or the machine.
