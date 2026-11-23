@@ -32,7 +32,7 @@ beforeEach(async () => {
   await refresh();
   for (const t of D.tabs.value) D.close(t.path);
   for (const b of S.banners.value) S.dismiss(b);
-  S.dialog.value = null;
+  S.closeDialog();
 });
 
 /** Open `path` with `text` in the store, as the active tab. */
@@ -80,7 +80,7 @@ function answering(a: ClashAnswer) {
   return effect(() => {
     if (S.dialog.value?.d !== "clash") return;
     queueMicrotask(() => {
-      S.dialog.value = null;
+      S.closeDialog();
       Up.answerClash(a);
     });
   });
@@ -207,7 +207,7 @@ test("Save rule: an upload's Replace of the tab whose turn comes before a pendin
   const done = Up.upload([{ path: "a.do", data: enc("uploaded") }]);
   await asked();
   const open = await hold();
-  S.dialog.value = null;
+  S.closeDialog();
   Up.answerClash({ replace: true, isForRest: false }); // the upload's write takes the turn after the held one
   await new Promise((r) => setTimeout(r, 0));
   const saved = D.save("a.do"); // and the Save the one after that

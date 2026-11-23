@@ -1002,7 +1002,7 @@ export const fresh: ReadonlySignal<Set<string>>;         // file service: paths 
 export const persisted: ReadonlySignal<boolean | null>;  // file service, from storage.persist() and persisted()
 export const split: Signal<boolean>;             // the Log head's Split and Unsplit; kept in localStorage
 export const outputTab: Signal<"log" | "graph" | "data" | "results" | "help">;   // the Output tablist; "log" only unsplit; Unsplit always shows it
-export const phoneTab: Signal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar; Run sets "log";
+export const phoneTab: ReadonlySignal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar, through showPhone(tab); Run sets "log";
                                                  // 4a's openFile sets "editor" (a text or .dta tab)
 export const log: ReadonlySignal<LogItem[]>;             // run controller; "Clear log" empties it but the head
 export const lastRun: ReadonlySignal<LastRun | null>;    // run controller
@@ -1020,7 +1020,7 @@ export const theme: Signal<"system" | "light" | "dark">;   // the theme button
 export const wrap: Signal<boolean>;              // "Wrap lines" in the ⋯ menus (state/layout.ts toggleWrap); views read it; kept in localStorage
 export const toast: ReadonlySignal<string | null>;       // anyone, through showToast(text, kind?); it clears itself (toastMs: 4 to 10 s)
 export const toastError: ReadonlySignal<boolean>;        // the toast reports an error (warning icon), not a confirmation
-export const dialog: Signal<Dialog>;             // whoever opens one; the dialog closes itself
+export const dialog: ReadonlySignal<Dialog>;       // the one open dialog: openDialog(d); closeDialog() closes any, closeDialog(own) only that kind or object
 export const banners: ReadonlySignal<Banner[]>;          // their owners, through addBanner(); Dismiss removes one (dismiss())
 export const announce: ReadonlySignal<string>;           // the hidden live region: through say() (controllers, showToast, views)
 ```
@@ -1036,10 +1036,11 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   transport or the machine (an import-graph test checks it).
 - **Who writes a signal.** A signal with one owner is a `ReadonlySignal`, so a view that assigns one fails `npm run check`:
   `engine`; `memory`, `log`, `lastRun`, `history`, `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`,
-  `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`). The owner
+  `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`); `dialog`
+  (`openDialog`, `closeDialog`); `phoneTab` (`showPhone`). The owner
   writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state.ts`), which only its owner imports (a
-  test checks it). The others stay writable by views: `dialog`, `split`,
-  `outputTab`, `phoneTab`, `pickedVar`, `theme`, `layout`, `isolated`.
+  test checks it). The others stay writable by views: `split`,
+  `outputTab`, `pickedVar`, `theme`, `layout`, `isolated`.
 - **The open tabs** are not in `state.ts`: `editor/documents.ts` keeps one record per tab (its path and its document,
   or nothing for a .dta tab) and exports `tabs: ReadonlySignal<OpenTab[]>`, `activeTab: ReadonlySignal<string | null>`
   and `selection` (the shown text tab's whole selected lines), all computed from the records; a tab's `dirty` is its
@@ -1123,9 +1124,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
     delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Opens, closes,
-    renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
+    renames and activates tabs through `editor/documents.ts`; opens `dialog`s (its four kinds, `openDialog`) and closes them (`closeDialog`), writes `banners` (not-text); `openFile` calls `showPhone("editor")` on
     a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `showFullSize()` (phone); the phone's
-    `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
+    `FileSwitcher` calls `showPhone("files")` ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
     `editor/documents.ts` `save(path)` and `focusNow("editor")` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
@@ -1170,7 +1171,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `log/CommandLine.tsx` (`CommandLine`), `log/LogActions.tsx` (`LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too),
     `log/PhoneStrip.tsx` (`PhoneStrip`: draws the short form), `log/find.ts` (Find's signals and `openFind`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
     save-failed and run-changed), `outputTab` (a graph link; `outputTab` "log" when Find opens with the
-    Output pane unsplit), and selects a graph with `selectGraph` (a graph link), and opens the full-size view with `showFullSize` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
+    Output pane unsplit), and selects a graph with `selectGraph` (a graph link), and opens the full-size view with `showFullSize` (a tap on an inline graph, phone), `showPhone("log")` (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
     ("Reset now"), `openFile` (Go to line in a file that is not open), `store.write`, `saveAs` (Download log, the
     save-failed banner's Download), `reloadFromStore` (the run-changed banner's "Reload from the
@@ -1327,7 +1328,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
     banners above the editor and the log, and the reset and storage banners (the unused memory banner view was removed in the post-merge review); `DownloadFailedBanner` was built in
     step 3, "Try again" (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d
-    reworded it: "Step 4d: decided words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
+    reworded it: "Step 4d: decided words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Opens the reset dialog (`openDialog`) and closes download and other-tab (`closeDialog(kind)`), `banners` (only `dismiss`). Calls `start`,
     `ask()` (the declined banner's "Start engine" leads back to `asking`, section 5), `decline`,
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
@@ -1489,7 +1490,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `store_error`), so an older run keeps its own "Go to line". The run-head's `first` is per engine: a reset starts
   again, and the run it cut counts for the old engine. "Clear log" empties the log but its head (the banner and the versions line, as a fresh page shows it; this reverses the first spec, "the head too") and the graphs, keeps
   a running run's text item, and graph numbers start again at 1. `graphs` keeps the last 20, so a graph is found by `n`,
-  never by a kept index. A run's graphs keep the theme it was sent with. Run sets `phoneTab` to "log" on a phone; a
+  never by a kept index. A run's graphs keep the theme it was sent with. Run calls `showPhone("log")` on a phone; a
   command does not. A run cut because another tab took the lock (kind "stopped") does not set `lastRun`.
 - **Layout as built.** One component tree for every width (the editor and the log are never mounted twice), in
   `web/src/app/App.tsx`, each phone piece next to its desktop counterpart (`PhoneTopBar` after `Toolbar`, the phone's ⋯

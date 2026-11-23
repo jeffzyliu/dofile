@@ -15,7 +15,7 @@ const type = (path: string, at: number, insert: string) => D.update(path, { chan
 beforeEach(() => {
   for (const t of D.tabs.value) D.close(t.path);
   for (const b of S.banners.value) S.dismiss(b);
-  S.dialog.value = null;
+  S.closeDialog();
 });
 
 test("addText and addDta open tabs at the end, each text tab with its document from the start; activate makes one active", () => {

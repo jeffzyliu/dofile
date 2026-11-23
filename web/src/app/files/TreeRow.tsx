@@ -3,7 +3,7 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
 import { activeTab, tabs } from "../editor/documents.ts";
-import { dialog, fresh } from "../state.ts";
+import { fresh, openDialog } from "../state.ts";
 import { useFocusOnMount, useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { roveKey } from "../ui/keys.ts";
@@ -15,7 +15,7 @@ import { parentOf, type Row } from "./tree.ts";
 import { currentDir, focusRow, rove, toggle } from "./tree-state.ts";
 
 const askDelete = (path: string) => {
-  dialog.value = { d: "delete", paths: [path] };
+  openDialog({ d: "delete", paths: [path] });
 };
 
 function rowItems(row: Row): MenuItem[] {

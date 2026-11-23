@@ -2,7 +2,7 @@
 // to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
 import { activate, addDta, addText, tabs } from "../editor/documents.ts";
 import { addFileGraph } from "../graphs.ts";
-import { addBanner, banners, dismiss, isPhone, outputTab, phoneTab, say, showFullSize, showToast } from "../state.ts";
+import { addBanner, banners, dismiss, isPhone, outputTab, say, showFullSize, showPhone, showToast } from "../state.ts";
 import { baseName, extOf } from "./tree.ts";
 import { fileTurn } from "./turns.ts";
 
@@ -27,7 +27,7 @@ export function toBase64(bytes: Uint8Array): string {
 /** Make `path` the active tab; on a phone show the Editor view. */
 function show(path: string) {
   activate(path);
-  if (isPhone.value) phoneTab.value = "editor";
+  if (isPhone.value) showPhone("editor");
 }
 
 /** Open `path` from the store as section 3.11 says. Resolves once it is shown; a file

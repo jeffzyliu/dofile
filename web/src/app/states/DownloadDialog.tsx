@@ -8,7 +8,7 @@
 import { megabytes } from "../bytes.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL, snapshotStart } from "../env";
-import { dialog, engine, engineBytes, graphicsPart } from "../state.ts";
+import { closeDialog, engine, engineBytes, graphicsPart } from "../state.ts";
 import type { DialogOf, Stage } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { useNow } from "./clock.ts";
@@ -66,7 +66,7 @@ function ProgressDialog() {
   const busy = engineStarting(st);
   const now = useNow(250, busy);
   const close = () => {
-    dialog.value = null;
+    closeDialog();
   };
   const stages = stagesOf(snapshotStart);
   const pct = st.s === "downloading" && st.total ? Math.min(100, (100 * st.received) / st.total) : null;

@@ -7,7 +7,7 @@ import { batch, computed, effect, type ReadonlySignal, type Signal, signal, untr
 import { minimalSetup } from "codemirror";
 import { baseName, movedPath, within } from "../files/tree.ts";
 import { fileTurn } from "../files/turns.ts";
-import { addBanner, banners, dialog, dismiss, engine, lastRun, say, showToast, wrap } from "../state.ts";
+import { addBanner, banners, dismiss, engine, lastRun, openDialog, say, showToast, wrap } from "../state.ts";
 import { runOn } from "../states/predicates.ts";
 import type { OpenTab, RunHead } from "../types.ts";
 import {
@@ -195,7 +195,7 @@ export function askClose(path: string): boolean {
   const tab = tabs.peek().find((t) => t.path === path);
   if (!tab) return false;
   if (tab.dirty) {
-    dialog.value = { d: "close-tab", path };
+    openDialog({ d: "close-tab", path });
     return false;
   }
   close(path);

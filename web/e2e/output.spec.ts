@@ -1,12 +1,12 @@
 // The Output tabs (Graph, Data, Results), the full-size graph view and a .dta file's tab in real browsers
 // (src/app/output/). The tests reach the page through its test hook: `run` runs code through the run controller, `state`
-// holds the signals (a test sets `tabs`, `activeTab`, `phoneTab` and `graphFull` itself, which views may write). The
+// holds the signals (a test sets `tabs` and `activeTab` itself, and the phone's view and the full-size view through `showPhone` and `showFullSize`). The
 // clipboard is replaced by a recorder in every page (reading the real one needs a permission each browser handles its own
 // way), so a test reads what the page copied.
 //  - The empty states and a .dta tab with no engine need none: `?test=manual`.
 //  - Everything else is one test with an engine (each start costs a while): one run draws three graphs, fits a model and
 //    leaves a wide dataset, and the tabs are checked against that. On the phone profile there is no Graph tab (graphs
-//    show in the log), so only the full-size view is checked there, opened through `graphFull`.
+//    show in the log), so only the full-size view is checked there, opened through `showFullSize`.
 import type { Page } from "@playwright/test";
 import { engineState, expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 import {
@@ -45,7 +45,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-/** Show an Output tab: the Output tablist on a desktop, the phone's bottom bar (its `phoneTab` signal) on a phone. */
+/** Show an Output tab: the Output tablist on a desktop, the phone's bottom bar (its `phoneTab` signal, set by `showPhone`) on a phone. */
 async function showTab(page: Page, tab: "graph" | "data" | "results") {
   if (isPhone(page))
     await showPhoneTab(page, tab as PhoneTab); // never "graph": the phone has no Graph tab

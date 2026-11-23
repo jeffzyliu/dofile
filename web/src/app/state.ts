@@ -10,6 +10,7 @@ import type {
   BrowseRows,
   DataSummary,
   Dialog,
+  DialogName,
   EngineState,
   FileInfo,
   Graph,
@@ -79,7 +80,12 @@ export const persisted: ReadonlySignal<boolean | null> = filesWriter.persisted;
 // ---- layout ----
 export const split = signal(saved.get("dofile.split") !== "0"); // kept in localStorage
 export const outputTab = signal<OutputTab>(split.value ? "graph" : "log"); // "log" only unsplit
-export const phoneTab = signal<PhoneTab>("editor");
+const shownPhoneTab = signal<PhoneTab>("editor");
+export const phoneTab: ReadonlySignal<PhoneTab> = shownPhoneTab; // through showPhone()
+/** Show the phone's `tab` view. */
+export function showPhone(tab: PhoneTab) {
+  shownPhoneTab.value = tab;
+}
 export const layout = signal<Layout>("desktop"); // from the width: phone under 700 px (SPEC section 2)
 /** The phone layout: read this rather than passing a `phone` prop down. */
 export const isPhone = computed(() => layout.value === "phone");
@@ -173,7 +179,21 @@ const announced = signal("");
 export const toast: ReadonlySignal<string | null> = toastText; // set through showToast(); it clears itself (toastMs)
 // the toast reports an error (the warning icon), not a confirmation
 export const toastError: ReadonlySignal<boolean> = toastIsError;
-export const dialog = signal<Dialog>(null); // the one open dialog; it sets null when it closes
+const openedDialog = signal<Dialog>(null);
+export const dialog: ReadonlySignal<Dialog> = openedDialog; // the one open dialog, through openDialog() and closeDialog()
+/** Open `d`, in the place of any dialog open. */
+export function openDialog(d: NonNullable<Dialog>) {
+  openedDialog.value = d;
+}
+/** Close the open dialog. With `own`, a kind or the object openDialog was given, only that dialog: one that another
+ *  replaced meanwhile stays open. Returns whether a dialog closed. */
+export function closeDialog(own?: DialogName | NonNullable<Dialog>): boolean {
+  const open = openedDialog.peek();
+  if (open === null) return false;
+  if (own !== undefined && (typeof own === "string" ? open.d !== own : open !== own)) return false;
+  openedDialog.value = null;
+  return true;
+}
 export const banners: ReadonlySignal<Banner[]> = bannerList; // through addBanner() and dismiss()
 export const announce: ReadonlySignal<string> = announced; // the hidden live region, through say()
 
