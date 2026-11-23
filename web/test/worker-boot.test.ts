@@ -213,7 +213,7 @@ test("startEngine: the normal boot installs the wheels, then starts the engine i
   const startup: Partial<Startup> = {};
   const buffer = new Int32Array(new SharedArrayBuffer(4));
   const part = { file: { name: "graphics.tar.br", raw: 1, size: 1 }, sab: new SharedArrayBuffer(16) };
-  const source = { snapshotBase: "", built: 0, brotliWasm: null, brotliMode: undefined };
+  const source = { snapshotURL: "", built: 0, brotliWasm: null, brotliMode: undefined };
   const lazy: unknown[] = [];
   const out = await startEngine(
     py,

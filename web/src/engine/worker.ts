@@ -63,7 +63,7 @@ let share: {
   region: SeqRegion | null; // the shared buffer's; null: there is none, and boot wrote the part
 } | null = null;
 let brotliWasm: BrotliWasmType | null = null;
-let snapshotBase = ""; // mount's `snapshot`: where the part is, for boot's fetch of it without a shared buffer
+let snapshotURL = ""; // mount's `snapshot`: where the part is, for boot's fetch of it without a shared buffer
 let built = 0; // mount's `built`: the name of the snapshot's Cache, for that fetch
 let started = false; // `startup` was answered
 let runs = 0; // runs sent and not ended (counted before the queue)
@@ -149,9 +149,9 @@ function waitGraphics(ms: number): string {
       const step = waitStep(
         {
           interrupted: Boolean(interrupt && Atomics.load(interrupt, 0) !== 0),
-          decoded: Boolean(decoded),
-          decoding: Boolean(decode),
-          askedAt,
+          unpacked: Boolean(decoded),
+          unpacking: Boolean(decode),
+          askedOn: askedAt,
         },
         () => (read = readGraphics(ms, true)),
       );
@@ -164,11 +164,11 @@ function waitGraphics(ms: number): string {
           writePart("in a run");
           writtenInRun = performance.now();
           return "";
-        case "decode-more":
+        case "unpack-more":
           decodeStep();
           continue;
-        case "decode":
-          // waitStep decodes only a landed read
+        case "unpack":
+          // waitStep unpacks only a landed read
           if ("value" in read && read.value.state === "landed") decodeStep(read.value.bytes!);
           continue;
         case "ask-again":
@@ -283,7 +283,7 @@ export const table: OpTable = {
     queued: true,
     async handle(args) {
       brotliMode = args.brotli;
-      snapshotBase = args.snapshot ?? "";
+      snapshotURL = args.snapshot ?? "";
       built = args.built ?? 0;
       fromSnapshot = Boolean(args.snapshot);
       ({ py, brotli: brotliWasm } = await startPython(args, stage, startup));
@@ -306,7 +306,7 @@ export const table: OpTable = {
         fromSnapshot,
         stage,
         startup,
-        part: { snapshotBase, built, brotliWasm, brotliMode },
+        part: { snapshotURL, built, brotliWasm, brotliMode },
         partWritten(graphics) {
           // no shared buffer: boot wrote it; the idle steps import it
           share = { file: graphics.file, region: null };

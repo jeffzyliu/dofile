@@ -16,7 +16,7 @@ import {
 import type { SeqRead, SeqReader } from "../src/engine/seqlock.ts";
 import { readSeq } from "../src/engine/seqlock.ts";
 
-const idle = { interrupted: false, decoded: false, decoding: false, askedAt: null };
+const idle = { interrupted: false, unpacked: false, unpacking: false, askedOn: null };
 const offline = partReason("offline");
 // a read that counts how often it is made
 const reader = (part: PartRead) => {
@@ -34,20 +34,20 @@ const landed = (copy = 0): PartRead => ({ state: "landed", copy, bytes: null });
 const pending = (copy = 0): PartRead => ({ state: "pending", copy });
 const failed = (copy = 0): PartRead => ({ state: "failed", copy, reason: offline });
 
-test("waitStep: a Break comes first, then a decoded part is written, then a decode goes on; none of them reads the part", () => {
+test("waitStep: a Break comes first, then an unpacked part is written, then an unpack goes on; none of them reads the part", () => {
   const r = reader(landed());
-  assert.equal(waitStep({ ...idle, interrupted: true, decoded: true, decoding: true }, r.read), "break");
-  assert.equal(waitStep({ ...idle, decoded: true, decoding: true }, r.read), "write");
-  assert.equal(waitStep({ ...idle, decoding: true }, r.read), "decode-more");
+  assert.equal(waitStep({ ...idle, interrupted: true, unpacked: true, unpacking: true }, r.read), "break");
+  assert.equal(waitStep({ ...idle, unpacked: true, unpacking: true }, r.read), "write");
+  assert.equal(waitStep({ ...idle, unpacking: true }, r.read), "unpack-more");
   assert.equal(r.reads, 0, "the part (a copy of up to 33 MB) is not read");
 });
 
-test("waitStep: a part that landed is decoded; one that is pending, or a busy read, waits", () => {
+test("waitStep: a part that landed is unpacked; one that is pending, or a busy read, waits", () => {
   const r = reader(landed());
-  assert.equal(waitStep(idle, r.read), "decode");
+  assert.equal(waitStep(idle, r.read), "unpack");
   assert.equal(r.reads, 1);
   assert.equal(waitStep(idle, readOf(pending())), "wait");
-  assert.equal(waitStep({ ...idle, askedAt: 3 }, readOf(pending(4))), "wait");
+  assert.equal(waitStep({ ...idle, askedOn: 3 }, readOf(pending(4))), "wait");
   assert.equal(
     waitStep(idle, () => ({ seq: 7, busy: true })),
     "wait",
@@ -56,14 +56,14 @@ test("waitStep: a part that landed is decoded; one that is pending, or a busy re
 });
 
 test("waitStep: a failed part is asked for again once per run; that fetch's failure (the copy moved on) is final, with its reason", () => {
-  assert.equal(waitStep(idle, readOf(failed(2))), "ask-again", "first: ask the page (askedAt := 2)");
-  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(failed(2))), "wait", "the page has not begun");
+  assert.equal(waitStep(idle, readOf(failed(2))), "ask-again", "first: ask the page (askedOn := 2)");
+  assert.equal(waitStep({ ...idle, askedOn: 2 }, readOf(failed(2))), "wait", "the page has not begun");
   assert.deepEqual(
-    waitStep({ ...idle, askedAt: 2 }, readOf(failed(3))),
+    waitStep({ ...idle, askedOn: 2 }, readOf(failed(3))),
     { giveUp: offline },
     "the asked-for fetch failed",
   );
-  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(pending(3))), "wait", "the asked-for fetch is on its way");
+  assert.equal(waitStep({ ...idle, askedOn: 2 }, readOf(pending(3))), "wait", "the asked-for fetch is on its way");
 });
 
 test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed part gives a whole snapshot or busy, never the reason "" (the answer for written)', () => {
@@ -101,7 +101,7 @@ test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed par
           ),
         waitMs,
       );
-      const step = waitStep({ ...idle, askedAt: 0 }, () => read);
+      const step = waitStep({ ...idle, askedOn: 0 }, () => read);
 
       const where = `retry after read ${after}, waitMs ${waitMs}`;
       assert.ok(readCount >= after, `${where}: the retry was made`);
