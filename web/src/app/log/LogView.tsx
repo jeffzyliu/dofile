@@ -8,10 +8,9 @@ import { runheadWords } from "../editor/words.ts";
 import { ABOUT } from "../env";
 import { graphs, isPhone, log, wrap } from "../state.ts";
 import type { RunHead } from "../types.ts";
-import { useFocusRequest } from "../ui/focus-hooks.ts";
-import { fromAnywhere } from "../ui/focus-targets.ts";
+import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { isMac } from "../ui/Icon";
-import { findAsked, findAt, findOpen, findReturn, findText } from "./find.ts";
+import { findAt, findOpen, findReturn, findText } from "./find.ts";
 import { useFollowEnd } from "./follow.ts";
 import { drawRunParts, GraphLink, type Marker, marked } from "./LogParts.tsx";
 import { runParts } from "./run-parts.ts";
@@ -47,14 +46,7 @@ function logHead(m: Marker) {
 function FindBar({ total, pre }: { total: number; pre: RefObject<HTMLPreElement | null> }) {
   const field = useRef<HTMLInputElement>(null);
   // once per openFind: a LogView drawn again with Find open (another Output tab and back) takes no focus
-  useFocusRequest(
-    findOpen.value && findAsked.value,
-    field,
-    () => {
-      findAsked.value = false;
-    },
-    fromAnywhere,
-  );
+  useFocusTarget("find-field", () => field.current);
   if (!findOpen.value) return null;
   const at = total ? (findAt.value % total) + 1 : 0;
   const close = () => {

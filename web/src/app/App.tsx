@@ -13,7 +13,7 @@ import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
 import { FilesBody, FilesHead, fileMenuItems, NewFileButton } from "./files/FilesPane";
-import { filesOpen, foldFiles, holdFilesToggle, onFilesKey } from "./files/fold.ts";
+import { filesOpen, foldFiles, onFilesKey } from "./files/fold.ts";
 import { downloadAll } from "./files.ts";
 import { CommandLine } from "./log/CommandLine";
 import { LogActions, logMenuItems } from "./log/LogActions";
@@ -129,13 +129,16 @@ function Pane({ view, class: cls, label, children, ...rest }: PaneProps) {
   );
 }
 
+/** The Files button of the folded list: the registry's `files-toggle` target. */
 function FilesToggle() {
+  const button = useRef<HTMLButtonElement>(null);
+  useFocusTarget("files-toggle", () => button.current);
   const n = files.value.filter((f) => !f.dir).length;
   return (
     <button
       type="button"
       class="fold-toggle"
-      ref={holdFilesToggle}
+      ref={button}
       aria-expanded={filesOpen.value}
       aria-controls="files-pane"
       onClick={() => foldFiles(!filesOpen.value)}

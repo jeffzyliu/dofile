@@ -8,7 +8,7 @@ import { refresh } from "../files.ts";
 import { dialog, files } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
-import { focusAfterClose } from "./EditorTabs";
+import { focusAfterClose } from "./close-focus.ts";
 import { deleteAll, deleteEntries } from "./ops.ts";
 import { baseName, shortDate } from "./tree.ts";
 import { focusTree } from "./tree-state.ts";

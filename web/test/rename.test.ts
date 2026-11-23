@@ -10,6 +10,7 @@ const { connectFiles, refresh } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");
 const R = await import("../src/app/files/rename.ts");
 const TS = await import("../src/app/files/tree-state.ts");
+const { cancel } = await import("../src/app/ui/focus-targets.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -33,7 +34,7 @@ async function reset(files: Record<string, string> = {}) {
   for (const t of D.tabs.value) D.close(t.path);
   R.renaming.value = null;
   TS.rovingPath.value = null;
-  TS.focusWanted.value = null;
+  cancel("tree");
   TS.currentDir.value = "";
   TS.folded.value = new Set();
   S.showToast("");
@@ -66,7 +67,7 @@ async function counting(body: () => Promise<void>) {
 
 test("startRename: the field takes the row in the tab order, remembers the row it came from, and ends a waiting focus request", () => {
   TS.rovingPath.value = "b.do";
-  TS.focusWanted.value = { path: "b.do" };
+  TS.focusRow("b.do");
   R.startRename("a.do");
   const first = R.renaming.value!;
   assert.deepEqual(

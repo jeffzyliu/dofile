@@ -53,6 +53,9 @@ afterEach(() => {
   cancel("editor");
   cancel("more-actions");
   cancel("open-file-tab");
+  cancel("tree");
+  cancel("find-field");
+  cancel("files-toggle");
   doc.activeElement = doc.body;
 });
 
@@ -194,6 +197,30 @@ test("a key reaches only the entry with that key", () => {
   assert.equal(on, true);
   assert.equal(doc.activeElement, b);
   assert.equal(shownElement("editor", "c"), null);
+});
+
+test("a request with no key reaches only the entries with no key, so the row in the tab order is found among keyed rows", () => {
+  const rows = [fake(), fake(), fake()];
+  rows.forEach((el, i) => {
+    reg("editor", () => el, `row${i}`);
+  });
+  const tabOrder = rows[1];
+  reg("editor", () => tabOrder);
+  ask("editor", { from: fromAnywhere });
+
+  const moved = takeRequest("editor");
+
+  assert.equal(moved, true);
+  assert.equal(doc.activeElement, tabOrder);
+  assert.equal(shownElement("editor"), tabOrder);
+});
+
+test("a request with no key moves nothing when every entry has a key", () => {
+  reg("editor", () => fake(), "row");
+  ask("editor", { from: fromAnywhere });
+
+  assert.equal(takeRequest("editor"), false);
+  assert.equal(doc.activeElement, doc.body);
 });
 
 test("a request waits for a target registered later, and ends when taken", () => {

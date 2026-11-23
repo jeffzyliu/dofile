@@ -5,6 +5,7 @@ import { isConflict } from "../../engine/store.ts";
 import { refresh } from "../files.ts";
 import { files, say, showToast } from "../state.ts";
 import { store } from "../store.ts";
+import { cancel } from "../ui/focus-targets.ts";
 import { openFile } from "./open.ts";
 import { createEntry, fail, NEW_NAMES, renameEntry } from "./ops.ts";
 import {
@@ -17,7 +18,7 @@ import {
   newPathProblem,
   parentOf,
 } from "./tree.ts";
-import { currentDir, focusRow, focusTree, focusWanted, rovingPath, unfold } from "./tree-state.ts";
+import { currentDir, focusRow, focusTree, rovingPath, unfold } from "./tree-state.ts";
 
 export interface Renaming {
   id: number; // which field: a commit that ends after another one began leaves it alone
@@ -32,7 +33,7 @@ let lastFieldId = 0;
 export function startRename(path: string, draft?: Renaming["draft"]) {
   renaming.value = { id: ++lastFieldId, path, problem: null, draft, from: rovingPath.value };
   rovingPath.value = path;
-  focusWanted.value = null; // the field takes the focus: a waiting request ends
+  cancel("tree"); // the field takes the focus: a waiting request ends
 }
 
 /** "New .do file", "New folder" and the "+": draw the name field at once in `dir` (unfolded, made current), writing
