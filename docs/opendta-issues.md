@@ -60,6 +60,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | PATCH-2 | dofile patch: Break is taken only at safe points, so an interrupt can't leave the data half changed | `tests/test_break.py` | patched |
 | PATCH-3 | dofile patch: every user file name goes through one hook (`core/userpath.user_path`), for the web demo's path shim (`dofile/pathshim.py`) | `tests/test_pathshim.py` | patched (dofile-only, not for upstream) |
 | PATCH-4 | dofile patch: `expand` and `stsplit` build `np.repeat` counts as `np.intp`, which wasm32 numpy needs | `expand` and `stsplit` cases of `tests_opendta/compat` in Pyodide (`web/scripts/check-snapshot.ts`); a CPython test cannot show it | patched (dofile-only, wasm32); the 11 cases pass in Pyodide |
+| PATCH-5 | dofile patch: upstream turns an `IndexError`, `KeyError` or `ValueError` in a command into r(198) "invalid syntax" (00cd4dc); the log gets a line `engine error: <Type>: <message>` before it, so an engine fault is not taken for the user's syntax error | `tests/test_engine.py::test_patch5_*` | patched (dofile-only, not for upstream) |
 
 ## Details
 
@@ -682,3 +683,16 @@ is dofile's own, not for upstream.
 - Related, not OpenDTA bugs: the same run found the optional packages `xlwt` (`.xls` output) and `pyreadstat` (SAS
   transport files, pre-Stata-13 `.dta`) missing; both are in the page now (`browser-engine.md`, "Known gaps in the
   browser engine").
+
+### PATCH-5: an engine fault in a command is r(198) with an "engine error" line (dofile's own patch)
+Since 00cd4dc the dispatcher (`lang/interpreter.py`, `_as_stata_error`) turns an `IndexError`, `KeyError` or
+`ValueError` that escapes a command into r(198) "invalid syntax", with no traceback, so `capture` takes it. Before, the
+same fault was rc 9999 "internal engine error" with a traceback. The 198 follows upstream (maintainer's decision
+2026-11-23, option a), but a bug in the engine then looks like a mistake in the user's code.
+- The patch (`opendta-patch5-engine-error-line.patch`, five lines, after PATCH-2 because both edit that `except`): before it
+  raises, the dispatcher writes `engine error: <ExceptionType>: <message>` (the first line of the message; just the type
+  when the message is empty) as an error line, shown under `quietly` and hidden under `capture`, as the error itself is.
+  A real syntax error has no such line. The line has no traceback and the error text stays "invalid syntax".
+- rc 9999 stays for an exception that escapes outside a command (macro expansion, the interpreter, a loop's own work),
+  and for an `OSError` the engine did not mean (`Engine.run`).
+- Not for upstream: it is a diagnostic for dofile's agents and bug reports.

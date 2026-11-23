@@ -653,6 +653,30 @@ def test_a_memory_error_outside_a_command_is_rc_909_after_on_memory_error(eng, m
     assert eng.run("display 3").rc == 9999  # another OSError is still an engine error
 
 
+def test_patch5_a_python_error_in_a_command_is_rc_198_with_an_engine_error_line(eng, monkeypatch):
+    """PATCH-5: upstream turns an IndexError, KeyError or ValueError in a command into r(198) "invalid syntax"; the log
+    line "engine error: <Type>: <message>" tells an engine fault from the user's own syntax error."""
+    from dofile._vendor.opendta.core.dataset import Dataset
+
+    def broken(*args, **kwargs):
+        raise ValueError("boom")
+
+    eng.run("clear\nset obs 3\ngen x = _n")
+    syntax = eng.run("replace x =")
+    assert syntax.rc == 198 and "engine error" not in syntax.log, (syntax.rc, syntax.log)
+    monkeypatch.setattr(Dataset, "set_numeric", broken)
+    r = eng.run("replace x = 2")
+    assert (r.rc, r.error) == (198, "invalid syntax"), (r.rc, r.error)
+    assert "\nengine error: ValueError: boom\ninvalid syntax\n" in r.log and r.log.endswith("r(198);\n"), r.log
+    assert "engine error: ValueError: boom\n" in eng.run("quietly replace x = 2").log  # errors show under quietly
+    r = eng.run('capture replace x = 2\ndisplay "rc " _rc')  # capture takes the error and the line with it
+    assert r.rc == 0 and "engine error" not in r.log and r.log.strip().splitlines()[-1] == "rc 198", r.log
+    monkeypatch.setattr(Dataset, "set_numeric", lambda *a, **k: (_ for _ in ()).throw(KeyError("v")))
+    assert "engine error: KeyError: 'v'\n" in eng.run("replace x = 2").log
+    monkeypatch.setattr(Dataset, "set_numeric", lambda *a, **k: (_ for _ in ()).throw(IndexError()))
+    assert "engine error: IndexError\n" in eng.run("replace x = 2").log
+
+
 def test_odt22_matrix_pseudofunction(eng):
     """ODT-22: matrix(name) is the matrix name in an expression."""
     eng.run("matrix xx = (1, 2 \\ 3, 4)")
