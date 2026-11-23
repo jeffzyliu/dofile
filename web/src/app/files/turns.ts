@@ -59,8 +59,6 @@ export interface Io {
   issue(path: string, data: Uint8Array): Turn<Issued>;
 }
 
-const OP_TIMEOUT = 30_000; // ms: an IndexedDB call that has not answered by then is stuck (a hung disk, a blocked upgrade)
-
 interface Request {
   name: string;
   run: () => Promise<unknown>;
@@ -109,10 +107,30 @@ export function fileTurn<T>(body: (io: Io) => Turn<T>): Promise<T> {
   return run;
 }
 
+class TurnTimeout extends Error {
+  override name = "TurnTimeout";
+}
+
+/** The store call, rejected with a TurnTimeout if it has not answered in time. */
+function callWithTimeout(request: Request): Promise<unknown> {
+  const OP_TIMEOUT = 30_000; // ms: an IndexedDB call that has not answered by then is stuck (a hung disk, a blocked upgrade)
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new TurnTimeout(`the store did not answer ${request.name} within ${OP_TIMEOUT / 1000} s; it may still do it`),
+      );
+    }, OP_TIMEOUT);
+  });
+  const answer = (async () => request.run())(); // a store method that throws at once rejects here too, so the timer is still cleared
+  return Promise.race([answer, late]).finally(() => clearTimeout(timer));
+}
+
 async function perform<T>(body: (io: Io) => Turn<T>): Promise<T> {
   const self = { nested: false };
   const it = body(io);
-  const step = (move: () => IteratorResult<Op, T>) => {
+  /** Resume the body; while its code runs, fileTurn refuses to start a turn. */
+  const resume = (move: () => IteratorResult<Op, T>) => {
     inBody = self;
     try {
       return move();
@@ -121,39 +139,24 @@ async function perform<T>(body: (io: Io) => Turn<T>): Promise<T> {
     }
   };
   const end = (e: Error) => {
-    step(() => it.return(undefined as T));
+    resume(() => it.return(undefined as T));
     return e;
   };
-  let next = step(() => it.next());
+  let next = resume(() => it.next());
   for (;;) {
     if (self.nested) throw end(new Error("a turn cannot start inside another turn"));
     if (next.done) return next.value;
     const request = next.value as unknown as Request;
     if (!requests.has(request))
       throw end(new Error("a turn yielded something that is not a store operation: yield* io.<op>(...)"));
-    let answer: { value: unknown } | "late";
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let value: unknown;
     try {
-      answer = await Promise.race([
-        request.run().then((value) => ({ value })),
-        new Promise<"late">((ok) => {
-          timer = setTimeout(() => ok("late"), OP_TIMEOUT);
-        }),
-      ]);
+      value = await callWithTimeout(request);
     } catch (e) {
-      next = step(() => it.throw(e));
+      if (e instanceof TurnTimeout) throw end(e);
+      next = resume(() => it.throw(e));
       continue;
-    } finally {
-      clearTimeout(timer);
     }
-    if (answer === "late") {
-      const late = new Error(
-        `the store did not answer ${request.name} within ${OP_TIMEOUT / 1000} s; it may still do it`,
-      );
-      late.name = "TurnTimeout";
-      throw end(late);
-    }
-    const { value } = answer;
-    next = step(() => it.next(value));
+    next = resume(() => it.next(value));
   }
 }
