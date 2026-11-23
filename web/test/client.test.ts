@@ -1425,7 +1425,7 @@ test("graphics part: an `again` or `damaged` from a worker that has ended is dro
   page.eng.end(live(page.eng), { kind: "reset", reset: "user", reason: "session reset: reset by you." });
   await startWorker(page.eng, done.build);
 
-  ended.onmessage!({ data: { graphics: "again" } });
+  ended.onmessage!({ data: { graphics: "again", copy: 0 } });
   await sleep(20);
   assert.equal(f.modes.length, 1, "the ended worker's again fetches nothing");
   assert.equal(page.header()[0], PART_FAILED);
@@ -1433,7 +1433,7 @@ test("graphics part: an `again` or `damaged` from a worker that has ended is dro
   page.say("again");
   await f.release();
   await until(() => page.states.at(-1) === "landed", "landed");
-  ended.onmessage!({ data: { graphics: "damaged" } });
+  ended.onmessage!({ data: { graphics: "damaged", copy: 1 } });
   await sleep(20);
   assert.equal(f.modes.length, 2, "the ended worker's damaged fetches nothing");
   assert.deepEqual(page.header(), [PART_LANDED, PART.size, 1]);
