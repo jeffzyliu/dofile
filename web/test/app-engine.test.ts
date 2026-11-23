@@ -1000,7 +1000,7 @@ test("an older download still talking: its progress and its end are dropped as s
 test("call(): a read op with no worker is rejected (no-engine); one that waits behind a run is cut by a reset (kind reset), or answered after the run", async () => {
   await load();
   engine.decline();
-  await assert.rejects(engine.call("matrix", { name: "e(b)" }), { kind: "no-engine" });
+  await assert.rejects(engine.call("matrix", { name: "e(b)", runId: 1 }), { kind: "no-engine" });
   assert.deepEqual(S.engine.value, { s: "declined" });
   assert.deepEqual(engine.drops(), []);
 

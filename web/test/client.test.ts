@@ -654,7 +654,7 @@ test("error kinds: an op's error keeps the worker's name; end() fails the pendin
     if (m.op === "matrix") post({ id: m.id, error: "file system error ENOENT", name: "ErrnoError" });
   });
   await startWorker(eng);
-  await assert.rejects(eng.query("matrix", { name: "e(b)" }), {
+  await assert.rejects(eng.query("matrix", { name: "e(b)", runId: 1 }), {
     kind: "op",
     name: "ErrnoError",
     message: "file system error ENOENT",

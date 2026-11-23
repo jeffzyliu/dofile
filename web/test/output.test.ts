@@ -138,6 +138,7 @@ const results = (
   r: Partial<typeof NONE> = {},
   flags = { e: false, r: false },
 ): Results => ({
+  runId: 1,
   e: { ...NONE, ...e },
   r: { ...NONE, ...r },
   e_changed: flags.e,

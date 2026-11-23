@@ -81,4 +81,13 @@ parentPort!.on("message", async (data) => {
   if (data?.harness === "databases") return parentPort!.postMessage({ harness: await databases() });
   (globalThis.onmessage as ((event: MessageEvent) => void) | null)?.({ data } as MessageEvent);
 });
+if (workerData.failParse) {
+  // a JSON text with this in it does not parse: the op that reads it fails after the engine ran (a result the worker
+  // cannot read back)
+  const parse = JSON.parse;
+  JSON.parse = (text: string, reviver?: Parameters<typeof JSON.parse>[1]) => {
+    if (typeof text === "string" && text.includes(workerData.failParse)) throw new SyntaxError("unreadable result");
+    return parse(text, reviver);
+  };
+}
 await import(workerData.script);

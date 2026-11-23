@@ -99,7 +99,7 @@ export const result = (more: object = {}) =>
     error: null,
     error_command: null,
     log: "",
-    results: { e: {}, r: {}, e_changed: false, r_changed: false },
+    results: { runId: 1, e: {}, r: {}, e_changed: false, r_changed: false },
     nobs: 0,
     nvars: 0,
     new_graphs: 0,
