@@ -7,7 +7,7 @@ import { graphOpenName } from "../output/format.ts";
 import { cardTheme } from "../output/GraphTab";
 import { runCommand } from "../run.ts";
 import { startFirst, startOffer } from "../start.ts";
-import { engine, graphFull, graphIndex, graphs, isPhone, outputTab, showToast } from "../state.ts";
+import { engine, graphs, isPhone, outputTab, selectGraph, showFullSize, showToast } from "../state.ts";
 import type { Graph } from "../types.ts";
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
@@ -39,7 +39,6 @@ export function marked(text: string, m: Marker): ComponentChildren {
 
 export function GraphLink({ g }: { g: Graph }) {
   const all = graphs.value;
-  const i = all.findIndex((x) => x.n === g.n);
   if (isPhone.value)
     return (
       <button
@@ -48,8 +47,8 @@ export function GraphLink({ g }: { g: Graph }) {
         data-theme={cardTheme(g)}
         aria-label={graphOpenName(g, all)}
         onClick={() => {
-          graphIndex.value = i;
-          graphFull.value = true;
+          selectGraph(g.n);
+          showFullSize();
         }}
       >
         <img src={`data:image/png;base64,${g.png}`} alt="" />
@@ -60,7 +59,7 @@ export function GraphLink({ g }: { g: Graph }) {
       type="button"
       class="glink"
       onClick={() => {
-        graphIndex.value = i;
+        selectGraph(g.n);
         outputTab.value = "graph";
       }}
     >

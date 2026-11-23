@@ -1012,8 +1012,8 @@ export const rows: ReadonlySignal<BrowseRows | null>;    // run controller alone
                                                  // moreRows() for the Data tab's "Show 50 more"
 export const pickedVar: Signal<string | null>;   // the Data tab
 export const graphs: ReadonlySignal<Graph[]>;            // run controller: a run's, and addFileGraph() for a .png; "Clear log" empties
-export const graphIndex: Signal<number>;         // the Graph tab, the full-size view and the log's graph links (by `n`)
-export const graphFull: Signal<boolean>;         // the full-size view is open: 4c's Open full size and Close, 4b's inline tap
+export const graphIndex: ReadonlySignal<number>; // the shown graph's place in `graphs` (computed from the picked `n`; the last when none or gone); selectGraph(n), selectGraphAt(place)
+export const graphFull: ReadonlySignal<boolean>; // the full-size view is open: showFullSize() (4c's Open full size, 4b's inline tap), closeFullSize()
 export const theme: Signal<"system" | "light" | "dark">;   // the theme button
 export const wrap: Signal<boolean>;              // "Wrap lines" in the ⋯ menus (state/layout.ts toggleWrap); views read it; kept in localStorage
 export const toast: ReadonlySignal<string | null>;       // anyone, through showToast(text, kind?); it clears itself (toastMs: 4 to 10 s)
@@ -1036,7 +1036,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `engine`; `memory`, `log`, `lastRun`, `history`, `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`,
   `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`). The owner
   writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state.ts`), which only its owner imports (a
-  test checks it). The others stay writable by views: `graphIndex`, `graphFull`, `dialog`, `split`,
+  test checks it). The others stay writable by views: `dialog`, `split`,
   `outputTab`, `phoneTab`, `pickedVar`, `theme`, `layout`, `isolated`.
 - **The open tabs** are not in `state.ts`: `editor/documents.ts` keeps one record per tab (its path and its document,
   or nothing for a .dta tab) and exports `tabs: ReadonlySignal<OpenTab[]>`, `activeTab: ReadonlySignal<string | null>`
@@ -1079,7 +1079,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`UPDATED` is reason "updated"'s); `stageNow` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
-    `history`; it also moves `graphIndex` to the newest graph (views write `graphIndex` too). It reads no engine state: the engine controller tells it, through the
+    `history`; it also shows the newest graph (`selectGraph(null)`; views pick a graph with `selectGraph(n)`). It reads no engine state: the engine controller tells it, through the
     handlers it gives to `connectRun` (a run began, a chunk of its log, its end, an engine is ready, the engine is gone).
     It clears `results`, `macros`, `data`, `rows`, `memory` and `lastRun` when the engine is gone (a reset, or another tab
     took it: the machine's effect `engine-gone`), and asks for `memory` when an engine is ready. Actions: `runCode(code,
@@ -1295,7 +1295,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **4c** `output/tabs.tsx` (`GraphTab`, `DataTab`, `ResultsTab`; they may be mounted again when the layout changes, so
     their state lives in signals), `output/FullSize.tsx` (`FullSize`, placed once over the page for every width, open
     while `graphFull`), `output/DtaView.tsx` (`DtaView({path})`, a .dta tab, shown in the editor's place). Writes
-    `graphIndex`, `graphFull`, `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
+    through `selectGraph`, `selectGraphAt`, `showFullSize`, `closeFullSize`, and `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
     run.ts `moreRows()`, which appends (run.ts is the one writer of `rows`). Calls
     `call("matrix" | "describe_file", ...)`, `moreRows()`, `runCommand` (Load), `showToast` ("Copied").
     As built (step 4c): `tabs.tsx` only re-exports the three tabs, one file each (`GraphTab.tsx`, `DataTab.tsx`,

@@ -121,11 +121,33 @@ export const rows: ReadonlySignal<BrowseRows | null> = runWriter.rows;
 export const memory: ReadonlySignal<Memory | null> = runWriter.memory;
 export const pickedVar = signal<string | null>(null); // the Data tab
 export const graphs: ReadonlySignal<Graph[]> = runWriter.graphs;
-// An index into `graphs`, which keeps the last 20 (graphs.ts MAX_GRAPHS): the oldest drop off the front, so an index
-// moves. Find a graph by its `n` (graphs.value.findIndex(g => g.n === n)), never keep an index: the log's links carry
-// `n`.
-export const graphIndex = signal(0);
-export const graphFull = signal(false); // the full-size graph view is open, on graphIndex
+// `graphs` keeps the last 20 (graphs.ts MAX_GRAPHS): the oldest drop off the front, so a graph's place moves. The shown
+// graph is kept by its `n` (the log's links carry it), never by its place.
+const pickedGraph = signal<number | null>(null); // the `n` of the graph picked; null: the newest
+/** The shown graph's place in `graphs`: the picked one's, or the last when it is gone or none is picked (0 when there
+ *  are no graphs). Always in range. */
+export const graphIndex = computed(() => {
+  const list = graphs.value;
+  const at = list.findIndex((g) => g.n === pickedGraph.value);
+  return at >= 0 ? at : Math.max(list.length - 1, 0);
+});
+/** Show the graph numbered `n`; null shows the newest. A number that is not kept shows the last graph. */
+export function selectGraph(n: number | null) {
+  pickedGraph.value = n;
+}
+/** Show the graph at this place in `graphs`, held to the first and the last (the full-size view's previous and next). */
+export function selectGraphAt(place: number) {
+  const list = graphs.value;
+  if (list.length) selectGraph(list[Math.min(Math.max(place, 0), list.length - 1)].n);
+}
+const fullSizeOpen = signal(false);
+export const graphFull: ReadonlySignal<boolean> = fullSizeOpen; // the full-size graph view is open, on graphIndex
+export function showFullSize() {
+  fullSizeOpen.value = true;
+}
+export function closeFullSize() {
+  fullSizeOpen.value = false;
+}
 
 // ---- theme ----
 const asTheme = (v: string | null): Theme => (v === "light" || v === "dark" ? v : "system");

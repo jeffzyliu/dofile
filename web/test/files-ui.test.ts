@@ -40,7 +40,7 @@ async function reset(files: Record<string, string | Uint8Array> = {}) {
   S.layout.value = "desktop";
   S.phoneTab.value = "files";
   S.outputTab.value = "data";
-  S.graphFull.value = false;
+  S.closeFullSize();
   for (const b of S.banners.value) S.dismiss(b);
 }
 beforeEach(() => reset());
@@ -190,7 +190,7 @@ test("openFile on a phone shows the Editor view for a text or .dta tab; a .png g
   const g = S.graphs.value.at(-1)!;
   assert.deepEqual([g.from, g.path, g.png], ["file", "out/g.png", Buffer.from(png).toString("base64")]);
   S.layout.value = "desktop";
-  S.graphFull.value = false;
+  S.closeFullSize();
   await openFile("out/g.png");
   assert.equal(S.outputTab.value, "graph");
   assert.equal(S.graphFull.value, false);

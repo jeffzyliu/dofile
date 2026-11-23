@@ -90,7 +90,7 @@ export const seedGraphs = (page: Page, graphs: Graphs, { full = false } = {}) =>
   page.evaluate(
     (v) => {
       window.__dofile.state.runWriter.graphs.value = v.graphs;
-      if (v.full) window.__dofile.state.graphFull.value = true;
+      if (v.full) window.__dofile.state.showFullSize();
     },
     { graphs, full },
   );
@@ -114,7 +114,7 @@ export const seedLastRun = (page: Page, run: LastRun) =>
 /** Open the full-size graph view. */
 export const showGraphFull = (page: Page) =>
   page.evaluate(() => {
-    window.__dofile.state.graphFull.value = true;
+    window.__dofile.state.showFullSize();
   });
 
 /** Give an open text tab an edit (a space at its end) without typing, so it is unsaved. */

@@ -13,16 +13,6 @@ type WritableSignals = { [K in keyof Flags]: Flags[K] extends true ? K : never }
 export type OnlyTheViewsOwnSignalsAreWritable = Expect<
   Same<
     WritableSignals,
-    | "dialog"
-    | "split"
-    | "outputTab"
-    | "phoneTab"
-    | "pickedVar"
-    | "theme"
-    | "wrap"
-    | "layout"
-    | "isolated"
-    | "graphIndex"
-    | "graphFull"
+    "dialog" | "split" | "outputTab" | "phoneTab" | "pickedVar" | "theme" | "wrap" | "layout" | "isolated"
   >
 >;

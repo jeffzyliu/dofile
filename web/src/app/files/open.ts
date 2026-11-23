@@ -2,7 +2,7 @@
 // to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
 import { activate, addDta, addText, tabs } from "../editor/documents.ts";
 import { addFileGraph } from "../graphs.ts";
-import { addBanner, banners, dismiss, graphFull, isPhone, outputTab, phoneTab, say, showToast } from "../state.ts";
+import { addBanner, banners, dismiss, isPhone, outputTab, phoneTab, say, showFullSize, showToast } from "../state.ts";
 import { baseName, extOf } from "./tree.ts";
 import { fileTurn } from "./turns.ts";
 
@@ -53,7 +53,7 @@ export async function openFile(path: string): Promise<void> {
     }
     if (ext === ".png") {
       addFileGraph(path, toBase64(bytes));
-      if (isPhone.value) graphFull.value = true;
+      if (isPhone.value) showFullSize();
       else outputTab.value = "graph";
       return;
     }

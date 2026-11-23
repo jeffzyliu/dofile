@@ -14,14 +14,14 @@ export const nextGraphNumber = () => ++graphCount;
 /** No graphs, the first one selected, and the numbers start again from 1. */
 export function clearGraphs() {
   W.graphs.value = [];
-  S.graphIndex.value = 0;
+  S.selectGraph(null); // the numbers start again: a number picked before would meet a new graph
   graphCount = 0;
 }
 
 /** Keep `added` after the graphs there are (the last 20), and show the latest. */
 export function keepGraphs(added: Graph[]) {
   W.graphs.value = [...W.graphs.value, ...added].slice(-MAX_GRAPHS);
-  S.graphIndex.value = W.graphs.value.length - 1; // the latest graph is the one shown
+  S.selectGraph(null); // the latest graph is the one shown
 }
 
 /** A .png opened from the files: it joins the session's graphs and is the one shown. Its colors are its own; `theme` is
@@ -32,7 +32,7 @@ export function addFileGraph(path: string, png: string): Graph {
   if (i >= 0) {
     const g: Graph = { ...W.graphs.value[i], png, theme: S.resolvedTheme.value };
     W.graphs.value = W.graphs.value.map((x, j) => (j === i ? g : x));
-    S.graphIndex.value = i;
+    S.selectGraph(g.n);
     return g;
   }
   const g: Graph = { n: nextGraphNumber(), png, theme: S.resolvedTheme.value, from: "file", path };

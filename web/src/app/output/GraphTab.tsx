@@ -1,9 +1,9 @@
 // The Graph tab (docs/design/SPEC.md, section 3.7): the shown graph on its card, and a foot with a thumbnail for each
-// graph and the actions. `graphIndex` is kept in range here, so a "Clear log" or a drop of the oldest graph never
-// leaves the tab on nothing.
+// graph and the actions. `graphIndex` is always in range, so a "Clear log" or a drop of the oldest graph never leaves
+// the tab on nothing.
 
 import type { ComponentChildren } from "preact";
-import { graphFull, graphIndex, graphs } from "../state.ts";
+import { graphIndex, graphs, selectGraph, showFullSize } from "../state.ts";
 import type { Graph } from "../types.ts";
 import { exportPng } from "./clip.ts";
 import { graphAlt, graphSubject, graphTitle } from "./format.ts";
@@ -19,11 +19,6 @@ export const EmptyGraph = () => (
     {FILE_HINT}
   </div>
 );
-
-/** The graph in the signal's range: the index is clamped, never wrapped. */
-export function shownGraph(list: Graph[], index: number): number {
-  return Math.min(Math.max(index, 0), list.length - 1);
-}
 
 /** The data URL of a graph's PNG. */
 export const src = (g: Graph) => `data:image/png;base64,${g.png}`;
@@ -41,7 +36,7 @@ export function Thumbs({ list, current, label }: { list: Graph[]; current: numbe
           aria-label={`Show graph ${g.n}${graphSubject(g) ? `: ${graphSubject(g)}` : ""}`}
           aria-current={i === current ? "true" : undefined}
           onClick={() => {
-            graphIndex.value = i;
+            selectGraph(g.n);
           }}
         />
       ))}
@@ -63,7 +58,7 @@ export const GraphCard = ({ g, list, children }: { g: Graph; list: Graph[]; chil
 export function GraphTab() {
   const list = graphs.value;
   if (!list.length) return <EmptyGraph />;
-  const at = shownGraph(list, graphIndex.value);
+  const at = graphIndex.value;
   const g = list[at];
   return (
     <div class="graph-wrap">
@@ -78,8 +73,7 @@ export function GraphTab() {
           onClick={(e) => {
             // Safari focuses no pressed button: the view hands the focus back to the active element
             e.currentTarget.focus();
-            graphIndex.value = at;
-            graphFull.value = true;
+            showFullSize();
           }}
         >
           Open full size
