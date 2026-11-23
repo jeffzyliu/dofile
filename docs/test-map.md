@@ -220,6 +220,10 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   no damage to say, and only then a read: a landed, brotli-sized copy, or a read without the bytes on its copy); and
   what an idle step does (a run in flight, IDLE_MS of idle, then by the unpack's phase; with none, the native gate or
   brotli-wasm, nothing on a busy or unlanded read).
+- `worker-graphics.test.ts`: the worker's record of the graphics part (`engine/worker-graphics.ts`) with a fake engine
+  and a real shared region (a small brotli part; Node's `DecompressionStream` as the browser's decoder, held when a test
+  needs it): the idle steps stop for a run in flight and go on at its end with nothing else to wake them; a graph after
+  the write answers at once, with no second unpack or write.
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
