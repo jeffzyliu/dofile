@@ -2,9 +2,10 @@
 // job's trigger) and .github/actions/build-web (the cache key) read it through snapshot-inputs.sh. Needs a git checkout.
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import { test } from "node:test";
 import { repo, web } from "../scripts/lib/paths.ts";
 
@@ -66,4 +67,16 @@ test("every file make-snapshot.ts runs is in the build section: what it imports,
   };
   visit(resolve(web, "scripts/make-snapshot.ts"));
   assert.deepEqual(missing, [], "add each to [build] in web/scripts/snapshot-inputs.txt (it changes the snapshot)");
+});
+
+test("the cache key fails, with a message, outside a git checkout: never a constant key", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "dofile-key-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(`${dir}/web/scripts`, { recursive: true });
+  for (const f of ["snapshot-inputs.sh", "snapshot-inputs.txt"])
+    copyFileSync(`${web}/scripts/${f}`, `${dir}/web/scripts/${f}`);
+  const r = spawnSync("sh", [`${dir}/web/scripts/snapshot-inputs.sh`, "key"], { encoding: "utf8" });
+  assert.notEqual(r.status, 0);
+  assert.equal(r.stdout, "", "no hash printed");
+  assert.match(r.stderr, /not a git checkout/);
 });

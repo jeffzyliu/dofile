@@ -34,7 +34,9 @@ runs:
     # never feeds a production deploy.
     - id: inputs
       shell: bash
-      run: echo "hash=$(sh web/scripts/snapshot-inputs.sh key)" >> "$GITHUB_OUTPUT"
+      run: |
+        hash=$(sh web/scripts/snapshot-inputs.sh key)   # a failure stops the step
+        echo "hash=$hash" >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache@v6
       with:
