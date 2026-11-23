@@ -446,7 +446,8 @@ Specs:
   r(199) with a clear message, no lasting label, and the next graph once online fetches it and draws.
   - A return visit (a persistent profile, so every project): the page's "landed (cache)" line comes before "ready" (the
     page's own clock), a graph sent at ready draws, the part is written once and fetched once.
-  - A damaged part: the graph says it arrived damaged, the Cache entry is dropped, the next graph fetches it and draws.
+  - A damaged part found while idle: the Cache entry is dropped and the part fetched again at once, and a graph draws
+    without saying the damage (race 11; the graph that finds a damaged copy itself and says it: `lazy-graphics.test.ts`).
   - Without cross-origin isolation (no SharedArrayBuffer): the part is a start file: one request for it, the start's
     download, and the worker writes it before ready; a graph at ready draws with no waiting line and no ring; other runs
     work. A damaged part fails the start as a damaged heap does: it is dropped from the Cache, and the next start
