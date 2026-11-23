@@ -1,0 +1,29 @@
+name: windows
+
+# The Python tests on Windows (worker.py spawns there, the sandbox's path rules differ). Not a required check and not
+# called by deploy.yml: a red run here does not block a merge or a deploy.
+on:
+  push:
+    branches:
+      - main
+      - ci/windows   # TEMPORARY: removed before merge
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    env:
+      # poe runs tasks through a nested `uv run`, which would otherwise pick .python-version
+      UV_PYTHON: "3.14"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv sync --extra mcp
+      - run: uv run poe test
