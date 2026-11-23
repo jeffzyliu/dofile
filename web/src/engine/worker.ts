@@ -282,6 +282,7 @@ function fetchPartNow(): string {
 
 // Without a shared buffer: this worker's own fetch of the part, started after `startup` is answered. A graph that comes
 // first stops it and fetches the part itself.
+// biome-ignore lint/plugin: callers share the one in-flight fetch: it returns the same `prefetching.done` each time, which async would wrap in a new promise
 function prefetch(): Promise<void> {
   if (!share || share.sab || share.bytes) return Promise.resolve();
   if (prefetching) return prefetching.done;
