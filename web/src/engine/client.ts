@@ -462,6 +462,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     part.damaged = true;
     if (again) {
       const why = "the graphics files arrived damaged twice in a row; they are fetched again for the next graph";
+      void this.#uncache(part); // a reload would read it again
       failPart(part.region, partReason(why));
       console.warn(`[dofile] graphics part: ${why}`);
       this.#graphicsSay(part, { state: "failed", error: why });
@@ -470,6 +471,14 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
     part.progress = { ...part.progress, state: "failed" }; // so that #retryGraphics takes it
     this.#retryGraphics(part);
+  }
+
+  // Deletes the part's copy from the Cache; a Cache that cannot be opened has none to delete.
+  async #uncache(part: GraphicsPart): Promise<void> {
+    if (!this.caches || part.url.startsWith("file:")) return;
+    try {
+      await (await openCache(this.caches, part.built)).delete(part.url);
+    } catch {}
   }
 
   async #fetchGraphics(part: GraphicsPart, fresh = false): Promise<void> {
