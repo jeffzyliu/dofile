@@ -88,8 +88,7 @@ test("Copy image twice in the full-size view: the first 'Copied' timer does not 
   await expect(viewer.locator(".vsaid")).toHaveText("");
 });
 
-const PIXEL =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 test("the full-size view: its first focus is the view, not Close; Tab and Shift+Tab wrap inside it; Esc hands the focus back to Open full size", async ({
   page,
@@ -150,9 +149,7 @@ test("the full-size view whose opener has left the page gives the focus to the e
   await expect(page.getByRole("button", { name: "Open full size" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
-  await expect
-    .poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]"))))
-    .toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]")))).toBe(true);
 });
 
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
