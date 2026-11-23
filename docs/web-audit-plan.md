@@ -211,6 +211,15 @@ waits on lane b twice.
 **End gate.** G0's checks on every browser project; the engine checks of phase 1; N7 against the phase's start baseline,
 every difference accounted for.
 
+#### Notes for the 3.0 sweep
+
+- **Named roots (decided).** Imports use `#app/`, `#engine/`, `#stata/` and `#site/` through `package.json`
+  `"imports"`.
+- **Layer groups (a direction, pending the design note).** The maintainer leans to layers first: state, controllers, ui,
+  and views in `views/<feature>/` with their local helpers beside `index.tsx`.
+- **Biome drift risk.** The `ui/` overrides repeat the `app/**/*.ts` and `app/**/*.tsx` patterns, because a later
+  override replaces an earlier one's patterns; a change to those patterns must be made in both places.
+
 ### Phase 3: close (session 5)
 
 A sweep that has to change a test or a shared doc logs the change for W5 or the doc sync; it does not make it.
