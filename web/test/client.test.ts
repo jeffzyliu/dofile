@@ -1258,6 +1258,7 @@ test("graphics part: the shared buffer is pending while the part is fetched, the
   assert.ok((await cached(caches)).includes(`snapshot/${PART.name}`), "kept beside the start files");
   await until(() => page.told.length > 0, "the op graphics");
   page.say("again"); // a part that landed is not fetched again
+  assert.deepEqual(page.header(), [1, PART.size, 0], "still the landed copy: no retry");
   await sleep(20);
   assert.equal(f.modes.length, 1);
 });
