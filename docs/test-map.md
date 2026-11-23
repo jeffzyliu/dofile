@@ -218,6 +218,14 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   (a worker whose result will not parse), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
+- `lazy-graphics.test.ts`: the lazy graphics part with a shared buffer on both threads: the page's half, the real worker,
+  and both threads' `[dofile]` lines (the harness's `onConsole`); skipped without a current snapshot that has a graphics
+  part. A graph at `started` waits for the part and writes it in its run, then it is warmed while idle; a restarted
+  worker gets the landed part with no fetch and writes and warms it while idle with no run, and no sooner than `IDLE_MS`
+  after the last of a train of runs. With the snapshot served over HTTP (the harness's `served`), so that the page's
+  `fetch` can hold or damage the part: a Break while a graph waits for a held part is rc 1 within seconds with the data
+  kept, and a graph draws once it lands (one fetch); a damaged copy is r(199) for the graph that finds it, fetched again
+  with `cache: "reload"`, and the next graph draws.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
   - iPhone, iPad and a touch Mac are capped (750 MB), a Mac without touch is not; `userAgentData.mobile`, `deviceMemory`
     of 4 or less.
