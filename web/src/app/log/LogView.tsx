@@ -52,9 +52,8 @@ function logHead(m: Marker) {
 
 /** Find's field, over the log. */
 function FindBar({ total, pre }: { total: number; pre: RefObject<HTMLPreElement | null> }) {
-  const field = useRef<HTMLInputElement>(null);
   // once per openFind: a LogView drawn again with Find open (another Output tab and back) takes no focus
-  useFocusTarget("find-field", () => field.current);
+  const field = useFocusTarget<HTMLInputElement>("find-field");
   if (!findOpen.value) return null;
   const at = total ? (findAt.value % total) + 1 : 0;
   const close = () => {
@@ -155,7 +154,7 @@ export function LogView() {
   });
   const total = m.n;
 
-  useFollowEnd(pre);
+  useFollowEnd({ get: () => pre.current?.parentElement ?? null });
   // Find scrolls to its match
   useLayoutEffect(() => {
     if (findOpen.value && findText.value) pre.current?.querySelector("mark.on")?.scrollIntoView({ block: "nearest" });

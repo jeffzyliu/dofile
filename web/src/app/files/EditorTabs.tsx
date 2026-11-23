@@ -51,7 +51,7 @@ export function EditorTabs() {
   return (
     <div ref={strip} role="tablist" aria-label="Open files" class="tabstrip file-tabs" onKeyDown={onKeyDown}>
       {list.map((t, i) => (
-        <FileTab key={t.path} t={t} i={i} at={at} label={labels[i]} close={close} list={strip} />
+        <FileTab key={t.path} t={t} i={i} at={at} label={labels[i]} close={close} list={() => strip.current} />
       ))}
     </div>
   );
@@ -72,19 +72,18 @@ function FileTab({
   at: number;
   label: string;
   close: (path: string, keyboard: boolean) => void;
-  list: { current: HTMLElement | null };
+  list: () => HTMLElement | null;
 }) {
-  const el = useRef<HTMLDivElement>(null);
-  useFocusTarget("open-file-tab", () => (i === at ? el.current : null));
-  useFocusRequest(
-    tabAsked.value === t.path,
-    el,
-    () => {
+  const el = useFocusTarget<HTMLDivElement>("open-file-tab", { get: (own) => (i === at ? own : null) });
+  useFocusRequest({
+    asked: tabAsked.value === t.path,
+    end: () => {
       tabAsked.value = null;
     },
     // a closed tab leaves the focus on nothing
-    (focused) => fromNothing(focused) || !!list.current?.contains(focused),
-  );
+    from: (focused) => fromNothing(focused) || !!list()?.contains(focused),
+    get: () => el.current,
+  });
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keys are the tablist's (arrows, Home, End, Delete); a tab holds the × (a click target of its own), so it is not a button
     <div

@@ -16,7 +16,6 @@ import { graphAlt, graphTitle } from "./format.ts";
 import { GraphCard, Thumbs } from "./GraphTab";
 
 function Viewer() {
-  const root = useRef<HTMLDivElement>(null);
   const [said, say] = useState("");
   const saidTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(saidTimer.current), []);
@@ -25,7 +24,7 @@ function Viewer() {
   const g = list[at];
   const move = (by: number) => selectGraphAt(at + by);
   // the focus goes to the view itself, so a Space that opened it cannot press Close, the first button
-  useModalTrap(root, {
+  const root = useModalTrap<HTMLDivElement>({
     first: (view) => view,
     onEscape: closeFullSize,
     onKey: (e) => {

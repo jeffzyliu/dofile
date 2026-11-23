@@ -3,7 +3,7 @@
 // data in memory, r() and the log stay untouched until Load. What was read stays in view.ts `dtaInfo`, since this view
 // is unmounted when another tab is made active.
 
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect } from "preact/hooks";
 
 import { fileCommand } from "../../stata/quote.ts";
 
@@ -32,8 +32,9 @@ export function DtaView({ path }: { path: string }) {
   const file = files.value.find((f) => f.path === path);
   const key = file ? `${file.size}:${file.mtime}` : "none";
   const up = workerReachable(engine.value);
-  const root = useRef<HTMLDivElement>(null);
-  useFocusTarget("dta-load", () => root.current?.querySelector<HTMLElement>("button:not([disabled])") ?? null);
+  const root = useFocusTarget<HTMLDivElement>("dta-load", {
+    get: (own) => own?.querySelector<HTMLElement>("button:not([disabled])") ?? null,
+  });
   useEffect(() => {
     if (!up || dtaInfo.value[path]?.key === key) return;
     readDta(path, key);

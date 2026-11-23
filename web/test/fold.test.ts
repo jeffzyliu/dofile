@@ -34,7 +34,7 @@ let unregister = () => {};
 /** The button is the registry's `files-toggle` target until the test ends. */
 const hold = (t: ReturnType<typeof toggle> | null) => {
   unregister();
-  unregister = t ? register("files-toggle", () => t as unknown as HTMLElement) : () => {};
+  unregister = t ? register("files-toggle", { get: () => t as unknown as HTMLElement }) : () => {};
 };
 
 beforeEach(() => {

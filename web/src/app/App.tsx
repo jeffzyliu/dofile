@@ -2,7 +2,6 @@
 // twice; app.css arranges it by `data-layout` and the width.
 
 import type { ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
 
 import type { OutputTab, PhoneTab } from "./types.ts";
 
@@ -80,8 +79,7 @@ const phoneMoreItems = (): MenuItem[] => [
 
 /** The "More actions" button of the desktop toolbar and the phone's top bar: the registry's `more-actions` target. */
 function MoreActions({ items }: { items: () => MenuItem[] }) {
-  const button = useRef<HTMLButtonElement>(null);
-  useFocusTarget("more-actions", () => button.current);
+  const button = useFocusTarget<HTMLButtonElement>("more-actions");
   return (
     <MenuButton label="More actions" items={items} ref={button}>
       <Icon name="more" />
@@ -139,8 +137,7 @@ function Pane({ view, class: cls, label, children, ...rest }: PaneProps) {
 
 /** The Files button of the folded list: the registry's `files-toggle` target. */
 function FilesToggle() {
-  const button = useRef<HTMLButtonElement>(null);
-  useFocusTarget("files-toggle", () => button.current);
+  const button = useFocusTarget<HTMLButtonElement>("files-toggle");
   const n = files.value.filter((f) => !f.dir).length;
   return (
     <button

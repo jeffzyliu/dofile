@@ -44,16 +44,18 @@ const shownEntry = (name: TargetName, key?: string) => {
 
 /**
  * Make `name` a target until the returned function is called.
- * @param get - the element, or null while there is none; read at each use, so one entry follows a ref that changes
- * @param key - tells entries of one name apart: a request reaches only the entries with its own key, and one with no key
+ * @param options.get - the element, or null while there is none; read at each use, so one entry follows a ref that changes
+ * @param options.key - tells entries of one name apart: a request reaches only the entries with its own key, and one with no key
  *   only the entries with none (so a target that is one of many, and also "the one in the tab order", registers twice)
- * @param focus - how the element takes the focus, when `el.focus()` is not enough
+ * @param options.focus - how the element takes the focus, when `el.focus()` is not enough
  */
 export function register(
   name: TargetName,
-  get: () => HTMLElement | null,
-  key?: string,
-  focus: (el: HTMLElement) => void = (el) => el.focus(),
+  {
+    get,
+    key,
+    focus = (el) => el.focus(),
+  }: { get: () => HTMLElement | null; key?: string; focus?: (el: HTMLElement) => void },
 ): () => void {
   const entry: Entry = { name, key, get, focus };
   entries.add(entry);

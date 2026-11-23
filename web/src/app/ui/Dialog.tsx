@@ -36,7 +36,6 @@ export function Dialog({
   class: cls = "",
   describedBy,
 }: DialogProps) {
-  const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const closing = useRef(false);
   const cancel = useRef(onCancel);
@@ -50,7 +49,7 @@ export function Dialog({
     [],
   );
 
-  useModalTrap(ref, {
+  const ref = useModalTrap<HTMLDialogElement>({
     first: (d) =>
       d.querySelector<HTMLElement>("[data-autofocus]") ??
       d.querySelector<HTMLElement>("button:not([disabled]), [href], input"),

@@ -1,6 +1,6 @@
 // A row of the file tree and its inline rename field (docs/design/SPEC.md, section 3.1). The keys follow
 // docs/web-page-flows.md; the rename and the draft rows end in rename.ts.
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect } from "preact/hooks";
 
 import { fresh } from "../state/files.ts";
 import { openDialog } from "../state/notices.ts";
@@ -62,8 +62,7 @@ function rowItems(row: Row): MenuItem[] {
 const menuLabel = (row: Row) => `Actions for ${row.path}${row.dir ? "/" : ""}`;
 
 function RenameField({ field, row }: { field: Renaming; row: Row }) {
-  const input = useRef<HTMLInputElement>(null);
-  useFocusOnMount(input);
+  const input = useFocusOnMount<HTMLInputElement>();
   useLayoutEffect(() => {
     const dot = row.dir ? -1 : row.name.lastIndexOf(".");
     input.current?.setSelectionRange(0, dot > 0 ? dot : row.name.length); // the name without its extension
@@ -116,11 +115,10 @@ export function TreeRow({
   const tab = tabs.value.find((t) => t.path === row.path);
   const open = !row.dir && activeTab.value === row.path;
   const field = renaming.value?.path === row.path ? renaming.value : null;
-  const li = useRef<HTMLLIElement>(null);
   // a row asked for by its path, and the row in the tab order asked for with none (tree-state.ts): a row with its rename
   // field open is not a target, since the field has the focus
-  useFocusTarget("tree", () => (field ? null : li.current), { key: row.path });
-  useFocusTarget("tree", () => (tabbable && !field ? li.current : null));
+  const li = useFocusTarget<HTMLLIElement>("tree", { key: row.path, get: (own) => (field ? null : own) });
+  useFocusTarget("tree", { get: () => (tabbable && !field ? li.current : null) });
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }, anchor: HTMLElement | null = at ? null : el) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor, at, restore: el });
   // a folder is made current and unfolded, never folded (its caret and Left fold it); a file opens, and its folder is

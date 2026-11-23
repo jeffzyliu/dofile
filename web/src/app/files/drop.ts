@@ -5,6 +5,9 @@ import { dialog } from "../state/notices.ts";
 
 import { store } from "../store.ts";
 
+import type { Get } from "../ui/element.ts";
+import { useElement } from "../ui/element.ts";
+
 import { entriesOf, fromDrop } from "./intake.ts";
 import { fail } from "./ops.ts";
 import type { Incoming } from "./upload.ts";
@@ -17,10 +20,12 @@ export function send(items: Promise<Incoming[]>) {
 /** A drop of files anywhere on the page uploads them. The listeners are the window's, in the capture phase: a drag with
  *  files stops there, so nothing under them sees it (CodeMirror would paste a dropped file's text). A drop uploads
  *  nothing while a dialog is open or the store is blocked (the browser still does not open the file). With the list
- *  folded away or on another phone view the upload still happens, and the toast says so. */
-export function useDrop(ref: { current: HTMLElement | null }) {
+ *  folded away or on another phone view the upload still happens, and the toast says so.
+ *  @returns the ref to attach to an element of the files pane */
+export function useDrop<T extends HTMLElement = HTMLElement>({ get }: { get?: Get<T> } = {}) {
+  const { ref, el } = useElement(get);
   useEffect(() => {
-    const pane = ref.current?.closest<HTMLElement>(".files-pane");
+    const pane = el()?.closest<HTMLElement>(".files-pane");
     if (!pane) return;
     // A drag that began in the page is never an upload: Chromium and WebKit list "Files" for an image dragged from it
     // (a graph). dragend ends it; so does a drop, or the mouse moving again (no mouse events fire during a drag), in
@@ -83,4 +88,5 @@ export function useDrop(ref: { current: HTMLElement | null }) {
       mark(false);
     };
   }, []);
+  return ref;
 }

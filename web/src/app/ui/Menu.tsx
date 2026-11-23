@@ -69,7 +69,7 @@ export function openMenu({
 
 /** Close the open menu; `restoreFocus` gives the focus back to its trigger (Esc, a pick, Tab), not on a click
  *  outside. */
-export function closeMenu(restoreFocus = true) {
+export function closeMenu({ restoreFocus = true }: { restoreFocus?: boolean } = {}) {
   const m = openMenuState.value;
   if (!m) return;
   openMenuState.value = null;
@@ -149,9 +149,9 @@ export function MenuHost() {
     setPlaced(m); // the active item takes the focus (and a current one is scrolled into view) when it is drawn again
 
     const outside = (e: PointerEvent) => {
-      if (!el.contains(e.target as Node) && !m.anchor?.contains(e.target as Node)) closeMenu(false);
+      if (!el.contains(e.target as Node) && !m.anchor?.contains(e.target as Node)) closeMenu({ restoreFocus: false });
     };
-    const away = () => closeMenu(false);
+    const away = () => closeMenu({ restoreFocus: false });
     document.addEventListener("pointerdown", outside, true);
     addEventListener("resize", away);
     addEventListener("blur", away);
@@ -269,7 +269,7 @@ function MenuEntry({
       rel="noopener"
       class={item.danger ? "danger" : undefined}
       onFocus={onFocus}
-      onClick={() => closeMenu(false)}
+      onClick={() => closeMenu({ restoreFocus: false })}
     >
       {item.label}
       {item.hint && <Hint item={item} />}

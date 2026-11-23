@@ -13,12 +13,12 @@ export function DismissibleBanner({
   actions,
   children,
   ...rest
-}: Omit<BannerProps, "bannerRef" | "focusable"> & { banner: BannerRecord }) {
+}: Omit<BannerProps, "ref" | "focusable"> & { banner: BannerRecord }) {
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (
     <Banner
       {...rest}
-      bannerRef={ref}
+      ref={ref}
       actions={
         <>
           {actions}
