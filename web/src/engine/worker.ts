@@ -463,11 +463,14 @@ export const table: OpTable = {
       }));
       return about;
     },
-    answered: (failed, error) => (failed ? bootDone.err(error) : bootDone.ok()),
+    answered(failed, error) {
+      if (failed) bootDone.err(error);
+      else bootDone.ok();
+    },
   },
   startup: {
     queued: true,
-    handle: async () => {
+    async handle() {
       started = true; // the part's work may begin (nativeSoon, idleSoon)
       idleSince = performance.now();
       if (share && !share.sab) setTimeout(() => void prefetch(), 0); // after this answer, as nativeSoon
@@ -480,7 +483,7 @@ export const table: OpTable = {
   // {id, log} chunks go to the page while the run prints.
   run: {
     queued: true,
-    arrived: () => {
+    arrived() {
       runs++; // at once, not when the queue reaches it: the part's idle steps stop for it (idleStep)
     },
     async handle({ code, fresh_locals, plot_theme }, id) {
@@ -514,7 +517,7 @@ export const table: OpTable = {
   // undefined becomes Python's None (null would become JsNull)
   describe: {
     queued: true,
-    handle: async ({ vars, offset = 0, limit }) => {
+    async handle({ vars, offset = 0, limit }) {
       await booted;
       return JSON.parse(browser.describe(vars, offset, limit));
     },
@@ -530,21 +533,21 @@ export const table: OpTable = {
   },
   matrix: {
     queued: true,
-    handle: async ({ name }) => {
+    async handle({ name }) {
       await booted;
       return JSON.parse(browser.matrix(name));
     },
   },
   macros: {
     queued: true,
-    handle: async () => {
+    async handle() {
       await booted;
       return JSON.parse(browser.macros());
     },
   },
   browse: {
     queued: true,
-    handle: async ({ vars, offset, limit }) => {
+    async handle({ vars, offset, limit }) {
       await booted;
       return JSON.parse(browser.browse(vars ?? undefined, offset ?? 0, limit ?? 50));
     },
@@ -552,14 +555,24 @@ export const table: OpTable = {
   // heap_bytes: the size of this worker's WebAssembly memory
   memory: {
     queued: true,
-    handle: async () => {
+    async handle() {
       await booted;
       return { ...JSON.parse(browser.memory()), heap_bytes: py._module.HEAPU8.length };
     },
   },
   // views of /work, for the tests: the page lists and reads the store
-  files: { queued: true, handle: () => mirror!.walk() },
-  read: { queued: true, handle: ({ path }) => py.FS.readFile(mirror!.inRoot(path)) },
+  files: {
+    queued: true,
+    handle() {
+      return mirror!.walk();
+    },
+  },
+  read: {
+    queued: true,
+    handle({ path }) {
+      return py.FS.readFile(mirror!.inRoot(path));
+    },
+  },
   // no mirror (before mount, or after one that failed): no store either, so nothing to take
   sync: {
     queued: true,
