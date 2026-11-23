@@ -12,6 +12,7 @@ import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
 import { focusWanted } from "./app/files/tree-state.ts";
 import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
+import * as Saved from "./app/state/saved.ts";
 import * as S from "./app/state.ts";
 import { store } from "./app/store.ts";
 import { applyTheme } from "./app/theme.ts";
@@ -74,7 +75,7 @@ const testHook = {
   start,
   persisted: () => S.persisted.value,
   engineBytes: S.engineBytes,
-  state: { ...S, tabs, activeTab }, // one object: the signals, and the tabs from their owner
+  state: { ...S, ...Saved, tabs, activeTab }, // one object: the signals, and the tabs from their owner
   documents: documentSeeds,
   run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
   breakRun,

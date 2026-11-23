@@ -5,6 +5,7 @@
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
 import { movedPath, within } from "./paths.ts";
+import { saved } from "./state/saved.ts";
 import type {
   Banner,
   BrowseRows,
@@ -24,25 +25,6 @@ import type {
   Results,
   Theme,
 } from "./types.ts";
-
-// localStorage, which a browser may refuse (some private modes) and Node does not have
-export const saved = {
-  get: (key: string) => {
-    try {
-      return globalThis.localStorage?.getItem(key) ?? null;
-    } catch {
-      return null;
-    }
-  },
-  set: (key: string, value: string | null) => {
-    try {
-      if (value === null) globalThis.localStorage?.removeItem(key);
-      else globalThis.localStorage?.setItem(key, value);
-    } catch {
-      /* not kept: the page works the same this visit */
-    }
-  },
-};
 
 // ---- the engine ----
 export const engineWriter = {

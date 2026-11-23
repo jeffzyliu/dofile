@@ -57,7 +57,7 @@ Object.defineProperty(globalThis, "localStorage", {
   },
 });
 
-export const S = await import("../src/app/state.ts");
+export const { S } = await import("./state-all.ts");
 /** The open tabs and their documents. */
 export const D = await import("../src/app/editor/documents.ts");
 export const engine = await import("../src/app/engine.ts");

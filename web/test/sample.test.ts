@@ -24,7 +24,7 @@ Object.assign(globalThis, {
 });
 const page = (search = "") => Object.assign(globalThis, { location: { search } });
 
-const S = await import("../src/app/state.ts");
+const { S } = await import("./state-all.ts");
 const { store } = await import("../src/app/store.ts");
 const { afterRun, connectFiles, keep, own, refresh } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");

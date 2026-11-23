@@ -1,7 +1,8 @@
 // The theme button: System, Light, Dark in turn. System sets nothing; the others set data-theme on <html>. index.html
 // sets it from localStorage before the first paint, so a dark page does not flash light.
 import { effect } from "@preact/signals-core";
-import { saved, theme } from "./state.ts";
+import { saved } from "./state/saved.ts";
+import { theme } from "./state.ts";
 import type { Theme } from "./types.ts";
 
 /** The order of the presses. */

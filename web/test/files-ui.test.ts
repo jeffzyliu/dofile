@@ -8,7 +8,7 @@ import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
 import type { ClashAnswer, ClashFacts, Incoming } from "../src/app/files/upload.ts";
 
-const S = await import("../src/app/state.ts");
+const { S } = await import("./state-all.ts");
 const { store } = await import("../src/app/store.ts");
 const { connectFiles, refresh } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");

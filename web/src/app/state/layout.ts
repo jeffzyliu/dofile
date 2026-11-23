@@ -1,7 +1,8 @@
 // The layout's actions: what a view calls to change how the page is laid out. They write the signals of state.ts and
 // the visitor's choice in localStorage; no DOM, so a Node test runs them.
 
-import { outputTab, saved, split, wrap } from "../state.ts";
+import { outputTab, split, wrap } from "../state.ts";
+import { saved } from "./saved.ts";
 
 /** "Wrap lines": the log's long lines wrap; kept across visits. */
 export function toggleWrap() {

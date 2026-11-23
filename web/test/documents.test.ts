@@ -7,7 +7,7 @@ import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { effect } from "@preact/signals-core";
 
-const S = await import("../src/app/state.ts");
+const { S } = await import("./state-all.ts");
 const D = await import("../src/app/editor/documents.ts");
 
 const type = (path: string, at: number, insert: string) => D.update(path, { changes: { from: at, insert } });
