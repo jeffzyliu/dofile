@@ -12,6 +12,12 @@ import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
 import { fileTurn, type Io, type Turn } from "./turns.ts";
 
+/** A failure handler for a call whose promise nobody awaits: the cause to the console, `said` to the visitor. */
+export const fail = (what: string, said: string) => (e: unknown) => {
+  console.warn(`[dofile] ${what}: ${(e as Error)?.message ?? e}`);
+  say(said);
+};
+
 /** How a file opens by its name: a .dta tab, the editor (open.ts says which text files the editor takes), or no tab (a
  *  .png goes to the Graph tab). */
 const kindOf = (path: string) => {
@@ -94,7 +100,7 @@ function* readText(io: Io, path: string): Turn<string | null | Error> {
 /** What a new file or folder is called when the name field is left empty or unchanged. */
 export const NEW_NAMES = { file: "untitled.do", folder: "folder" } as const;
 
-/** Make an empty file or a folder when the visitor leaves the name field of a draft row (FilesPane.tsx,
+/** Make an empty file or a folder when the visitor leaves the name field of a draft row (rename.ts,
  *  docs/web-page-flows.md section 1): `name` in `dir`, or with no `name` the first free `untitled.do` (`untitled-2.do`,
  *  ...) or `folder`. The store is listed fresh and in a turn, so two quick ones cannot both take a name; a `name` in
  *  use rejects with a StoreConflict, "already exists" (a write would replace it). Returns its path. */

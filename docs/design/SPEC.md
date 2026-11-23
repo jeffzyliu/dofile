@@ -1111,7 +1111,9 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
 - **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
   three times in step 4: the phone ⋯'s file actions and the focus on the tree's row when 4a was
   joined, and the phone's Save off on a .dta tab when 4b and 4d were joined.) A part reads any signal; it writes only those listed for it.
-  - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
+  - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/TreeRow.tsx` (a row and its rename field), `files/drop.ts`
+    (the drop listeners), `files/rename.ts` (the inline rename and the draft rows, plain TypeScript), `files/tree-state.ts` (what
+    is folded, the current folder, the focus request), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
     delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Opens, closes,

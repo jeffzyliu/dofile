@@ -1,5 +1,5 @@
 // The file tree's plain logic (docs/design/SPEC.md, section 3.1), with no DOM and no store, so the Node tests run it:
-// the rows of the tree, sizes, names and paths. FilesPane.tsx draws the rows; ops.ts and upload.ts change files.
+// the rows of the tree, sizes, names and paths. TreeRow.tsx draws the rows; ops.ts and upload.ts change files.
 import { CONTROL } from "../../stata/quote.ts";
 import type { FileInfo } from "../types.ts";
 
