@@ -507,3 +507,52 @@ The words are the maintainer's, as recorded in the sessions' notes; the plan's t
 
 - `e2e/files.spec.ts:1227` (the upload test before #120's split), Firefox: deploy run 45113314919 attempts 1 and 2,
   PR #119's run 45119420519. Fixed by #120; not yet run under load since.
+
+### Session 13 (2026-11-23, `audit/2b-moves` 6acd204 to 3dcf8f3)
+
+Into `audit/2b-moves` by merge commit, each after a fresh-context review and with every CI job green (#157 merged by
+the maintainer):
+- **R1c.** #147 (the client's machine, `#writePart` and progress derived), #151 (online once; race 10 checked live; the
+  `again` and damaged replies carry a name copy; a throwing `readPart` is not damage: nothing is posted and the next
+  graph retries, kept by the maintainer after it was asked), #152 (the note's docs), #156 (the note's Decisions entry).
+- **R7r.** #148: `state.ts` split into `app/paths.ts` and `state/{saved,engine,files,run,layout,notices}.ts`; the path
+  helpers moved with it; a fix round added `hookState()` with its test and an import test.
+- **C5.** #149: one `--tabbar-h` source and a fixed-height tab bar (the trade-off: a 300% font spills labels by 5 px, not
+  cut); four phone e2e cases; N7 0 px.
+- **2.21.** #150: the test hook's module; a data-engine poll that was always true removed from `landing.spec`.
+- **Imports.** #157: Biome `useImportType` in the separated style, organised imports in groups from general to
+  specific, and ruff's `I` rules for dofile's own Python.
+- **UI helper contract.** #158: every UI helper's focus hook takes an optional getter, and makes and returns the ref when
+  none is given; `focusStable` and `useFocusOnLeave` moved into `ui/`; the `ui/`-to-`states/` import cycle is gone;
+  `web/STYLE.md` has the contract; Biome rules keep `ui/` from importing `states/` or `files/` and
+  `focus-targets.ts` from importing `preact/hooks`.
+
+Into `main`:
+- #154 (d9078d0, fast-forward): pull requests test Python 3.14 only, on Ubuntu and macOS; `main` runs Ubuntu 3.12 to 3.14
+  and macOS 3.14.
+- #153 (9ffa8c9, rebase merge): each gate (`ci ok`, `web ok`, `lint ok`) fails unless every job of its own workflow's
+  run succeeded or was skipped. The old step passed with two cancelled macOS legs; the cause was legs that never got a
+  runner and were cancelled by GitHub at about 15 minutes. A first run of the gate failed because a job with no checkout
+  has no `web/`; `deploy.yml` needed `actions: read`. The deploys of both PRs succeeded, the second one the first live run
+  of the new gates.
+
+Reviews: R1c and R7r by Opus, high; the rest by Sonnet, medium, except the Biome rules, read by the orchestrator.
+
+### Flaky tests and CI sightings of session 13
+
+- macOS runner starvation: jobs cancelled at about 15 minutes with "not acquired by Runner" (#137 twice, #152, #155
+  twice); each re-run once, the first result recorded. #154 cut the macOS demand.
+- Pyodide could not load a corrupt `scipy` download in the unit tests (#157, run 45274956655); the re-run passed.
+- A Chromium dialog-reset failure once in `shots:baseline` locally (R7r); the re-run passed.
+- Not run locally: Firefox and desktop WebKit e2e, the whole e2e suite, real Safari or iPhone.
+
+### On hold and for later
+
+- Held by the maintainer: #155 (the session's pull request to `main`; a deep review first), the real-phone check, and
+  #137 (the re-vendor draft, green at 1e537fa).
+- The gate step was not exercised against a cancelled job; past 100 jobs a run, its per-page filter would error.
+- **Decisions for later.** A design note is to come, covering the exports' placement (inline against a bottom list or a
+  top block, weighing locality for reading and editing against clarity of the interface), the state modules' shape
+  (read-only exports with one writer object) and a layer-first layout with each view's helpers beside it. Imports are
+  to use named roots `#app/`, `#engine/`, `#stata/` and `#site/` through `package.json` `"imports"`, and the
+  build is in 3.0. Windows CI is the next item after the audit's stage.
