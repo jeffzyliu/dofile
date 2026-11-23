@@ -6,6 +6,7 @@ import { activeTab, tabs } from "../editor/documents.ts";
 import { dialog, fresh } from "../state.ts";
 import { useFocusOnMount, useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
+import { roveKey } from "../ui/keys.ts";
 import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { openFile } from "./open.ts";
 import { downloadEntry } from "./ops.ts";
@@ -132,18 +133,13 @@ export function TreeRow({
     const i = rows.indexOf(row);
     const go = (j: number) => {
       e.preventDefault();
-      const to = rows[Math.max(0, Math.min(rows.length - 1, j))];
+      const to = rows[j];
       if (to) focusRow(to.path);
     };
+    const next = roveKey(e, i, rows.length, { axis: "y", wrap: false });
+    if (next !== null) return go(next);
+
     switch (e.key) {
-      case "ArrowDown":
-        return go(i + 1);
-      case "ArrowUp":
-        return go(i - 1);
-      case "Home":
-        return go(0);
-      case "End":
-        return go(rows.length - 1);
       case "ArrowRight":
         e.preventDefault();
         if (row.dir && !row.expanded) toggle(row.path, true);

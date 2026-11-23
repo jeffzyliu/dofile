@@ -34,7 +34,7 @@ import { classify, hintParts, plainLog, runError } from "../src/app/log/classify
 import { matches } from "../src/app/log/find.ts";
 import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
 import type { LastRun, RunHead } from "../src/app/types.ts";
-import { ignoreHeldEnter, isHeldEnter } from "../src/app/ui/keys.ts";
+import { ignoreHeldEnter, isHeldEnter, type RoveAxis, roveKey } from "../src/app/ui/keys.ts";
 
 // a log as the engine writes it (the engine's own text: hints on, as browser.py runs it)
 const LOG = `. clear
@@ -991,4 +991,88 @@ test("which key press is Run (keys.ts isRunKey): Ctrl or Cmd with Enter, no Alt,
   assert.equal(isRunKey(press({ ctrlKey: true, shiftKey: true })), false);
   assert.equal(isRunKey(press({ ctrlKey: true, altKey: true })), false);
   assert.equal(isRunKey(press({ ctrlKey: true, key: "s", code: "KeyS" })), false);
+});
+
+test("the roving-key rule (ui/keys.ts roveKey), the rows of axis and wrap a widget can ask for (both axes, one axis; wrap, stop), Alt, Ctrl and Cmd, keys not its own, no places", () => {
+  const press = (key: string, o: object = {}) => ({ key, altKey: false, ctrlKey: false, metaKey: false, ...o });
+  const rows: { axis: RoveAxis; wrap: boolean; moves: [string, number | null][] }[] = [
+    // from the middle of three places (at 1), from the first (at 0) and from the last (at 2)
+    {
+      axis: "both",
+      wrap: true,
+      moves: [
+        ["ArrowRight", 2],
+        ["ArrowDown", 2],
+        ["ArrowLeft", 0],
+        ["ArrowUp", 0],
+        ["Home", 0],
+        ["End", 2],
+      ],
+    },
+    {
+      axis: "x",
+      wrap: true,
+      moves: [
+        ["ArrowRight", 2],
+        ["ArrowDown", null],
+        ["ArrowLeft", 0],
+        ["ArrowUp", null],
+        ["Home", 0],
+        ["End", 2],
+      ],
+    },
+    {
+      axis: "y",
+      wrap: false,
+      moves: [
+        ["ArrowRight", null],
+        ["ArrowDown", 2],
+        ["ArrowLeft", null],
+        ["ArrowUp", 0],
+        ["Home", 0],
+        ["End", 2],
+      ],
+    },
+    {
+      axis: "y",
+      wrap: true,
+      moves: [
+        ["ArrowRight", null],
+        ["ArrowDown", 2],
+        ["ArrowLeft", null],
+        ["ArrowUp", 0],
+        ["Home", 0],
+        ["End", 2],
+      ],
+    },
+  ];
+  for (const { axis, wrap, moves } of rows)
+    for (const [key, to] of moves)
+      assert.equal(roveKey(press(key), 1, 3, { axis, wrap }), to, `${axis}, wrap ${wrap}, ${key} from 1`);
+
+  // at an end an arrow wraps round or stays, whichever the widget says
+  assert.equal(roveKey(press("ArrowRight"), 2, 3, { axis: "x", wrap: true }), 0);
+  assert.equal(roveKey(press("ArrowLeft"), 0, 3, { axis: "x", wrap: true }), 2);
+  assert.equal(roveKey(press("ArrowDown"), 2, 3, { axis: "y", wrap: false }), 2);
+  assert.equal(roveKey(press("ArrowUp"), 0, 3, { axis: "y", wrap: false }), 0);
+  assert.equal(roveKey(press("ArrowDown"), 2, 3, { axis: "y", wrap: true }), 0);
+  assert.equal(roveKey(press("ArrowUp"), 0, 3, { axis: "y", wrap: true }), 2);
+
+  // no place now (-1): Down and Right go to the first, as a tab strip with no tab selected does
+  assert.equal(roveKey(press("ArrowRight"), -1, 3, { axis: "x", wrap: true }), 0);
+  assert.equal(roveKey(press("ArrowDown"), -1, 3, { axis: "y", wrap: false }), 0);
+  assert.equal(roveKey(press("ArrowUp"), -1, 3, { axis: "y", wrap: false }), 0);
+  assert.equal(roveKey(press("ArrowLeft"), -1, 1, { axis: "x", wrap: true }), 0, "one place: wraps onto itself");
+});
+
+test("roveKey leaves alone a key with Alt, Ctrl or Cmd (Alt+Left is Back), keeps one with Shift, and ignores keys that are not its own and a widget with no place", () => {
+  const press = (key: string, o: object = {}) => ({ key, altKey: false, ctrlKey: false, metaKey: false, ...o });
+  for (const mod of ["altKey", "ctrlKey", "metaKey"])
+    for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"])
+      assert.equal(roveKey(press(key, { [mod]: true }), 1, 3, { axis: "both", wrap: true }), null, `${mod}+${key}`);
+  assert.equal(roveKey(press("ArrowDown", { shiftKey: true }), 1, 3, { axis: "both", wrap: true }), 2);
+  for (const key of ["Enter", " ", "Tab", "Escape", "Delete", "F2", "PageDown", "a"])
+    assert.equal(roveKey(press(key), 1, 3, { axis: "both", wrap: true }), null, key);
+  assert.equal(roveKey(press("Home"), -1, 0, { axis: "both", wrap: true }), null, "no places");
+  assert.equal(roveKey(press("ArrowDown"), 0, 0, { axis: "y", wrap: false }), null, "no places");
 });

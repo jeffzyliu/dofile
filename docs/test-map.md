@@ -253,7 +253,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `focus-targets.test.ts`: the focus registry (`ui/focus-targets.ts`, stand-in elements): `focusNow` for a target that is there, absent, gone, hidden, shown but not taking the focus or one of several, `focusStable`'s order (editor, else More actions, else nothing), an entry's own focus function and key (a request with no key reaches only the entries with none, so the tree's tab-order row is found among keyed rows); the one waiting request (`ask`, `takeRequest`, `cancel`: waits for a later registration, ends taken or not, is replaced, obeys `from`); and a source scan that every target name is registered by a component and no component registers another.
 - `tree-focus.test.ts`: the requests of the file tree, Find and the close of a tab (`files/tree-state.ts`, `files/close-focus.ts`, `log/find.ts`, stand-in elements): `focusRow` and `focusTree` and the values the test hook reads (`focusWanted`), the tab-order row taking a keyless request among keyed rows, a tree request's `from` (nothing or the tree, or anywhere), `rove` ending the other requests, `treeShown` for a row and for File actions alone, `openFind` asking the field once, and `focusAfterClose` choosing the selected tab, the tree or the editor (not a tab on a phone).
 - `run-gate.test.ts`: the Run gate (`src/app/editor/runnable.ts`): `runRefusal` per path kind, `activeRunRefusal` following the active tab, `canRunFile` combining the engine's `takesRun`.
-- `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`).
+- `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`); the page's key rules in `src/app/ui/keys.ts` (held Enter, `roveKey`: the axis and wrap rows, Alt, Ctrl or Cmd, keys not its own, no places; which row each component passes is pinned by e2e, not here).
   - The .log tokenizer, Download log's text, Find's matches, `runError`, a .csv's columns, the run-head words.
   - Where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture`
     blocks).
@@ -437,7 +437,8 @@ Specs:
 - `output.spec.ts` (step 4c): the Output tabs; Copy image twice in the full-size view (fake clock: the first "Copied" timer
   does not clear the second).
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
-  - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the
+  - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more; the
+    name buttons' arrow keys leave Alt, Ctrl and Cmd alone), the
     Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).
   - Copy of a closed matrix pressed while a run goes on is refused when that run replaces the results (toast, nothing
     copied); pressed again it copies the new results' matrix.

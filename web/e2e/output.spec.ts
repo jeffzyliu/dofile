@@ -294,6 +294,48 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await page.keyboard.press("ArrowDown");
   await expect(names.nth(1)).toBeFocused();
   await expect(page.locator(".t tr.picked")).toHaveCount(0);
+  // with Alt, Ctrl or Cmd the keys are the browser's (Alt+Left is Back): the focus stays and the key is not cancelled
+  const withModifier = await page.evaluate(() => {
+    const prevented: string[] = [];
+    const moved: string[] = [];
+    let last = false;
+    const listen = (e: KeyboardEvent) => {
+      last = e.defaultPrevented;
+    };
+    document.addEventListener("keydown", listen);
+    for (const mod of ["altKey", "ctrlKey", "metaKey"]) {
+      for (const key of ["ArrowDown", "ArrowUp", "Home", "End"]) {
+        const before = document.activeElement as HTMLElement;
+        last = false;
+        before.dispatchEvent(new KeyboardEvent("keydown", { key, [mod]: true, bubbles: true, cancelable: true }));
+        if (last) prevented.push(`${mod}+${key}`);
+        if (document.activeElement !== before) moved.push(`${mod}+${key}`);
+        before.focus();
+      }
+    }
+    document.removeEventListener("keydown", listen);
+    return { prevented, moved };
+  });
+  expect(withModifier).toEqual({ prevented: [], moved: [] });
+  await expect(names.nth(1)).toBeFocused();
+  // the list's own axis: Up and Down stop at the ends (no wrap), Home and End jump, Left and Right are not its keys
+  await page.keyboard.press("ArrowUp");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowLeft");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(names.nth(1)).toBeFocused();
   // Browse: 50 of 160 rows, read only
   const subhead = page.locator(".subhead", { hasText: "Browse" });
   await expect(subhead).toContainText("first 50 of 160 rows · read only");
