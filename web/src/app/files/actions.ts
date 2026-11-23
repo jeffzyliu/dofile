@@ -11,7 +11,7 @@ import { store } from "../store.ts";
 import type { Dialog, FileInfo } from "../types.ts";
 import { decodeText, noteNotText } from "./open.ts";
 import { saveAs } from "./save.ts";
-import { sequentialPromiseQueue } from "./sequential-promise-queue.ts";
+import { SequentialPromiseQueue } from "./sequential-promise-queue.ts";
 import { baseName, extOf, freeName, joinPath, movedPath, parentOf, within } from "./tree.ts";
 import { fileTurn, type Io, type Turn } from "./turns.ts";
 
@@ -238,7 +238,7 @@ const noDialog = () =>
     });
   });
 
-const enqueueUpload = sequentialPromiseQueue();
+const uploadQueue = new SequentialPromiseQueue();
 
 /** Upload `items` into the store. Files that clash with none are written first; then each clash is asked in its own
  *  dialog (Keep mine is the default). A clash whose stored bytes are the uploaded ones is neither asked nor written
@@ -252,7 +252,7 @@ const enqueueUpload = sequentialPromiseQueue();
  *  already here" (nothing to write, nothing asked), "Couldn't restore the sample".
  *  @returns the paths written */
 export async function upload(items: Incoming[], words: WordsOf = "upload"): Promise<string[]> {
-  return enqueueUpload(() => uploadNow(items, words));
+  return uploadQueue.enqueue(() => uploadNow(items, words));
 }
 
 async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {

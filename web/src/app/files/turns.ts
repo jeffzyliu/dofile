@@ -32,7 +32,7 @@
 import type { Expect, FileStore } from "../../engine/store.ts";
 import { store } from "../store.ts";
 import type { FileInfo } from "../types.ts";
-import { sequentialPromiseQueue } from "./sequential-promise-queue.ts";
+import { SequentialPromiseQueue } from "./sequential-promise-queue.ts";
 
 declare const opBrand: unique symbol;
 /** A store operation a body asks for; only `Io` makes one. */
@@ -93,7 +93,7 @@ const io: Io = {
   issue: (path, data) => op(`issue ${path}`, async () => ({ answer: target.write(path, data) })),
 };
 
-const enqueueTurn = sequentialPromiseQueue();
+const turnQueue = new SequentialPromiseQueue();
 let inBody: { nested: boolean } | null = null; // the turn whose body is running now (synchronously)
 
 /** Run `body` once the turns started before it have ended (a rejection ends one too). Resolves as `body` returns, or
@@ -103,7 +103,7 @@ export async function fileTurn<T>(body: (io: Io) => Turn<T>): Promise<T> {
     inBody.nested = true;
     throw new Error("a turn cannot start inside another turn");
   }
-  return enqueueTurn(() => perform(body));
+  return turnQueue.enqueue(() => perform(body));
 }
 
 class TurnTimeout extends Error {

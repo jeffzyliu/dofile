@@ -1,21 +1,21 @@
-// sequentialPromiseQueue (src/app/files/sequential-promise-queue.ts): order, one at a time, failures.
+// SequentialPromiseQueue (src/app/files/sequential-promise-queue.ts): order, one at a time, failures.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sequentialPromiseQueue } from "../src/app/files/sequential-promise-queue.ts";
+import { SequentialPromiseQueue } from "../src/app/files/sequential-promise-queue.ts";
 
 test("tasks run one at a time in the order enqueued; each call resolves with its task's value", async () => {
-  const enqueue = sequentialPromiseQueue();
+  const queue = new SequentialPromiseQueue();
   const seen: string[] = [];
   let release = () => {};
-  const first = enqueue(
+  const first = queue.enqueue(
     () =>
       new Promise<string>((ok) => {
         seen.push("first starts");
         release = () => ok("a");
       }),
   );
-  const second = enqueue(async () => {
+  const second = queue.enqueue(async () => {
     seen.push("second starts");
     return "b";
   });
@@ -27,18 +27,18 @@ test("tasks run one at a time in the order enqueued; each call resolves with its
 });
 
 test("a task that fails rejects its own call and the queue goes on", async () => {
-  const enqueue = sequentialPromiseQueue();
-  const failed = enqueue(async () => {
+  const queue = new SequentialPromiseQueue();
+  const failed = queue.enqueue(async () => {
     throw new Error("boom");
   });
-  const next = enqueue(async () => "after");
+  const next = queue.enqueue(async () => "after");
   await assert.rejects(failed, /boom/);
   assert.equal(await next, "after");
 });
 
 test("two queues do not wait for each other", async () => {
-  const one = sequentialPromiseQueue();
-  const two = sequentialPromiseQueue();
-  void one(() => new Promise(() => {})); // never settles
-  assert.equal(await two(async () => "free"), "free");
+  const one = new SequentialPromiseQueue();
+  const two = new SequentialPromiseQueue();
+  void one.enqueue(() => new Promise(() => {})); // never settles
+  assert.equal(await two.enqueue(async () => "free"), "free");
 });
