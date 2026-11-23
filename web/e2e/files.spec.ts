@@ -1215,6 +1215,29 @@ test("a clash dialog that follows another (Keep mine, then the next clash at onc
   expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["old a", "old b"]);
 });
 
+test("a clash asked again because the file changed while the dialog was open: the new dialog has the focus on Keep mine, and its answer hands the focus back to what had it before the first", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "old a" });
+  const opener = row(page, /^a\.do/);
+  await opener.focus();
+  await page
+    .locator('input[data-upload="files"]')
+    .setInputFiles({ name: "a.do", mimeType: "text/plain", buffer: Buffer.from("uploaded") });
+  const first = page.getByRole("alertdialog", { name: "a.do is already here" });
+  await expect(first.getByRole("button", { name: "Keep mine" })).toBeFocused();
+  await putFiles(page, { "a.do": "saved again" }); // saved while the dialog is open
+  await first.getByRole("button", { name: "Replace with uploaded" }).click();
+  const again = page.getByRole("alertdialog", { name: "a.do changed while you were deciding" });
+  await expect(again).toContainText("It was saved again since you were asked.");
+  await expect(again.getByRole("button", { name: "Keep mine" })).toBeFocused();
+  expect(await storedText(page, "a.do")).toBe("saved again"); // nothing written without the answer
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(await storedText(page, "a.do")).toBe("saved again");
+});
+
 test("the clash over an open file with unsaved edits says so", async ({ page }) => {
   await setUp(page, { "a.do": "old a" });
   await row(page, /^a\.do/).click();
