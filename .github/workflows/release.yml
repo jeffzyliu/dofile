@@ -18,7 +18,27 @@ env:
   UV_PYTHON: "3.14"
 
 jobs:
+  # The tests on the platforms ci.yml covers on main, before anything is built.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.12", "3.13", "3.14"]
+        # include:
+        #   - os: windows-latest   # enable once windows.yml passes
+        #     python: "3.14"
+    runs-on: ${{ matrix.os }}
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: uv sync --extra mcp
+      - run: uv run poe test
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
