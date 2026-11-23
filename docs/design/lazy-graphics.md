@@ -470,6 +470,74 @@ Memory Models?", MSPC 2012).
 - Chosen: an explicit counter beside the state and `tries`. One field the header already has, two adds per write
   section; every rule is the textbook's, and the state and `tries` mean only what they say.
 
+### How far to lean on the shared state
+
+**Design principle for R1** (the maintainer, 2026-11-23, on whether to lean more on the shared buffer): "given that we
+are considering investing in a "grown-up" concurrency system, relying on it more to reduce code duplication and
+fragmentation is desirable, but we don't want to increase any fragility or complexity, just rely on existing complexity.
+fixing issues by construction is far more desirable than fixing through exhaustive checks or linter rules". Read here
+as: R1 uses the buffer, its counter and the copy number (`tries`) wherever they remove a duplicate or make a race
+impossible; it adds no second shared region, no second writer per region, and no second transport for one piece of
+state.
+
+Each candidate below, with what it removes, what it fixes by construction, and what it adds:
+
+- **The copy number in the page's region, and in the messages that are about a copy.** The region already holds it:
+  `tries`, read under the counter with the state and the bytes. The worker's two messages, `again` ("this copy failed,
+  fetch another") and `damaged` ("this copy will not unpack"), would name the copy they are about, and the page would
+  act only on a message about its current copy. Removes: the page's guards that stand in for "is this message still
+  about the copy I have" (`#refetchDamaged`'s "landed, not loading", and its rewrite of `progress.state` to "failed"
+  only to steer `#retryGraphics`). Fixes by construction: race 13's second, stale `damaged` (the page would drop a good
+  copy), the same stale `damaged` sent twice by two graphs of one run, and a late `again` for a copy already replaced
+  (race 4 is today ordered by the guard; with the number it no longer depends on it). Adds: one number in two messages,
+  taken from a read the worker already makes. Recommended.
+
+- **The copy number on the worker's own findings.** Not shared state, the same idea inside the worker: `graphicsError`
+  (the damage found) and the native decode's result each keep the copy they are about, and are used only while
+  `copyNow()` is still that copy. Fixes by construction: race 11 (damage found by an idle step no longer blocks a fresh
+  copy that has landed since, and the next graph is not told about damage to a copy that is gone) and race 13 (a native
+  result of a copy found damaged is not kept). Adds: one field each in the worker's record. Recommended; race 11's fix
+  changes behaviour (today the next graph reports the damage), so it is the maintainer's call, and R1b's.
+
+- **A worker region** (a second seqlock region the worker writes: the copy it is working on, its unpack phase, damage
+  tagged with a copy number). Removes: in principle the `again` and `damaged` messages. But the page's main thread
+  cannot block on `Atomics.wait`, so it would still need a message (a doorbell with no content) or `Atomics.waitAsync`
+  to learn that the region changed. Support for `Atomics.waitAsync` in every browser the site serves was not verified
+  here (the repository has no compatibility data and nothing was run in a browser), so it could not replace the message
+  today without that check. `again` is a request (fetch another copy), not a state, and reads more plainly as a message.
+  Fixes by construction: nothing the copy number above does not already fix (races 11 and 13). Adds: a second region, a
+  second writer direction (the worker writes shared memory the page reads), a second counter, and a permanent contract
+  for each field the page reads. Not recommended for R1. Worth reopening only if the page has to show the worker's own
+  progress (say, "unpacking" in the status bar), which it does not today.
+
+- **Replacing `again` and `damaged` by buffer fields.** The same as the worker region, in a smaller form: the page would
+  still need a doorbell, so the message stays and only its content moves. Not recommended; the copy number in the
+  messages gives the by-construction part.
+
+- **The no-buffer path mirroring the regions over messages.** Without a buffer the worker downloads the part and tells
+  the page by five messages (`fetching`, `progress`, `landed`, `failed`, `damaged`), which `#workerSaysGraphics` turns
+  into the same `progress` the page writes itself when there is a buffer. A full mirror (the worker posting a copy of a
+  region's fields, with its own counter) would add a second transport for one state, which the principle rules out. The
+  small version fits it: the worker's five messages become one message carrying the part's record (state, copy number,
+  bytes received, reason), the same record type the page keeps for the buffer path, and R1c's derived `progress` reads
+  that record whichever thread filled it. Removes: the five-way switch and the two places that build `progress`. Fixes
+  by construction: none of the listed races (race 10, a late message from an ended worker, is fixed by dropping messages
+  from a worker that is not `live`, which R1c already plans). Adds: nothing new, one message shape instead of five.
+  Recommended, as part of R1c, only if it comes out smaller than the switch it replaces.
+
+- **The op `graphics` (the page's "look at the header" message to the worker).** The worker could watch the counter with
+  `Atomics.waitAsync` instead. It would remove the op and its place beside the queue, and fix no race (every page write
+  is already followed by the op), and it depends on the same unverified browser support. Not recommended.
+
+- **The interrupt buffer** stays a separate 4-byte buffer: Pyodide reads it directly, and merging it into the part's
+  header would tie two contracts together for nothing.
+
+Recommended, with the line the principle draws: R1 keeps one shared region, the page's (the part, its state, length and
+copy number under the counter), as decided above. The messages that are about a copy name it, and the worker ties its
+own findings to the copy they are about. That uses only what the counter design already has, and settles races 11 and 13
+and the stale messages by construction. A worker region is not part of R1. The no-buffer path keeps its messages, as one
+record-shaped message if that is the smaller code.
+
 ### What stays out of the buffer
 
 **Why the rest of each machine cannot live in the buffer.** A `SharedArrayBuffer` holds numbers and bytes, not objects,
@@ -520,23 +588,25 @@ each thread keeps its own machine.
 10. No buffer, an ended worker's late `{graphics}` message: `worker.onmessage` hands it to `#workerSaysGraphics`
     without checking `live.ended` (answers to calls go through `live.pending`), after `start()` reset the progress
     to pending. Not ordered. Guess: whether a terminated worker's queued messages are still delivered was not checked.
-11. Damage found by an idle step, then the fresh copy lands: `graphicsError` blocks `nativeSoon` and `idleSoon`, so
-    the fresh copy waits; the next graph reports the damage (rc 199) although a fresh copy is there, the one after it
-    draws. As `damaged()`'s comment says; R1 keeps it or the maintainer changes it.
+11. Damage found by an idle step, then the fresh copy lands: `graphicsError` blocks `nativeSoon` and `idleSoon`, so the
+    fresh copy waits; the next graph reports the damage (rc 199) although a fresh copy is there, the one after it draws.
+    As `damaged()`'s comment says. Section 6 ("How far to lean on the shared state") recommends fixing it by
+    construction in R1b: the damage names its copy; the maintainer decides.
 12. Each failed page fetch adds one `online` listener (`once`); they pile up until the browser is online, each a no-op
     after the first. Not a race; noted.
 13. **A native decode of a copy a graph has already found damaged is written again** (read, not run). The part lands,
     `startNative` starts; a graph comes first (race 7), decodes with brotli-wasm, and `writeGraphics` throws:
     `damaged()` posts `damaged`, clears `decode` and `decoded`, and the graph's catch clears `graphicsError`. The page
-    drops the Cache entry and fetches again. After the run the native promise resolves; its guard
-    (`!graphicsWritten && !decode && !decoded`) holds, so the damaged copy becomes `decoded`, the idle step writes it,
-    it throws again, and a second `damaged` goes out with `graphicsError` set. If the fresh copy has landed by then,
-    `#refetchDamaged` drops a good copy and fetches a third time, and the next graph reports damage (rc 199) although
-    a good copy is there. Not ordered. Rare: it needs bytes brotli accepts but the write rejects, and a graph during
-    the native decode. The cause: `damaged` and `again` carry no copy number, and the native result is not tied to the
-    copy it read (`startNative` keeps `copy` only for a failure); two graphs of one run (a `capture` loop) can send the
-    same stale `damaged` twice too. R1b keeps the native result only while `copyNow()` is still the copy it read and no
-    damage was found on that copy; R1c could take `damaged` with the copy (tries) it is about.
+    drops the Cache entry and fetches again. After the run the native promise resolves; its guard (`!graphicsWritten &&
+    !decode && !decoded`) holds, so the damaged copy becomes `decoded`, the idle step writes it, it throws again, and a
+    second `damaged` goes out with `graphicsError` set. If the fresh copy has landed by then, `#refetchDamaged` drops a
+    good copy and fetches a third time, and the next graph reports damage (rc 199) although a good copy is there. Not
+    ordered. Rare: it needs bytes brotli accepts but the write rejects, and a graph during the native decode. The cause:
+    `damaged` and `again` carry no copy number, and the native result is not tied to the copy it read (`startNative`
+    keeps `copy` only for a failure); two graphs of one run (a `capture` loop) can send the same stale `damaged` twice
+    too. R1b keeps the native result only while `copyNow()` is still the copy it read and no damage was found on that
+    copy; R1c makes `damaged` and `again` name the copy (tries) they are about (section 6, "How far to lean on the
+    shared state").
 14. **Without a buffer, a graph's own download cannot be broken off** (read, not run). There is no interrupt buffer
     (`client.ts`, `start()`), and `fetchPartNow`'s synchronous request holds the worker for the whole download
     (its comment says so). A Break or the run's timeout therefore resets the worker (rc 9998, the data gone); the
@@ -592,17 +662,23 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
 
 ## 9. R1 in three items (proposed)
 
+The design principle for all three is the maintainer's, in section 6 ("How far to lean on the shared state"): fix by
+construction, using the complexity there already is; add none.
+
 1. **R1a, the nets (2.3).** Tests a to c with their harness changes; `share.error` either set by the no-buffer
    failures or removed (the test says which); no change to behaviour.
 2. **R1b, the worker's machine (2.3, after R1a).** The 22 variables as one record (section 2) in a module `worker.ts`
    imports statically; the idle step and the native gate as pure functions next to `waitStep`; the renames; `table`'s
-   hooks call it; wire and words unchanged (section 3). Tests d for the worker. Its two behaviour fixes come first, each
-   with its failing test: race 3 (section 6's sequence counter; no "" from a failed part) and race 13 (the native result
-   tied to its copy).
+   hooks call it; wire and words unchanged (section 3). Tests d for the worker. Its behaviour fixes come first, each
+   with its failing test: race 3 (section 6's sequence counter; no "" from a failed part), race 13 (the native result
+   tied to its copy), and, if the maintainer agrees, race 11 (the damage found tied to its copy; section 6, "How far to
+   lean on the shared state").
 3. **R1c, the page's machine and the docs (2.4).** `client.ts`'s part as one state with its transitions (no rewrite of
    `progress.state` to steer a guard; `progress` becomes derived for the status bar); the `online` listener once per
-   part; race 10 checked against `live`. Then `docs/lazy-matplotlib.md` brought up to date (list below),
-   `src/dofile/browser.py`'s section comment, and `docs/test-map.md`. It leaves `app/state.ts` and
+   part; race 10 checked against `live`; `again` and `damaged` name the copy they are about, and the page acts only on
+   its current copy; without a buffer, the worker's five graphics messages as one record-shaped message if that is
+   smaller. One shared region only, the page's (section 6). Then `docs/lazy-matplotlib.md` brought up to date (list
+   below), `src/dofile/browser.py`'s section comment, and `docs/test-map.md`. It leaves `app/state.ts` and
    `app/engine.ts` alone (`onGraphics` keeps its shape).
 
 ## 10. Where lazy-matplotlib.md is out of date
