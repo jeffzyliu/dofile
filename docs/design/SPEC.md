@@ -1158,8 +1158,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the
     timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px),
     `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
-    `log/CommandLine.tsx` (`CommandLine`, `LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too,
-    `PhoneStrip`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
+    `log/CommandLine.tsx` (`CommandLine`), `log/LogActions.tsx` (`LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too),
+    `log/PhoneStrip.tsx` (`PhoneStrip`), `log/find.ts` (Find's signals and `openFind`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
     save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
     Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
