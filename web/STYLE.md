@@ -62,20 +62,29 @@ Renames happen inside the restructure that owns the file, and never in the same 
 One word per concept. Wire names (the worker protocol, `start-files.json`, the test hook, state tags, SPEC) keep their
 spelling; code translates them once. `URL` is spelt in capitals inside a name (`indexURL`, `heapURL`, `snapshotURL`).
 
-| Concept | Words | Not |
-|---|---|---|
-| A request number from the machine | `ticket` (type `Ticket`), on states, events, effects and client calls | `id`, `download`, `worker`, `take`, `n` |
-| Decompression | `unpack` for the verb; `decoder` for which one | `inflate`, `decompress`, `decode` (that is text), `how` |
-| The build | `built` (the build number) and `buildId` (its string) together; `Build` is the part of the start files that `mount` needs | `version` |
-| The Python module | `browser` (`dofile.browser`), type `Browser`; the web browser is never a variable | `engine` |
-| The start files | `StartFiles`, `startFiles`, `start-files.json`; "list" only as a local alias. The state tags (`starting-list`, `list-*`) are tags, not names | `List` |
-| An open file in the editor | `EditorTab` (the type); `tab`, `tabs`, `activeTab` only in editor and files code and the test hook; `editorTab` anywhere else | `OpenTab`, bare `tab` outside those |
-| A tab of the Output pane | `outputTab` | |
-| The phone's bottom bar | `phoneView` (SPEC's "Views tablist") | `phoneTab` |
-| A browser tab | `browserTab`; `otherTab`, `OTHER_TAB` and `other-tab-*` mean another browser tab (wire names, kept). The words the visitor reads stay "another tab", "this tab" | `page`, bare `tab` |
-| The Web Lock `dofile-engine` | `engineLock` (`engine/lock.ts`) | `tabLock`, `engine/tab.ts` |
-| A run | `run` is the record (type `RunHead`); `runId` its number; `runHandlers` the controller's handlers; a count says what it counts (`engineRuns`, `runsInFlight`). "Run" the verb is the wire's op and the visitor's word | `runs` for a count or the handlers |
-| The snapshot | `snapshot` alone only as the wire or data key; `snapshotStart` (a snapshot start, boolean), `snapshotURL` (its folder), `heap` (the heap file or its bytes), `snapshotFiles` (the group) | `snapshot` for any of these, `snapshotBase`, `fromSnapshot` |
+- **A request number from the machine:** `ticket` (type `Ticket`), on states, events, effects and client calls. Not
+  `id`, `download`, `worker`, `take`, `n`.
+- **Decompression:** `unpack` for the verb; `decoder` for which one. Not `inflate`, `decompress`, `decode` (that is
+  text), `how`.
+- **The build:** `built` (the build number) and `buildId` (its string) together; `Build` is the part of the start files
+  that `mount` needs. Not `version`.
+- **The Python module:** `browser` (`dofile.browser`), type `Browser`; the web browser is never a variable. Not
+  `engine`.
+- **The start files:** `StartFiles`, `startFiles`, `start-files.json`; "list" only as a local alias. The state tags
+  (`starting-list`, `list-*`) are tags, not names. Not `List`.
+- **An open file in the editor:** `EditorTab` (the type); `tab`, `tabs`, `activeTab` only in editor and files code and
+  the test hook; `editorTab` anywhere else. Not `OpenTab`, bare `tab` outside those.
+- **A tab of the Output pane:** `outputTab`.
+- **The phone's bottom bar:** `phoneView` (SPEC's "Views tablist"). Not `phoneTab`.
+- **A browser tab:** `browserTab`; `otherTab`, `OTHER_TAB` and `other-tab-*` mean another browser tab (wire names,
+  kept). The words the visitor reads stay "another tab", "this tab". Not `page`, bare `tab`.
+- **The Web Lock `dofile-engine`:** `engineLock` (`engine/lock.ts`). Not `tabLock`, `engine/tab.ts`.
+- **A run:** `run` is the record (type `RunHead`); `runId` its number; `runHandlers` the controller's handlers; a count
+  says what it counts (`engineRuns`, `runsInFlight`). "Run" the verb is the wire's op and the visitor's word. Not `runs`
+  for a count or the handlers.
+- **The snapshot:** `snapshot` alone only as the wire or data key; `snapshotStart` (a snapshot start, boolean),
+  `snapshotURL` (its folder), `heap` (the heap file or its bytes), `snapshotFiles` (the group). Not `snapshot` for any
+  of these, `snapshotBase`, `fromSnapshot`.
 
 The DOM's own words stay: `role="tab"`, `.tabbar`.
 
