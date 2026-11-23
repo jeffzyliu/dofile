@@ -44,13 +44,15 @@ const fit = () => {
 };
 fit();
 narrow.addEventListener("change", fit);
-// Without ?kblog the overlay's module is not loaded.
+
 const viewport = watchViewport({ enabled: () => Layout.isPhone.value });
-if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
 effect(() => {
   Layout.isPhone.value;
   viewport.update();
 });
+// Without ?kblog the overlay's module is not loaded.
+if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
+
 watchWakeLock();
 addEventListener("beforeunload", (e) => {
   if (tabs.value.some((t) => t.dirty)) e.preventDefault();
