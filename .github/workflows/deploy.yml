@@ -10,16 +10,19 @@ on:
   workflow_dispatch:   # the same as a push, tests included; on another branch it deploys nothing
 
 permissions:
-  contents: read   # the most any called workflow gets
+  contents: read   # the most a job gets, but the three test workflows also read the run's jobs (actions: read)
 
 jobs:
   # Their check names here are "ci / ci ok" and so on; on a pull request they are "ci ok", "web ok", "lint ok".
   ci:
     uses: ./.github/workflows/ci.yml
+    permissions: { contents: read, actions: read }   # actions: read for the gate's list of its run's jobs
   web:
     uses: ./.github/workflows/web.yml
+    permissions: { contents: read, actions: read }
   lint:
     uses: ./.github/workflows/lint.yml
+    permissions: { contents: read, actions: read }
 
   # Outside the deploy group: a commit that is no longer the tip stops here (green, with a notice), so it never becomes the
   # group's pending job, which would cancel a newer commit's pending deploy.
