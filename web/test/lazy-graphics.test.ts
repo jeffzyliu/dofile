@@ -1,5 +1,5 @@
-// The lazy graphics part with a shared buffer, end to end in Node: the page's half (EngineClient), worker.ts in a worker
-// thread, and the `[dofile]` lines both write. Skipped without a current snapshot that has a graphics part.
+// The lazy graphics part end to end in Node, with a shared buffer and without one: the page's half (EngineClient),
+// worker.ts in a worker thread, and the `[dofile]` lines both write. Skipped without a current snapshot that has a graphics part.
 
 import assert from "node:assert/strict";
 import { createReadStream, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
@@ -97,13 +97,31 @@ function client(
   fetch?: typeof globalThis.fetch,
   brotli?: "wasm",
   waits?: SharedArrayBuffer,
+  posted?: unknown[],
 ) {
   const served = fetch && { url: snapshot, dir: pathToFileURL(snapshotDir).href };
   const onConsole = (l: ConsoleLine) => {
     if (l.text.includes("[dofile]")) lines.push({ ...l, from: "worker" });
   };
   return new EngineClient({
-    createWorker: () => nodeWorker({ onConsole, served, waits }),
+    createWorker: () => {
+      const w = nodeWorker({ onConsole, served, waits });
+      if (!posted) return w;
+      // what the worker posts goes to `posted` too, as the page reads it
+      let read: ((e: { data: unknown }) => void) | null = null;
+      Object.defineProperty(w, "onmessage", {
+        get: () => read,
+        set: (f: typeof read) => {
+          read =
+            f &&
+            ((e) => {
+              posted.push(e.data);
+              f(e);
+            });
+        },
+      });
+      return w;
+    },
     wheel,
     extraWheels,
     buildId: buildId(STAMP, current),
@@ -300,5 +318,36 @@ test("a damaged copy: the graph that finds it says so (r(199)), the page fetches
   assert.deepEqual(net.modes, ["no-cache", "reload"]);
   assert.equal(drawn.rc, 0, drawn.log);
   assert.equal(drawn.images.length, 1);
+  eng.worker!.terminate();
+});
+
+test("without a SharedArrayBuffer (no cross-origin isolation): boot fetches, unpacks and writes the part before it answers; a graph right after the start draws with no waiting line, the worker posts no {graphics} message, and the part is warmed while idle", {
+  timeout: 240_000,
+  skip,
+}, async (t) => {
+  const lines = dofileLines(t);
+  const bare = mkdtempSync(join(tmpdir(), "dofile-lazy-"));
+  t.after(() => rmSync(bare, { recursive: true, force: true }));
+  for (const f of readdirSync(snapshotDir)) if (f !== "manifest.json") symlinkSync(join(snapshotDir, f), join(bare, f));
+  // gone from the page's thread only, as on a page without cross-origin isolation; the worker thread keeps its own
+  const shared = globalThis.SharedArrayBuffer;
+  Reflect.deleteProperty(globalThis, "SharedArrayBuffer");
+  t.after(() => {
+    globalThis.SharedArrayBuffer = shared;
+  });
+  const posted: unknown[] = [];
+  const eng = client(`${pathToFileURL(bare).href}/`, lines, undefined, undefined, undefined, posted);
+  await startWorker(eng, await eng.build());
+  // the worker's lines come on the port its answers come on, in order: this one came before boot's answer
+  assert.match(shown(lines), /worker: .*graphics part: written at the start/);
+
+  const graph = await within(runOn(eng, GRAPH), () => shown(lines));
+  assert.equal(graph.rc, 0, graph.log);
+  assert.equal(graph.images.length, 1);
+  assert.doesNotMatch(graph.log, /waiting for the graphics files/);
+  await line(lines, /warmed/);
+  assert.equal(matching(lines, /written (in a run|while idle)/).length, 0, shown(lines));
+  const graphics = posted.filter((m) => typeof m === "object" && m !== null && "graphics" in m);
+  assert.deepEqual(graphics, [], "no {graphics} message");
   eng.worker!.terminate();
 });
