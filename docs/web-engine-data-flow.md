@@ -458,7 +458,7 @@ What Part 3 listed before step 3.5 was answered by its steps A to D. What remain
 7. **JSON text with base64 images.** Simple and one parse, but every graph is encoded in Python, embedded in a string,
    parsed, and held as base64 in page state (up to 20).
 8. **The controller reaches into the UI.** The effects `show-dialog` and `close-dialog` write the `dialog` signal, and
-   `close-dialog` asks the editor for focus through the `editorAsked` signal (`app/editor/commands.ts`).
+   `close-dialog` asks the editor for focus through the focus registry's `ask("editor")` (`app/ui/focus-targets.ts`).
 9. **Module-level state in the controllers.** `connectEngine`, `connectRun` and `connectFiles` set module variables; the tests
    reconnect them (a second `connectEngine` replaces the wiring, one record that holds the performer and its handles, and
    clears the machine, the queue and the drop record). One engine per page is held by a
