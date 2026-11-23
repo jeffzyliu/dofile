@@ -107,10 +107,8 @@ The other scripts (the screenshot run, `preview`, the `check-*` runs inside Pyod
   no worker and writes nothing (`store.blocked`).
 - **Errors from `client.ts` carry a `kind`** (`ClientError` in `src/engine/types.ts` lists them); the worker answers
   `{id, error, name, type?}` (`type`: the Python exception class of a `PythonError`). Keep these on a new failure path: the page decides from them, never from the text.
-- **`vite.config.ts` holds the three configs (editor, pages, editor's preview) and staging (`stageFiles()`); the plugins are `scripts/vite/`**
-  (`headers`, `site-plugins`, `editor-plugins`, `start-list-dev`): factories that take their inputs as arguments.
 - **`vite.config.ts` builds the Web Worker as one file** (`inlineDynamicImports`): a chunk that imports the worker's
-  entry made iOS Safari run it twice.
+  entry made iOS Safari run it twice. Its plugins are factories in `scripts/vite/` that take their inputs as arguments.
 - **No pandas in the page**, so `export sasxport` is rc 199 there (ODT-32) and cases 1701 and 1911 are `EXPECTED_DIFFER`
   in `scripts/check-snapshot.ts`, a strict xfail.
 - **`wheels/`** holds wheels installed after the dofile wheel: `pyreadstat` built for Pyodide, committed so CI needs no
@@ -121,17 +119,14 @@ The other scripts (the screenshot run, `preview`, the `check-*` runs inside Pyod
   of the editor's goes through `import.meta.env.BASE_URL` or `LANDING_URL` (`app/env.ts`): `test/site.test.ts` fails if
   any other file spells the old `/app/` path or a production address. The e2e `baseURL` is the editor's origin; the
   pages are `LOCAL_SITE_URL`.
-- **The landing and commands pages are static HTML** (`landing.html`, `commands.html`) whose code is `src/site/`, which
-  imports only `src/site/` and stylesheets; the editor loads none of it (`biome.json`, `test/imports.test.ts`). They work with
-  scripts off. The build fills their `{{tokens}}` (`scripts/site-pages.ts`); an unknown one fails `test/site.test.ts`.
+- **The landing and commands pages are static HTML** (`landing.html`, `commands.html`) whose code is `src/site/`, kept
+  apart from the editor's by the architecture rules. They work with scripts off. The build fills their `{{tokens}}`
+  (`scripts/site-pages.ts`); an unknown one fails `test/site.test.ts`.
 - **The sample** is `sample/`; `npm run sample` rebuilds its data and the generated `src/app/sample-files.ts` (a test
   fails when it is stale). Under `?test` the first-visit sample is off unless the URL has `?sample`.
 
 ## Python files the page runs (`src/dofile/`, web demo only)
 
-- `browser.py`: what `src/engine/worker.ts` calls: one Engine in `/work`, JSON in and out, only `shell`/`webuse` denied,
-  Break through Pyodide's interrupt buffer.
-- `pathshim.py`: through PATCH-3's hook it maps file names written for someone's computer into one working folder and
-  replaces `cd`.
-- `linalgshim.py`: in Pyodide numpy's `inv`, `solve` and `cholesky` return NaN instead of raising `LinAlgError`;
-  `browser.start()` installs wrappers that raise (a no-op on CPython). The engine relies on that exception.
+`browser.py` (what `src/engine/worker.ts` calls), `pathshim.py` (maps file names into the working folder; replaces `cd`)
+and `linalgshim.py` (makes numpy's `inv`, `solve` and `cholesky` raise `LinAlgError` in Pyodide; the engine relies on
+that exception). The rest is in each module's docstring.
