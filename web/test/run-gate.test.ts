@@ -12,28 +12,28 @@ beforeEach(() => {
   for (const t of D.tabs.value) D.close(t.path);
 });
 
-test("runBlock: a .do or .ado path runs (any case, any folder); every other kind gets the reason", () => {
-  for (const p of ["a.do", "dir/b.ado", "C.DO", "x/y.Ado", ".hidden.do"]) assert.equal(G.runBlock(p), null, p);
+test("runRefusal: a .do or .ado path runs (any case, any folder); every other kind gets the reason", () => {
+  for (const p of ["a.do", "dir/b.ado", "C.DO", "x/y.Ado", ".hidden.do"]) assert.equal(G.runRefusal(p), null, p);
   for (const p of ["a.txt", "b.csv", "c.dta", "d.log", "do", "a.do.txt", "adofile", "dir.do/notes.md", "a.do ", ".do"])
-    assert.equal(G.runBlock(p), G.NOT_RUNNABLE, p);
+    assert.equal(G.runRefusal(p), G.NOT_RUNNABLE, p);
   assert.equal(G.NOT_RUNNABLE, "Only .do and .ado files can run");
 });
 
-test("runBlock: no tab is no block (Run's own toast says no file is open)", () => {
-  assert.equal(G.runBlock(null), null);
+test("runRefusal: no tab is no refusal (Run's own toast says no file is open)", () => {
+  assert.equal(G.runRefusal(null), null);
 });
 
-test("fileBlock follows the active tab", () => {
+test("activeRunRefusal follows the active tab", () => {
   D.addText("a.do", "x");
   D.addText("n.txt", "x");
   D.addDta("w.dta");
-  assert.equal(G.fileBlock.value, null, "no tab active");
+  assert.equal(G.activeRunRefusal.value, null, "no tab active");
   D.activate("n.txt");
-  assert.equal(G.fileBlock.value, G.NOT_RUNNABLE);
+  assert.equal(G.activeRunRefusal.value, G.NOT_RUNNABLE);
   D.activate("a.do");
-  assert.equal(G.fileBlock.value, null);
+  assert.equal(G.activeRunRefusal.value, null);
   D.activate("w.dta");
-  assert.equal(G.fileBlock.value, G.NOT_RUNNABLE);
+  assert.equal(G.activeRunRefusal.value, G.NOT_RUNNABLE);
 });
 
 test("canRunFile: the engine must take a run and the path must be runnable", () => {

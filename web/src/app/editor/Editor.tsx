@@ -15,7 +15,7 @@ import { wholeLines } from "./cm.ts";
 import { codeOf, editorAsked, editorCommands } from "./commands.ts";
 import { activeTab, attachView, edited, save, selection, stateOf, tabs } from "./documents.ts";
 import { isRunKey, isSaveKey } from "./keys.ts";
-import { fileBlock } from "./runnable.ts";
+import { activeRunRefusal } from "./runnable.ts";
 import { refusedRunWords } from "./words.ts";
 
 let view: EditorView | null = null;
@@ -96,8 +96,8 @@ function runEither() {
     if (words) showToast(words, "error");
     return;
   }
-  if (fileBlock.value) {
-    showToast(fileBlock.value, "error"); // a tab that is not a .do or .ado file
+  if (activeRunRefusal.value) {
+    showToast(activeRunRefusal.value, "error"); // a tab that is not a .do or .ado file
     return;
   }
   if (selection.value) runSelection(true);

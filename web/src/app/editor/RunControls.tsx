@@ -17,7 +17,7 @@ import { ignoreHeldEnter } from "../ui/keys.ts";
 import { since } from "./clock.ts";
 import { editorCommands } from "./commands.ts";
 import { activeTab, save, selection, tabs } from "./documents.ts";
-import { fileBlock } from "./runnable.ts";
+import { activeRunRefusal } from "./runnable.ts";
 import { PILL_WIDEST, pillTime, refusedRunWords } from "./words.ts";
 
 /** The run controls' class: in the other-tab states they keep their place and are unseen (app.css). */
@@ -52,7 +52,7 @@ function runState(): {
     return { label: "Start engine", disabled: offer === "off", busy: false, start: true };
   }
   if (takesRun(st)) {
-    const reason = fileBlock.value; // the active tab is not a .do or .ado file
+    const reason = activeRunRefusal.value; // the active tab is not a .do or .ado file
     return reason === null
       ? { label: "Run", disabled: false, busy: false, start: false }
       : { label: "Run", disabled: true, busy: false, start: false, reason };

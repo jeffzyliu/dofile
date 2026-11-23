@@ -12,14 +12,14 @@ import { activeTab } from "./documents.ts";
 export const NOT_RUNNABLE = "Only .do and .ado files can run";
 
 /** The reason Run is off for the tab `path`, or null when it can run (a .do or .ado file) or there is no tab. */
-export function runBlock(path: string | null): string | null {
+export function runRefusal(path: string | null): string | null {
   if (path === null) return null;
   const ext = extOf(path);
   return ext === ".do" || ext === ".ado" ? null : NOT_RUNNABLE;
 }
 
 /** The reason Run is off for the active tab, or null. */
-export const fileBlock: ReadonlySignal<string | null> = computed(() => runBlock(activeTab.value));
+export const activeRunRefusal: ReadonlySignal<string | null> = computed(() => runRefusal(activeTab.value));
 
 /** A run of the file `path` can be sent now: the engine takes a run and the path is a .do or .ado file. */
-export const canRunFile = (st: EngineState, path: string | null): boolean => takesRun(st) && runBlock(path) === null;
+export const canRunFile = (st: EngineState, path: string | null): boolean => takesRun(st) && runRefusal(path) === null;
