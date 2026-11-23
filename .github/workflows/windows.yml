@@ -4,9 +4,7 @@ name: windows
 # called by deploy.yml: a red run here does not block a merge or a deploy.
 on:
   push:
-    branches:
-      - main
-      - ci/windows   # TEMPORARY: removed before merge
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
