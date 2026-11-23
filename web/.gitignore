@@ -8,3 +8,4 @@ playwright-report/
 public/snapshot/
 .wrangler/
 public/pyodide/
+public/stage.json

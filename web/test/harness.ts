@@ -25,15 +25,17 @@ export const endWorkers = () => {
 
 // A Worker as client.ts wants it. `store`: the page's FileStore, which the worker thread then uses (node-worker.ts);
 // without it the thread has its own database, and `oldDatabase` puts an IDBFS-style "/work" database there first;
-// `noDatabase`: the thread has no IndexedDB at all. port.harness("databases") asks the thread what its IndexedDB holds.
+// `noDatabase`: the thread has no IndexedDB at all; `failParse`: a JSON text with that string in it fails to parse. port.harness("databases") asks the thread what its IndexedDB holds.
 export function nodeWorker({
   store,
   oldDatabase = false,
   noDatabase = false,
+  failParse,
 }: {
   store?: FileStore;
   oldDatabase?: boolean;
   noDatabase?: boolean;
+  failParse?: string;
 } = {}) {
   const channel = store && new MessageChannel();
   if (channel) {
@@ -58,6 +60,7 @@ export function nodeWorker({
       storePort: channel?.port2,
       oldDatabase,
       noDatabase,
+      failParse,
     },
     transferList: channel ? [channel.port2] : [],
   });

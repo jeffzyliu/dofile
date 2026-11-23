@@ -289,15 +289,20 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   `aria-expanded`, named "e(b), 1 x 3", the keyboard's toggle (Enter, Space). A click that ends a text selection in the row
   does nothing. The row shows the pointer. The copy icon (`Copy e(b)`; the check after a copy, as a scalar's) and Ctrl/Cmd+C
   on the caret copy the whole matrix as tab-separated text; the toast says "Copied e(b)", and a copy that had to read the
-  matrix leaves it closed; the icon does not toggle the row. A click on a grid cell copies that cell's every digit ("Copied
+  matrix leaves it closed; the icon does not toggle the row. A copy that had to read the matrix, or an open, whose read finds
+  that a later run replaced the results (the engine refuses a request that names older results than its latest run's)
+  copies and opens nothing and says so in an error toast: "The results changed: copy again" (the maintainer's words,
+  2026-11-23; the capital "T" is for the maintainer to confirm), "The results changed: open it again" for an open (for the
+  maintainer to confirm); the visitor presses again. The engine counts a run when it starts, so a run that fails after the
+  engine ran (its op rejected: the page keeps the old results) refuses the old row until the next run. A click on a grid cell copies that cell's every digit ("Copied
   e(b)[y1, age]": row name, column name); a text selection in the grid is not a click; cells are for mouse and touch, with
   no keyboard navigation (the copy icon covers it). Each cell shows the pointer and tints on hover (`hover: hover`).
 - **Empty** (`S 18`): "No results yet" / "e() and r() appear after an estimation or a command such as `summarize`, with the
   locals and globals your runs set."
 - **Keyboard and ARIA:** each row's copy icon is a Tab stop (Tab walks group heads, matrix carets and copy icons in order;
   no arrow keys), `aria-describedby` the whole value for a scalar or macro; group heads and matrix carets are buttons with
-  `aria-expanded`. **Calls:** `RunResult.results`; `macros` after each run; `matrix {name}` when
-  a matrix row opens.
+  `aria-expanded`. **Calls:** `RunResult.results`; `macros` after each run; `matrix {name, runId}` when
+  a matrix row opens or a closed one is copied (`runId`: `Results.runId` of the results the row shows).
 
 ### 3.10 Dialogs, banners, toast, menus (P1, step 4d unless noted)
 A dialog is a `<dialog>` centered over the scrim, a bottom sheet on a phone. Focus starts on the safe choice, Esc cancels,
@@ -630,7 +635,7 @@ handler with another op's arguments or result, fails the type check (`web/test/d
 | `run` | lifecycle | `{code, fresh_locals?, plot_theme?}` | `RunResult`; while it runs, `{id, log}` chunks | rejects (kind `op`) when the op fails in the worker, for example with no memory for its result, or (kind `no-engine`) when its worker is not live; the machine then ends the run with rc 9998, kind `run-failed`, and the worker stays. A rejection of an ending kind (`reset`, `stopped`, `failed`, `failed-twice`) says nothing: the machine has cut the run | engine | Worker. Then writes the run's difference to the store (section 7). |
 | `describe_file` (new) | read | `{path}` | `DataSummary` of a .dta in `/work`, without loading it | a path outside the folder rejects; other errors are `{error}` as the result | engine | Worker. Step 1: `Engine.describe_file(path)`, `browser.describe_file(path)`. It leaves the data in memory, r() and the log as they were. |
 | `describe` | read | `{vars?, offset?, limit?}` | `DataSummary` | `{error}` as the result | engine | Worker. |
-| `matrix` | read | `{name}` | `Matrix` | `{error}` as the result | engine | Worker. |
+| `matrix` | read | `{name, runId}` | `MatrixAnswer`: a `Matrix`, or `{changed: true}` | `{error}` as the result; `{changed: true}` when `runId` is not the number of the engine's latest results (a run was ahead of the request in the queue) | engine | Worker. The page's `runId` is the `Results.runId` of the results it shows. |
 | `macros` (new) | read | none | `Macros` | | engine | Worker. Step 1: `Engine.macros()`, `browser.macros()`. |
 | `browse` (new) | read | `{vars?, offset?, limit?}` | `BrowseRows` | `{error}` as the result | engine | Worker. Step 1: `Engine.data_rows()`, `browser.browse()`. |
 | `memory` (new) | read | none | `Memory` | | engine | Worker; it adds `heap_bytes`. Step 1: `Engine.memory()`, `browser.memory()`. |
@@ -771,7 +776,7 @@ type BootArgs = { wheel: Wheel; extraWheels?: Wheel[]; interruptBuffer?: Int32Ar
   graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null } };
 interface ReadOps {                              // declared to change nothing: anyone may send them, through query()
   describe: { args: DescribeArgs; result: DataSummary };   describe_file: { args: { path: string }; result: DataSummary };
-  matrix: { args: { name: string }; result: Matrix };      macros: { args: void; result: Macros };
+  matrix: { args: { name: string; runId: number }; result: MatrixAnswer };   macros: { args: void; result: Macros };
   browse: { args: DescribeArgs; result: BrowseRows };      memory: { args: void; result: Memory };
   files: { args: void; result: FileInfo[] };               read: { args: { path: string }; result: Uint8Array };   // views of /work, for tests
 }
@@ -804,7 +809,7 @@ interface FileInfo { path: string; dir: boolean; size: number; mtime: number }  
 
 type Value = number | string | null;             // null: missing "." (or infinity); ".a" to ".z": extended missing
 interface ResultSet { scalars: Record<string, Value>; macros: Record<string, string>; matrices: Record<string, string> }  // "3x3"
-interface Results { e: ResultSet; r: ResultSet; e_changed: boolean; r_changed: boolean }  // as `results` in MCP-SCHEMA.md
+interface Results { runId: number; e: ResultSet; r: ResultSet; e_changed: boolean; r_changed: boolean }  // as `results` in MCP-SCHEMA.md, and `runId`: the worker's count of its runs, taken when a run starts (set by the worker, not by Python)
 interface RunOptions {
   fresh_locals?: boolean;                        // true: clear the top-level locals first. Default false.
   plot_theme?: "light" | "dark";                 // the style of the PNGs in `images` only; `graph export` files unchanged
@@ -839,6 +844,7 @@ interface Variable { name: string; type: string; format: string; label: string |
 type DataSummary = { nobs: number; nvars: number; matched: number; offset: number; variables: Variable[]; more: number;
                      filename: string | null } | { error: string };
 type Matrix = { rows: string[]; cols: string[]; data: Value[][] } | { error: string };    // names as "eq:name"
+type MatrixAnswer = Matrix | { changed: true };   // changed: a later run than `runId` made the results since
 
 // Step 1. Python: Engine.run(code, images=False, *, fresh_locals=False, plot_theme=None, on_output=None);
 // browser.run(code, images=True, fresh_locals=False, plot_theme=None, on_output=None).
@@ -1123,13 +1129,13 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     an edit with `editor/documents.ts` `update`, as the view would.
     **As built in step 4a:** the plain logic is in `files/tree.ts` (the rows: in each folder its folders first, then its
     files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
-    with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
-    rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
+    with a new name; tab labels, the folder added when two open files share a name), `files/ops.ts` (rename, new,
+    delete, a folder's .zip from the store with `engine/zip.ts`) and `files/upload.ts` (upload: the files that clash with none
     are written first (so is none that holds the uploaded bytes already, unless it is open with unsaved edits), then each clash
     is asked; what the clash dialog shows beyond the `dialog` value, its words included (`upload(items, "sample")` is "Restore
     the sample"), is `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
     open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
-    is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), both tested in Node
+    is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), each tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
     its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). A tab still open at the new name after a run deleted its file closes for the rename, or, with unsaved edits, the rename is refused as if the file were there. After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
     now selected, else the tree's row, else the editor; the close-tab dialog stays open while its Save writes the file,

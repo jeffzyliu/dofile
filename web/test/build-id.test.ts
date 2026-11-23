@@ -113,6 +113,7 @@ test("writeStartFiles: a stale snapshot fails the build and writes nothing; a cu
   assert.equal(existsSync(`${dir}/start-files.json`), false, "no list");
   assert.equal(readFileSync(`${dir}/index.html`, "utf8"), html, "the page untouched");
   assert.equal(existsSync(`${dir}/snapshot/manifest.json`), true, "the manifest kept");
+  writeFileSync(`${dir}/stage.json`, "{}");
 
   // (b) a current snapshot: the list carries the id the page compiles in, and the manifest is not left to be deployed
   const list = writeStartFiles(dir, { stamp: "s", inputs: CURRENT, manifest: record });
@@ -124,6 +125,7 @@ test("writeStartFiles: a stale snapshot fails the build and writes nothing; a cu
     ["snapshot/heap.bin", "snapshot/bundle.bin"],
   );
   assert.equal(existsSync(`${dir}/snapshot/manifest.json`), false, "manifest.json removed from the built folder");
+  assert.equal(existsSync(`${dir}/stage.json`), false, "so is the staging record");
   assert.match(readFileSync(`${dir}/index.html`, "utf8"), /<meta name="dofile-engine-bytes" content="\d+">/);
 
   // (c) no snapshot: the list says so, and so does the dev server's list

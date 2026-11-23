@@ -7,7 +7,7 @@ import "fake-indexeddb/auto";
 
 const { store } = await import("../src/app/store.ts");
 const { connectFiles, refresh } = await import("../src/app/files.ts");
-const A = await import("../src/app/files/actions.ts");
+const Ops = await import("../src/app/files/ops.ts");
 const { fileTurn } = await import("../src/app/files/turns.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -164,8 +164,8 @@ test("the store applies and answers the page's calls in the order they are made 
 
 test("Delete all lists the store in its turn: a file a turn made before it is deleted too", async () => {
   await store.write("a.do", enc("1"));
-  const made = A.createEntry("file");
-  const all = A.deleteAll();
+  const made = Ops.createEntry("file");
+  const all = Ops.deleteAll();
   assert.equal(await made, "untitled.do");
   await all;
   assert.deepEqual(await paths(), []);

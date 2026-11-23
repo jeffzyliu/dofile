@@ -1,7 +1,7 @@
 // The Log head's "Find": a field over the log. Each match of its text (case ignored) is marked; Enter goes to the next
 // one, Shift+Enter to the one before, and the field says "2 of 5". It searches what the log shows (the head, run-heads
 // and the page's notes too), one line at a time. The state is signals, since the Log pane may be drawn again when the
-// layout changes. openFind, which the Log head's Find and the phone's "Log ⋯" call, opens it; LogView.tsx draws it.
+// layout changes.
 import { signal } from "@preact/signals-core";
 import { isPhone, outputTab, split } from "../state.ts";
 

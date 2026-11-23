@@ -28,10 +28,13 @@ function setMatrix(name: string, m: OpenMatrix | null) {
 /** Hide matrix `name`. A read still on its way leaves it hidden. */
 export const closeMatrix = (name: string) => setMatrix(name, null);
 
+const CHANGED = "changed"; // fetchMatrix's answer when the engine's results are no longer `rs`
+
 /** Ask the engine for matrix `name` as it stands for `rs`. */
-async function fetchMatrix(name: string, rs: Results): Promise<OpenMatrix> {
+async function fetchMatrix(name: string, rs: Results): Promise<OpenMatrix | typeof CHANGED> {
   try {
-    const m = await call("matrix", { name });
+    const m = await call("matrix", { name, runId: rs.runId });
+    if ("changed" in m) return CHANGED;
     return hasValues(m) ? { for: rs, status: "ready", matrix: m } : { for: rs, status: "error", message: m.error };
   } catch {
     return { for: rs, status: "error", message: NO_ENGINE };
@@ -39,15 +42,20 @@ async function fetchMatrix(name: string, rs: Results): Promise<OpenMatrix> {
 }
 
 /** Read matrix `name` of the current results from the engine and open it. Resolves the entry written (null when the
- *  results changed meanwhile and the answer is not for them). */
+ *  results changed meanwhile and the answer is not for them: a toast says so). */
 export async function readMatrix(name: string): Promise<OpenMatrix | null> {
   const rs = results.value;
   if (!rs) return null;
   const loading: OpenMatrix = { for: rs, status: "loading" };
   setMatrix(name, loading);
   const entry = await fetchMatrix(name, rs);
-  if (results.value !== rs) return null; // another run replaced the results: this answer is for the old ones
   if (openMatrices.value[name] !== loading) return null; // hidden (or read again) while it was loading: leave it so
+  if (entry === CHANGED) {
+    setMatrix(name, null);
+    showToast("The results changed: open it again", "error");
+    return null;
+  }
+  if (results.value !== rs) return null; // another run replaced the results: this answer is for the old ones
   setMatrix(name, entry);
   return entry;
 }
@@ -57,7 +65,13 @@ export async function readMatrix(name: string): Promise<OpenMatrix | null> {
 async function copyMatrix(name: string, done: string): Promise<boolean> {
   const rs = results.value;
   const open = matrixFor(name, rs);
-  const entry = open?.status === "ready" ? open : rs ? await fetchMatrix(name, rs) : null;
+  if (open?.status === "ready") return copyText(matrixTsv(open.matrix), done);
+
+  const entry = rs ? await fetchMatrix(name, rs) : null;
+  if (entry === CHANGED || (entry?.status === "ready" && results.value !== rs)) {
+    showToast("The results changed: copy again", "error");
+    return false;
+  }
   if (entry?.status === "ready") return copyText(matrixTsv(entry.matrix), done);
   showToast("Couldn't read the matrix", "error");
   return false;

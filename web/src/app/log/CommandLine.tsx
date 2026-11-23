@@ -1,11 +1,4 @@
-// The Log pane's command line (docs/design/SPEC.md, section 3.5): Enter runs the field through runCommand; when the
-// command is "started" the field clears, when it is "refused" the text stays and a toast says why. ↑ ↓ recall
-// `history`, and ↓ past the newest gives back what was being typed. The field stays on while the engine is on its way
-// but not `ready`, so a draft can be typed; the button is off. With no engine the field is off and keeps its text, and
-// the button is "Start engine". Nothing here is ever `disabled`: an off field is aria-disabled and read-only, an off
-// button aria-disabled and `.off`. A disabled element loses the focus to the page, and the states change under the
-// visitor's hands (a start that fails while a command is typed; "Start engine" pressed, which becomes the off "Run
-// command" in its place).
+// The Log pane's command line (docs/design/SPEC.md, section 3.5): the field, its history (↑ ↓) and its Run button.
 import { signal } from "@preact/signals-core";
 import { useRef } from "preact/hooks";
 import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
@@ -78,6 +71,7 @@ export function CommandLine() {
         typed = field.value;
         recall = list.length;
       }
+
       recall = Math.max(0, recall - 1);
       field.value = list[recall];
     } else if (e.key === "ArrowDown" && recall !== -1) {
@@ -159,7 +153,9 @@ export function CommandLine() {
         placeholder={
           offer !== null ? startHint(offer) : phone ? "Type a command" : "Type a command · ↑ ↓ for earlier ones"
         }
-        // off with no engine: aria-disabled and read-only, not `disabled`, so a field that has the focus keeps it
+        // off with no engine: aria-disabled and read-only, not `disabled`, so a field that has the focus keeps it (a
+        // disabled element loses the focus to the page, and the states change under the visitor's hands: a start that
+        // fails while a command is typed, "Start engine" pressed, which becomes the off "Run command" in its place)
         aria-disabled={offer !== null ? "true" : undefined}
         readOnly={offer !== null}
         autocomplete="off"

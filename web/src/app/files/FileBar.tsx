@@ -8,8 +8,8 @@ import { files, fresh } from "../state.ts";
 import { store } from "../store.ts";
 import { CommandBar } from "../ui/CommandBar";
 import { Icon } from "../ui/Icon";
-import { downloadEntry } from "./actions.ts";
 import { decodeText } from "./open.ts";
+import { downloadEntry } from "./ops.ts";
 import { baseName, extOf, rowCount } from "./tree.ts";
 
 const TABLE = new Set([".csv", ".tsv"]);
