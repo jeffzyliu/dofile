@@ -2,6 +2,7 @@
 // twice; app.css arranges it by `data-layout` and the width.
 
 import type { ComponentChildren } from "preact";
+import { useRef } from "preact/hooks";
 import { BannerSlot } from "./banners";
 import { DialogHost } from "./dialogs";
 import { activeTab, tabs } from "./editor/documents.ts";
@@ -27,6 +28,7 @@ import { takesReset } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
 import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
 import type { OutputTab, PhoneTab } from "./types.ts";
+import { useFocusTarget } from "./ui/focus-hooks.ts";
 import { Icon } from "./ui/Icon";
 import { LiveRegion, ToastHost } from "./ui/Live";
 import { MenuButton, MenuHost, type MenuItem } from "./ui/Menu";
@@ -68,6 +70,17 @@ const phoneMoreItems = (): MenuItem[] => [
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
 ];
 
+/** The "More actions" button of the desktop toolbar and the phone's top bar: the registry's `more-actions` target. */
+function MoreActions({ items }: { items: () => MenuItem[] }) {
+  const button = useRef<HTMLButtonElement>(null);
+  useFocusTarget("more-actions", () => button.current);
+  return (
+    <MenuButton label="More actions" items={items} ref={button}>
+      <Icon name="more" />
+    </MenuButton>
+  );
+}
+
 const Toolbar = () => (
   <header class="toolbar">
     <h1 class="visually-hidden">dofile editor</h1>
@@ -80,9 +93,7 @@ const Toolbar = () => (
       <Icon name="theme" />
       <span class="theme-word">{THEME_LABEL[theme.value]}</span>
     </button>
-    <MenuButton label="More actions" items={moreItems}>
-      <Icon name="more" />
-    </MenuButton>
+    <MoreActions items={moreItems} />
   </header>
 );
 
@@ -91,9 +102,7 @@ const VIEW_TITLE = { files: "Files", log: "Log", data: "Data", results: "Results
 const PhoneTopBar = () => (
   <header class="toolbar topbar">
     <h1 class="title">{phoneTab.value === "editor" ? <FileSwitcher /> : VIEW_TITLE[phoneTab.value]}</h1>
-    <MenuButton label="More actions" items={phoneMoreItems}>
-      <Icon name="more" />
-    </MenuButton>
+    <MoreActions items={phoneMoreItems} />
     <PhoneRun />
   </header>
 );

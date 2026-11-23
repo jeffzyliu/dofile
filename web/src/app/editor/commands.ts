@@ -11,20 +11,15 @@ import type { RunHead } from "../types.ts";
  *  lines that were sent to put each graph's link after the echo of its line (log/align.ts). */
 export const codeOf = new WeakMap<RunHead, string>();
 
-/** A request the Editor takes from its own render, once the page has drawn (docs/web-page-flows.md, section 1): `{}`
- *  for the editor's focus (the engine's dialog gone), `{ path, line }` for Go to line (the phone's Editor view shown).
- *  It ends there, taken or not. */
-export const editorAsked = signal<{ path?: string; line?: number } | null>(null);
+/** Go to line, taken by the Editor from its own render, once the page has drawn (the phone's Editor view shown). It ends
+ *  there, taken or not. The editor's focus is the registry's target `editor` (ui/focus-targets.ts). */
+export const editorAsked = signal<{ path: string; line: number } | null>(null);
 
 export const editorCommands = {
   /** Run: the whole text of `path` (default: the active tab), saved or not, with no locals (fresh_locals). */
   runFile(_path?: string) {},
   /** Run selection: the selected lines, keeping the locals of earlier runs. */
   runSelection() {},
-  /** Put the focus in the editor, at once. */
-  focus() {
-    ((globalThis.document?.querySelector("[data-editor]") ?? null) as HTMLElement | null)?.focus();
-  },
 
   /** Make `path` (default: the active tab) the active tab, opening it when it is not open, put the cursor on line
    *  `line` (1-based), scroll it into view and focus the editor. */

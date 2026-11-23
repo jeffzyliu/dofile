@@ -31,17 +31,17 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 
 1. **A hand-off moves only a focus left on nothing** (`document.activeElement` is `<body>` or null). The dialog's
    hand-back and `useFocusOnLeave` check this first, so whoever places the focus first wins and the focus moves once.
-2. **The fallback is `states/focus.ts` `focusStable()`:** first `editorCommands.focus()`, then, if that moved the focus
-   nowhere, the first visible `button[aria-label="More actions"]`. It is never `<body>`.
-3. **`editorCommands.focus()`** (`editor/Editor.tsx` `focus`) focuses at once, without changing the active tab or the
-   phone's view:
+2. **The fallback is `states/focus.ts` `focusStable()`:** first the registry's `editor` target (`focusNow`,
+   `ui/focus-targets.ts`), then, if that moved the focus nowhere, the first shown `more-actions` target (the "More actions"
+   button). It is never `<body>`.
+3. **The `editor` target** (`editor/Editor.tsx` `focusTarget`; `focusNow("editor")` focuses at once) focuses without
+   changing the active tab or the phone's view:
    - a text tab shown: CodeMirror's content (`[data-editor]`);
    - no tab, or a text tab with no editor state yet: the empty view ("No file is open", `[data-editor]` then);
    - a `.dta` tab: its tab in "Open files" when that is visible, else the first enabled button of its view (Load), else
      nothing;
-   - the Editor pane hidden (a phone on another view): it calls `view.focus()` (or the empty view's `focus()`) all the
-     same; the browser does not focus an element under `display: none`, so nothing moves and `focusStable` goes on to
-     "More actions".
+   - the Editor pane hidden (a phone on another view): the element is not shown, so `focusNow` moves nothing and returns
+     false, and `focusStable` goes on to "More actions".
 4. **A dialog gives the focus back to its opener** (what had the focus when it opened). When the opener has left the
    page, or it had none, the dialog calls `focusStable()`. `<body>` is never an opener. A dialog that opens while
    another one is still handing the focus back takes that one's opener as its own (`ui/Dialog.tsx`, the module variable
@@ -52,11 +52,11 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    that waits for a microtask finds the focus already taken.
 6. **After a tab closes** (`files/EditorTabs.tsx` `focusAfterClose` sets `closeAsked`, which `EditorTabs` takes in a
    layout effect of its next render) the focus goes to the selected tab (its `tabAsked` request), else the file tree's
-   row in the tab order when the tree is shown (`focusTree`), else `editorCommands.focus()`. When that moves nothing, the
+   row in the tab order when the tree is shown (`focusTree`), else `focusNow("editor")`. When that moves nothing, the
    close-tab dialog's own hand-back follows (its opener, else `focusStable`).
 7. **A focus request is taken by the render of the component that draws the target.** The action sets a signal (the
-   tree's `focusWanted`, the open-file tabs' `tabAsked` and `closeAsked`, a tablist's own, Find's `findAsked`, the
-   editor's `editorAsked`); the target takes it in a layout effect of its own render (`ui/focus-hooks.ts`
+   tree's `focusWanted`, the open-file tabs' `tabAsked` and `closeAsked`, a tablist's own, Find's `findAsked`; the
+   editor's is the registry's `ask("editor")`); the target takes it in a layout effect of its own render (`ui/focus-hooks.ts`
    `useFocusRequest`, or a plain layout effect where taking it is more than a focus: Go to line, a closed tab), and the
    request ends there, taken or not. No timer stands in for that render: Preact renders the queued components
    shallowest first, so `App` shows a pane, and the dialog host closes its dialog, before a deeper target takes its
@@ -108,7 +108,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 | `states/focus.ts` `useFocusOnLeave` | a banner unmounts with the focus inside | layout cleanup, then a microtask; only a focus on nothing | `focusStable()` |
 | `KeepWaitingButton` (in `StoppingBanner`), `WaitingBanner` (`states/banners.tsx`) | the button appears (1 s after the Break press), the waiting banner mounts | layout effect (`useFocusOnMount`) | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
 | `DeclinedBanner` (`states/banners.tsx`) | "Start engine" | synchronous, before `eng.ask()` | `focusStable()`, so the prompt takes the editor as its opener |
-| `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | sets `editorAsked` (`{}`) in the step; the Editor takes it in a layout effect of the render that removes the dialog | `editorCommands.focus()` |
+| `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | `ask("editor")` in the step; the Editor takes it in a layout effect of the render that removes the dialog (`useFocusTarget`) | the `editor` target |
 | `files/EditorTabs.tsx` `focusAfterClose` | Delete on a tab (no dialog); close-tab's Save or "Don't save" | sets `closeAsked` (rule 6) | rule 6 |
 | `files/dialogs.tsx` `DeleteDialog` | Delete's store change is done and the list read again (`files.ts` `refresh`) | `focusTree()`, taken by the tree's render; only a focus on nothing or in the tree | the tree's row in the tab order; with no rows, the head's File actions (`FilesHead`) |
 | `files/fold.ts` `foldFiles` (the Files button in `App.tsx`) | the Files button (700 to 1199 px) opens the list | `focusTree(true)`, taken by the render that shows the pane; from anywhere | as `DeleteDialog` |
@@ -232,7 +232,7 @@ sequenceDiagram
 
 Dismiss on a banner that uses `useFocusOnLeave` (reset, storage, download-failed, the failed-start banners, the
 editor's save-failed and run-changed, the Files pane's not-text), and run-changed's "Reload from the run", follow the
-last two lines. With a `.dta` tab active, `editorCommands.focus()` puts the focus on that tab, so the focus moves once.
+last two lines. With a `.dta` tab active, the `editor` target is that tab, so the focus moves once.
 The banners that hold no control (running, memory) do not use it, nor does the declined banner, which calls
 `focusStable()` itself before it goes.
 
@@ -261,7 +261,7 @@ sequenceDiagram
   end
   Note over D,ET: one microtask renders both, the dialog host first (shallower)
   D->>D: cleanup, blur inside, close(), queue microtask T
-  ET->>ET: layout effect, tabAsked for the selected tab (FileTab takes it in the same loop), or focusTree(), or editorCommands.focus()
+  ET->>ET: layout effect, tabAsked for the selected tab (FileTab takes it in the same loop), or focusTree(), or focusNow("editor")
   D->>D: T, the focus is not on body, nothing moves
 ```
 
@@ -286,7 +286,7 @@ On a phone one view shows at a time, so the Editor pane is often hidden and `foc
 
 ### Tests that hold this
 
-No Node test covers the focus; the rules hold only in a browser.
+`web/test/focus-targets.test.ts` covers the registry and `focusStable`'s order (the stand-in elements); the rest of the rules hold only in a browser.
 
 - `web/e2e/keyboard.spec.ts`: "a tap on the phone's command line focuses it without scrolling the page, …"
 - `web/e2e/states.spec.ts`:
@@ -317,7 +317,7 @@ No Node test covers the focus; the rules hold only in a browser.
   hand-off's microtask finds `<body>` first and sends the focus through the editor.
 - **`useFocusOnLeave`'s cleanup must stay a layout cleanup.** A `useEffect` cleanup runs after the nodes are removed, so
   `el.contains(activeElement)` is never true and nothing is handed on.
-- **`editorCommands.focus()` must focus synchronously.** `focusStable` reads `activeElement` right after it. A `.dta`
+- **`focusNow` must focus synchronously.** `focusStable` needs its answer at once. A `.dta`
   tab's own target must win in that call, or the focus moves twice (the e2e test records every `focusin`).
 - **An answer that places the focus sets its request in the same turn as `dialog = null`,** so the render that closes
   the dialog takes the request before the dialog's hand-back. That is why the close-tab dialog stays open while Save

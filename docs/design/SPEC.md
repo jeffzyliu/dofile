@@ -1124,7 +1124,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
     a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
     `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
-    `editor/documents.ts` `save(path)` and `editorCommands.focus` (after a tab closes), `addFileGraph`,
+    `editor/documents.ts` `save(path)` and `focusNow("editor")` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
     inline rename) calls `preventDefault()`. The Node tests of the close-tab and reload paths make
@@ -1236,17 +1236,17 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     of the plan's list); a later run that writes
     the editor's own text over it makes the tab clean again and takes the banner away. A file the run deleted
     keeps its tab (not handled): the file leaves the file list, the tab keeps its dot as it was, and Save writes the file
-    again (an open question: C 7 of the plan's list). `editorCommands.focus()` focuses at once and never changes
+    again (an open question: C 7 of the plan's list). The `editor` focus target (`focusNow("editor")`) focuses at once and never changes
     the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
     `[data-editor]`); with a .dta tab active, that tab in "Open files" when it is shown, else its view's first enabled
-    button (Load), else the focus does not move (the maintainer, 2026-11-23, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) it makes no check of its own: it focuses the same element, which the browser does not focus under `display: none`, so the focus does not move.
+    button (Load), else the focus does not move (the maintainer, 2026-11-23, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) the target is not shown, so the focus does not move.
     Decisions where this spec is silent: a whole-file run marks no running
     lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
     N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
     by Break. The data is as the last complete command left it.", no line); the notes at a run's end (Break's with its
     "Go to line", OQ-10's, the files not kept) wrap in the Log pane at every width; on a phone, a tap on the Break pill also shows
-    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; for the
-    the maintainer, 2026-11-23, B 2 of the plan's list); a phone's
+    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; the maintainer,
+    2026-11-23, B 2 of the plan's list); a phone's
     inline graph is on the card of its run's theme; Run with no text tab open runs nothing and
     says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
     line out; the page load's status words are "Loading"; a selection's last run is "Last run: lines 6–7 · …" and a
@@ -1329,8 +1329,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `ask()` (the declined banner's "Start engine" leads back to `asking`, section 5), `decline`,
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
-    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `editorCommands.focus` (through
-    `states/focus.ts` `focusStable`), `downloadAll`, and run.ts `refreshData`.
+    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `focusStable` (`states/focus.ts`), `downloadAll`, and run.ts `refreshData`.
     **As built (4d, to review).** `states/words.ts` holds the logic and the words with no view (Node-tested:
     `test/states.test.ts`), `states/clock.ts` the `useNow` timer of the download dialog (the machine has no clock; a view reads `Date.now()`). Every other elapsed time (the Break pill, the status bar, the running and stopping banners) reads the one `now` of `editor/clock.ts` and the status bar's `ticking` formatter, so they show the same seconds at every tick.
     S 2 and S 3 are one progress dialog: while `downloading` the header row "Downloading  14.2 of 48 MB · 6 s", the bar
@@ -1343,7 +1342,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     count of runs begun on the live engine, 0 after a reset; `words.ts` `resetAsks`). Anything that has run asks, so a run
     that left only a global or a scalar asks too; it no longer describes the memory again. The dialog closes itself if the engine can no
     longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
-    under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (`editorCommands.focus()`, which must focus at once; with a .dta tab
+    under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (the `editor` target, which focuses at once; with a .dta tab
     active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
     focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/Dialog.tsx` uses
     the same `focusStable` when a dialog closes and its opener has left the page (a banner's button: another tab took

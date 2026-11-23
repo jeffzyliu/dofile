@@ -3,7 +3,7 @@
 // data in memory, r() and the log stay untouched until Load. What was read stays in view.ts `dtaInfo`, since this view
 // is unmounted when another tab is made active.
 
-import { useEffect } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
 import { fileCommand } from "../../stata/quote.ts";
 import { formatSize } from "../bytes.ts";
 import { baseName } from "../files/tree.ts";
@@ -11,6 +11,7 @@ import { runCommand } from "../run.ts";
 import { engine, files, showToast } from "../state.ts";
 import { workerReachable } from "../states/predicates.ts";
 import { CommandBar } from "../ui/CommandBar";
+import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { readDta } from "./dta.ts";
 import { count } from "./format.ts";
@@ -23,6 +24,8 @@ export function DtaView({ path }: { path: string }) {
   const file = files.value.find((f) => f.path === path);
   const key = file ? `${file.size}:${file.mtime}` : "none";
   const up = workerReachable(engine.value);
+  const root = useRef<HTMLDivElement>(null);
+  useFocusTarget("dta-load", () => root.current?.querySelector<HTMLElement>("button:not([disabled])") ?? null);
   useEffect(() => {
     if (!up || dtaInfo.value[path]?.key === key) return;
     readDta(path, key);
@@ -39,7 +42,7 @@ export function DtaView({ path }: { path: string }) {
     showToast(r.rc === 0 ? `Loaded ${name}` : `Couldn't load ${name}: r(${r.rc})`, r.rc === 0 ? undefined : "error");
   };
   return (
-    <div class="dta-view">
+    <div class="dta-view" ref={root}>
       <div class="bar">
         <Icon name="file" />
         <b>{path}</b>

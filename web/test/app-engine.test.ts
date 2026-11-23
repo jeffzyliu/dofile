@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import { FAILED, FAILED_TWICE, UPDATED } from "../src/app/states/words.ts";
 import type { EngineStateName, RunHead } from "../src/app/types.ts";
+import { focusRequest } from "../src/app/ui/focus-targets.ts";
 import { EngineClient } from "../src/engine/client.ts";
 import type { FileInfo, Results, RunResult } from "../src/engine/types.ts";
 import { fakeWorker, sleep, starts } from "./harness.ts";
@@ -78,6 +79,7 @@ test("with nothing cached the page asks; Download counts bytes, the stages come 
   client.worker.reply({ type: "started" });
   assert.deepEqual(S.engine.value, { s: "ready" });
   assert.equal(S.dialog.value, null, "the dialog closed by itself");
+  assert.equal(focusRequest.value?.name, "editor", "and asked the editor for the focus");
   assert.deepEqual(client.calls.at(-1), ["memory", undefined]);
 });
 
