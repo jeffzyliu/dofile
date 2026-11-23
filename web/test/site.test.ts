@@ -416,7 +416,7 @@ test("the theme button of the landing and commands pages has the editor's words,
   assert.deepEqual(site.ARIA, app.THEME_ARIA);
   assert.deepEqual(site.NEXT, app.THEME_NEXT);
   // and the editor keeps that key in step with its theme signal
-  const { theme } = app;
+  const { setTheme } = app;
   const kept = new Map<string, string>();
   const storage = {
     getItem: (k: string) => kept.get(k) ?? null,
@@ -425,9 +425,9 @@ test("the theme button of the landing and commands pages has the editor's words,
   };
   await withGlobals({ localStorage: storage }, async () => {
     const stop = app.applyTheme();
-    theme.value = "dark";
+    setTheme("dark");
     assert.equal(kept.get(site.KEY), "dark");
-    theme.value = "system";
+    setTheme("system");
     assert.equal(kept.has(site.KEY), false);
     stop();
   });

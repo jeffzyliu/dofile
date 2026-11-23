@@ -1,11 +1,16 @@
 // The Output tabs' own state: signals that live as long as the page, so a tab unmounted and mounted again when the
 // layout changes (a phone turned, a window resized) comes back as it was. The shared signals are in state/.
 
+import type { ReadonlySignal } from "@preact/signals-core";
 import { signal } from "@preact/signals-core";
 import type { Macros, Matrix, Results } from "../../engine/types.ts";
 
 /** The variable the Data tab picked: it scrolls Browse to its column and marks it; null: none. */
-export const pickedVar = signal<string | null>(null);
+const picked = signal<string | null>(null);
+export const pickedVar: ReadonlySignal<string | null> = picked;
+export function pickVar(name: string | null) {
+  picked.value = name;
+}
 /** The Data tab's "Filter variables" text. */
 export const filterText = signal("");
 /** The Data tab's variable name that has the focus (the one in the tab order; arrows move it). */

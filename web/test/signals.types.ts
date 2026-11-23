@@ -12,6 +12,4 @@ type Writable<T> = Same<OnlyValue<T>, { -readonly [K in keyof OnlyValue<T>]: Onl
 type Flags = { [K in keyof S]: "value" extends keyof S[K] ? Writable<S[K]> : false };
 type WritableSignals = { [K in keyof Flags]: Flags[K] extends true ? K : never }[keyof Flags];
 
-export type OnlyTheViewsOwnSignalsAreWritable = Expect<
-  Same<WritableSignals, "split" | "outputTab" | "pickedVar" | "theme" | "wrap">
->;
+export type OnlyTheViewsOwnSignalsAreWritable = Expect<Same<WritableSignals, "split" | "outputTab" | "wrap">>;

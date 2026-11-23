@@ -1,11 +1,16 @@
 // The theme button: System, Light, Dark in turn. System sets nothing; the others set data-theme on <html>. index.html
 // sets it from localStorage before the first paint, so a dark page does not flash light.
+import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, effect, signal } from "@preact/signals-core";
 import { saved } from "./state/saved.ts";
 import type { Theme } from "./types.ts";
 
 const asTheme = (v: string | null): Theme => (v === "light" || v === "dark" ? v : "system");
-export const theme = signal<Theme>(asTheme(saved.get("dofile.theme"))); // kept in localStorage
+const chosen = signal<Theme>(asTheme(saved.get("dofile.theme"))); // kept in localStorage
+export const theme: ReadonlySignal<Theme> = chosen;
+export function setTheme(t: Theme) {
+  chosen.value = t;
+}
 const darkQuery = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
 const systemDark = signal(Boolean(darkQuery?.matches));
 darkQuery?.addEventListener?.("change", (e) => {
@@ -28,7 +33,7 @@ export const THEME_ARIA: Record<Theme, string> = {
 };
 
 export function cycleTheme() {
-  theme.value = THEME_NEXT[theme.value];
+  setTheme(THEME_NEXT[theme.value]);
 }
 
 /** Keep <html data-theme> and localStorage in step with the signal. */

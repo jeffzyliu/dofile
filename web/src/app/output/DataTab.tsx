@@ -10,7 +10,7 @@ import { data, memory, rows } from "../state/run.ts";
 import type { BrowseRows, DataSummary } from "../types.ts";
 import { count, cutCell } from "./format.ts";
 import { VarTable } from "./VarTable";
-import { filterText, focusVar, loadingRows, openCells, pickedVar } from "./view.ts";
+import { filterText, focusVar, loadingRows, openCells, pickedVar, pickVar } from "./view.ts";
 
 const EMPTY = "Load a .dta from the file list, or run ";
 const EMPTY_2 = " or ";
@@ -74,7 +74,7 @@ function Variables({ d }: { d: Summary }) {
             focusVar.value = name;
           },
           onPick: (name) => {
-            pickedVar.value = name === picked ? null : name;
+            pickVar(name === picked ? null : name);
           },
         }}
       />
