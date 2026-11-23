@@ -26,7 +26,7 @@ Each item was checked against the code on 2026-11-11 and is stated as the code b
 prototype, by the maintainer's decision of 2026-11-11; they belong with the plan's step 6 (accessibility on the real pages).
 
 To weigh first in the post-merge review:
-- **The row menu is out of reach without a keyboard or a pointer.** The file tree row's ⋯ (`files/FilesPane.tsx` `TreeRow`)
+- **The row menu is out of reach without a keyboard or a pointer.** The file tree row's ⋯ (`files/TreeRow.tsx` `TreeRow`)
   is `aria-hidden` and opens only on a click, so the row menu needs Shift+F10, the menu key or a right click. A touch
   screen-reader user may have no way to it. Left because a control inside a `treeitem` would be nested. 2026-11-11.
 
