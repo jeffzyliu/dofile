@@ -200,8 +200,10 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, a copy counted, fetched again with `cache: "reload"`; a second damaged copy in a row fails the
-    part with no fetch until a graph's `again`, and drops it from the Cache (decision B); failed: the reason written, then the worker's `again` and
-    the browser's `online` fetch it again.
+    part with no fetch until a graph's `again`, and drops it from the Cache (decision B); failed: the reason written,
+    then the worker's `again` and the browser's `online` fetch it again. The progress the listeners see, read from the
+    region (a miss with its bytes, a damage, a failed re-fetch, a retry, a Cache hit); an older build's part, its
+    download still on its way, says nothing to them.
 - `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
   counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
   word refused to a writer; a kept writer or reader throws; a page write between a reader's two counter reads is read
