@@ -340,6 +340,30 @@ test("the editor's and the Files pane's banners hand the focus on too: save-fail
   }
 });
 
+test("the storage, store-failed and download-failed banners hand the focus on too, dismissed by keyboard", async ({
+  page,
+}) => {
+  const ph = isPhone(page);
+  const more = page.getByRole("button", { name: "More actions" });
+  const cases: { banner: Banner; words: string; view: PhoneTab }[] = [
+    { banner: { b: "store-failed", cause: "open" }, words: "Your files couldn't be opened:", view: "log" },
+    { banner: { b: "storage" }, words: "This browser may clear your files", view: "editor" },
+    { banner: { b: "download-failed" }, words: "Your files couldn't be downloaded.", view: "log" },
+  ];
+  for (const { banner, words, view } of cases) {
+    // on a phone the log is its own view, so the editor is hidden there: More actions takes the focus
+    if (ph) await showPhoneTab(page, view);
+    await addBanner(page, banner);
+    // on a phone every view draws these banners; the hidden views' copies are display: none
+    const dismiss = page.locator(".banner:visible", { hasText: words }).getByRole("button", { name: "Dismiss" });
+    await dismiss.focus(); // the keyboard's way: a click does not focus a button in Safari
+    await page.keyboard.press("Enter");
+    await expect(dismiss).toHaveCount(0);
+    if (ph && view !== "editor") await expect(more, banner.b).toBeFocused();
+    else await expect.poll(() => inEditor(page), banner.b).toBe(true);
+  }
+});
+
 test("a dialog whose opener has left the page gives the focus to the editor, or More actions, not to the page", async ({
   page,
 }) => {
