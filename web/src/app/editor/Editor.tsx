@@ -9,7 +9,7 @@ import { openFile } from "../files/open.ts";
 import { requestRun } from "../run.ts";
 import { startEngine } from "../start.ts";
 import { engine } from "../state/engine.ts";
-import { dialog, showToast } from "../state.ts";
+import { dialog, showToast } from "../state/notices.ts";
 import type { RunHead } from "../types.ts";
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { shownElement } from "../ui/focus-targets.ts";

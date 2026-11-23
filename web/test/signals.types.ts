@@ -1,4 +1,4 @@
-// Compile-time only (npm run check): the writable signals state.ts exports are the views' own state. A signal with an
+// Compile-time only (npm run check): the writable signals the state modules export are the views' own state. A signal with an
 // owner is exported as ReadonlySignal, so a view that assigns it fails to compile; a new writable export fails here
 // until it is named below, on purpose.
 import type { S as AllState } from "./state-all.ts";

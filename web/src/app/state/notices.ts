@@ -1,29 +1,10 @@
-// The page's state: one module of signals (docs/design/SPEC.md, section 8; web/CLAUDE.md, "State"). On
-// @preact/signals-core, so the Node tests import this file as it is; components read the same signals through
-// @preact/signals.
+// What the page tells the visitor: the open dialog, the banners, the toast and the hidden live region. Each is written by
+// this module's functions; views and controllers read the signals.
 
 import type { ReadonlySignal } from "@preact/signals-core";
-import { computed, signal } from "@preact/signals-core";
-import { saved } from "./state/saved.ts";
-import type { Banner, Dialog, DialogName, Theme } from "./types.ts";
+import { signal } from "@preact/signals-core";
+import type { Banner, Dialog, DialogName } from "../types.ts";
 
-// ---- theme ----
-const asTheme = (v: string | null): Theme => (v === "light" || v === "dark" ? v : "system");
-export const theme = signal<Theme>(asTheme(saved.get("dofile.theme"))); // kept in localStorage
-const darkQuery = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
-const systemDark = signal(Boolean(darkQuery?.matches));
-darkQuery?.addEventListener?.("change", (e) => {
-  systemDark.value = e.matches;
-});
-/** The theme in effect, "light" or "dark": what a run sends as plot_theme. */
-export const resolvedTheme = computed(() =>
-  theme.value === "system" ? (systemDark.value ? "dark" : "light") : theme.value,
-);
-
-// ---- the Data tab ----
-export const pickedVar = signal<string | null>(null); // the Data tab
-
-// ---- dialogs, banners, toast, the live region ----
 const toastText = signal<string | null>(null);
 const bannerList = signal<Banner[]>([]);
 const toastIsError = signal(false);

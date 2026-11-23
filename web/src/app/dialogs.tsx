@@ -4,7 +4,7 @@
 import type { ComponentType } from "preact";
 import { ClashDialog, CloseTabDialog, DeleteAllDialog, DeleteDialog } from "./files/dialogs";
 import { ClearLogDialog } from "./log/ClearLogDialog";
-import { dialog } from "./state.ts";
+import { dialog } from "./state/notices.ts";
 import { DownloadDialog, OtherTabDialog } from "./states/DownloadDialog";
 import { ResetDialog } from "./states/ResetDialog";
 import type { DialogName, DialogOf } from "./types.ts";

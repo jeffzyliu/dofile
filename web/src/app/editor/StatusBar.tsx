@@ -1,5 +1,5 @@
 // The status bar (docs/design/SPEC.md, sections 3.6 and 5): draws the parts of status.ts's full form. Not a live region:
-// say() in state.ts announces changes. "Not affiliated with StataCorp" shows from 1200 px only (app.css): under it the
+// say() in state/notices.ts announces changes. "Not affiliated with StataCorp" shows from 1200 px only (app.css): under it the
 // bar has no room for it beside the longest last run. Screen readers get the full sentence (AFFILIATION).
 import { snapshotStart } from "../env";
 import { engine, graphicsPart } from "../state/engine.ts";

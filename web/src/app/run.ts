@@ -13,8 +13,8 @@ import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
 import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
 import { layout, showPhone } from "./state/layout.ts";
+import { say } from "./state/notices.ts";
 import { runWriter as W } from "./state/run.ts";
-import * as S from "./state.ts";
 import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
 
 /** The run in progress: its number, how it was started, what streamed in, and its promise. */
@@ -75,7 +75,7 @@ function began(head: RunHead, theme: "light" | "dark") {
   W.engineRuns.value++;
   const unsaved = tabs.value.filter((t) => t.dirty).map((t) => t.path); // for the note under a nested do
   W.log.value = [...W.log.value, ...add, { t: "text", text: "", run: id, streaming: true, unsaved }];
-  S.say("Run started");
+  say("Run started");
   let done!: (result: RunResult) => void;
   const promise = new Promise<RunResult>((ok) => {
     done = ok;
@@ -101,7 +101,7 @@ function ended(r: RunResult) {
   const own = engine.fromClient(r); // no log of its own
   const reset = own && r.kind !== "run-failed"; // the engine is gone (or another tab has it); run-failed keeps it
 
-  // a rename during the run moved the log's run head (state.ts runMoved), not `run.head`
+  // a rename during the run moved the log's run head (state/run.ts runMoved), not `run.head`
   const at = W.log.value.findIndex((i) => i.t === "text" && i.run === id);
   const shown = W.log.value[at - 1];
   const head = shown?.t === "runhead" ? shown.run : run.head;
@@ -117,7 +117,7 @@ function ended(r: RunResult) {
   // lastRun, and a quick take-over may already have started a new engine
   if (!(own && r.kind === "stopped")) W.lastRun.value = end;
   if (r.results) W.results.value = r.results;
-  S.say(
+  say(
     r.rc === 0
       ? "Run finished"
       : r.rc === 1

@@ -69,7 +69,7 @@ or {
     $filename <: not r".*/src/(?:app/engine\.ts|engine/machine\.ts)$",
     register_diagnostic(span=$m, message="only the engine controller (src/app/engine.ts) calls transition() and initial()")
   },
-  // Each signal has one writer: a writer object is named only by state.ts and its owner.
+  // Each signal has one writer: a writer object is named only by its state module and its owner.
   or {
     `engineWriter`,
     `graphicsWriter`

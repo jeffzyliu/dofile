@@ -5,7 +5,7 @@ import { activeTab } from "../editor/documents.ts";
 import { downloadAll } from "../files.ts";
 import { restoreSample } from "../sample.ts";
 import { files, hasFiles } from "../state/files.ts";
-import { openDialog } from "../state.ts";
+import { openDialog } from "../state/notices.ts";
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem } from "../ui/Menu";

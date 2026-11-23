@@ -5,7 +5,7 @@
 import { saveAs } from "../files/save.ts";
 import { baseName } from "../files/tree.ts";
 import { reloadFromStore } from "../files.ts";
-import { dismiss } from "../state.ts";
+import { dismiss } from "../state/notices.ts";
 import type { BannerOf } from "../types.ts";
 import { DismissibleBanner } from "../ui/DismissibleBanner";
 import { savedIsText, textOf } from "./documents.ts";

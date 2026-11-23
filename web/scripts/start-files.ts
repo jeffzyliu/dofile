@@ -72,7 +72,7 @@ export function listStartFiles(
 }
 
 // The page reads the download size from its own HTML, so the prompt has the number at load, offline too
-// (state.ts, engineBytes). index.html is not hashed, so the build can write into it.
+// (state/engine.ts, engineBytes). index.html is not hashed, so the build can write into it.
 export const engineBytesMeta = (bytes: number) => `<meta name="dofile-engine-bytes" content="${bytes}">`;
 const META = /\s*<meta name="dofile-engine-bytes" content="\d+">/g;
 

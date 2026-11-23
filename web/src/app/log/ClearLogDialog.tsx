@@ -2,7 +2,7 @@
 // streaming run's text item.
 
 import { clearLog } from "../run.ts";
-import { closeDialog } from "../state.ts";
+import { closeDialog } from "../state/notices.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 

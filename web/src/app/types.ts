@@ -1,4 +1,4 @@
-// The page's state model: docs/design/SPEC.md, section 8. The signals that hold these are in state.ts.
+// The page's state model: docs/design/SPEC.md, section 8. The signals that hold these are in state/ (one module per owner).
 
 import type { Equal, Expect, State, Ticket } from "../engine/machine.ts";
 import type {

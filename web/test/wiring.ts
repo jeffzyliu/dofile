@@ -296,7 +296,7 @@ export function setUp(opts: Wiring = {}) {
   wire(opts);
 }
 
-/** The writable signals of state.ts: every exported signal that takes an assignment (a computed one does not). */
+/** The writable signals of the state modules: every exported signal that takes an assignment (a computed one does not). */
 const initial = new Map<string, unknown>();
 const writables = Object.entries(S).filter(([, v]) => {
   const proto = v !== null && typeof v === "object" ? Object.getPrototypeOf(v) : null;
@@ -304,8 +304,8 @@ const writables = Object.entries(S).filter(([, v]) => {
 }) as [string, Signal<unknown>][];
 for (const [name, signal] of writables) initial.set(name, structuredClone(signal.peek()));
 
-/** Every writable signal of state.ts back to its value at load, the controllers' own state, the stand-ins and the drop
- *  record: a new wiring that nothing of an earlier test can reach. A signal added to state.ts is reset too. */
+/** Every writable signal of the state modules back to its value at load, the controllers' own state, the stand-ins and the drop
+ *  record: a new wiring that nothing of an earlier test can reach. A signal added to one of them is reset too. */
 export function resetState() {
   stored.clear();
   dropsWanted = [];

@@ -12,7 +12,7 @@ import { effect } from "@preact/signals-core";
 import { moduleText } from "../scripts/make-sample.ts";
 import type { ClashAnswer } from "../src/app/files/upload.ts";
 
-// localStorage and a page's location, which Node lacks: state.ts reads the first at load, sample.ts the second when
+// localStorage and a page's location, which Node lacks: state/saved.ts reads the first at load, sample.ts the second when
 // called
 const memory = new Map<string, string>();
 Object.assign(globalThis, {

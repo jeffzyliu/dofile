@@ -167,7 +167,7 @@ test("the import graph: no view reaches the transport or the worker through valu
     [...reached].some((f) => f.startsWith("src/app/") && f.endsWith(".ts")),
     "views reach the controllers",
   );
-  assert.ok(reached.has("src/app/state.ts"), "views reach the state");
+  assert.ok(reached.has("src/app/state/notices.ts"), "views reach the state");
   assert.ok(
     [...reach(LAYER.entry)].some((f) => LAYER.transport.test(f)),
     "main.tsx is where the transport comes in",

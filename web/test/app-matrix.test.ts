@@ -11,7 +11,7 @@ import { client, readyEngine, S, tick, useWiring, writable } from "./wiring.ts";
 
 useWiring();
 beforeEach(() => {
-  openMatrices.value = {}; // view.ts's signals are not state.ts's: resetState() leaves them
+  openMatrices.value = {}; // view.ts's signals are not the state modules': resetState() leaves them
   copiedRow.value = null;
 });
 

@@ -10,7 +10,7 @@ import { baseName } from "../files/tree.ts";
 import { runCommand } from "../run.ts";
 import { engine } from "../state/engine.ts";
 import { files } from "../state/files.ts";
-import { showToast } from "../state.ts";
+import { showToast } from "../state/notices.ts";
 import { workerReachable } from "../states/predicates.ts";
 import { CommandBar } from "../ui/CommandBar";
 import { useFocusTarget } from "../ui/focus-hooks.ts";

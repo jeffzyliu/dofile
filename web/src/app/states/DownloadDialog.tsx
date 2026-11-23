@@ -9,7 +9,7 @@ import { megabytes } from "../bytes.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL, snapshotStart } from "../env";
 import { engine, engineBytes, graphicsPart } from "../state/engine.ts";
-import { closeDialog } from "../state.ts";
+import { closeDialog } from "../state/notices.ts";
 import type { DialogOf, Stage } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { useNow } from "./clock.ts";

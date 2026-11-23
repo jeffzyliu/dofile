@@ -14,7 +14,7 @@ import { LANDING_URL } from "../env";
 import { downloadAll } from "../files.ts";
 import { engine, engineBytes, isolated } from "../state/engine.ts";
 import { hasFiles } from "../state/files.ts";
-import { dismiss } from "../state.ts";
+import { dismiss } from "../state/notices.ts";
 import type { BannerOf, EngineStateOf } from "../types.ts";
 import { DismissibleBanner } from "../ui/DismissibleBanner";
 import { useFocusOnMount } from "../ui/focus-hooks.ts";

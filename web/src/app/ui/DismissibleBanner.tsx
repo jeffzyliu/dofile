@@ -1,4 +1,4 @@
-import { dismiss } from "../state.ts";
+import { dismiss } from "../state/notices.ts";
 import { useFocusOnLeave } from "../states/focus.ts";
 import type { Banner as BannerRecord } from "../types.ts";
 import { Banner, type BannerProps } from "./Live";
