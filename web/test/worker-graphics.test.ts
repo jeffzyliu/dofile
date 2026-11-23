@@ -303,6 +303,31 @@ test("damage the page has not acted on yet: the next graph says it, and the one 
   assert.deepEqual(w.written, [1], "copy 1 is not unpacked or written again");
 });
 
+test("a read of the part that throws (its bytes copied out, a copy a phone may not allocate) is not damage: nothing is posted, the graph says so without promising a fetch, and the next graph draws that copy", (t) => {
+  const w = part({ brotli: "wasm", page: true });
+  w.land(1);
+  w.g.startupAnswered();
+  w.g.runArrived();
+  w.g.runStarts();
+  const slice = Uint8Array.prototype.slice;
+  const copyOut = t.mock.method(
+    Uint8Array.prototype,
+    "slice",
+    function (this: Uint8Array, start?: number, end?: number) {
+      if (end === SIZE) throw new RangeError("Array buffer allocation failed");
+      return slice.call(this, start, end);
+    },
+  );
+  const why = w.wait();
+  copyOut.mock.restore();
+  assert.match(why, /could not be read \(Array buffer allocation failed\)/);
+  assert.doesNotMatch(why, /fetched again/);
+  assert.deepEqual(w.posted, []);
+  assert.equal(w.wait(), "");
+  assert.deepEqual(w.written, [1]);
+  w.g.runEnded();
+});
+
 test("finding 15: a warm step's throw is a warning that stops the warm-up, not damage: nothing is posted, no further step is tried, and a graph draws", async () => {
   const w = part({ brotli: "wasm" });
   w.warmThrows();
