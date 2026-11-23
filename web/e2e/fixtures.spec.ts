@@ -4,6 +4,7 @@
 // needed. The fixture itself is exercised by every other spec's page.goto.
 import type { Page } from "@playwright/test";
 import { errors } from "@playwright/test";
+
 import { expect, retryFirstGoto, test } from "./fixtures";
 
 /** A page at `url()` whose goto calls take the next of `outcomes` (an Error to throw, or "ok"); `calls` counts them. */

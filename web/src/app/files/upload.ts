@@ -2,12 +2,18 @@
 // its words and its answer. "Restore the sample" is an upload (sample.ts). Plain TypeScript, so the Node tests run it.
 // Each write takes a turn (turns.ts); a replaced open file is reloaded in its tab (editor/documents.ts).
 import { effect } from "@preact/signals-core";
+
+import type { Dialog, FileInfo } from "../types.ts";
+
+import { CONTROL } from "../../stata/quote.ts";
+
+import { closeDialog, dialog, openDialog, showToast } from "../state/notices.ts";
+
 import type { Expect } from "../../engine/store.ts";
 import { isConflict } from "../../engine/store.ts";
-import { CONTROL } from "../../stata/quote.ts";
+
 import { close, reload, tabs } from "../editor/documents.ts";
-import { closeDialog, dialog, openDialog, showToast } from "../state/notices.ts";
-import type { Dialog, FileInfo } from "../types.ts";
+
 import { decodeText } from "./open.ts";
 import { SequentialPromiseQueue } from "./sequential-promise-queue.ts";
 import type { Io, Turn } from "./turns.ts";

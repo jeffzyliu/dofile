@@ -2,14 +2,19 @@
 // folder's .zip, download. Plain TypeScript, so the Node tests run it. Files change through the store in turns
 // (turns.ts), which lists itself again (files.ts); the tabs follow (editor/documents.ts).
 import { batch } from "@preact/signals-core";
-import { StoreConflict } from "../../engine/store.ts";
-import { zipParts } from "../../engine/zip.ts";
-import { close, closeUnder, moved, retype, tabs } from "../editor/documents.ts";
+
 import { movedPath, within } from "../paths.ts";
+
 import { files } from "../state/files.ts";
 import { addBanner, banners, say } from "../state/notices.ts";
 import { runMoved } from "../state/run.ts";
+
+import { StoreConflict } from "../../engine/store.ts";
+import { zipParts } from "../../engine/zip.ts";
 import { store } from "../store.ts";
+
+import { close, closeUnder, moved, retype, tabs } from "../editor/documents.ts";
+
 import { decodeText, noteNotText } from "./open.ts";
 import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, parentOf } from "./tree.ts";

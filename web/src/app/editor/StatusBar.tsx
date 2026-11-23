@@ -1,10 +1,12 @@
 // The status bar (docs/design/SPEC.md, sections 3.6 and 5): draws the parts of status.ts's full form. Not a live region:
 // say() in state/notices.ts announces changes. "Not affiliated with StataCorp" shows from 1200 px only (app.css): under it the
 // bar has no room for it beside the longest last run. Screen readers get the full sentence (AFFILIATION).
-import { snapshotStart } from "../env";
+
 import { engine, graphicsPart } from "../state/engine.ts";
 import { persisted } from "../state/files.ts";
 import { lastRun, memory } from "../state/run.ts";
+
+import { snapshotStart } from "../env";
 import { resetsIn, since } from "./clock.ts";
 import type { StatusForm, StatusPart } from "./status.ts";
 import { statusParts } from "./status.ts";

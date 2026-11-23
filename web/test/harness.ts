@@ -4,11 +4,15 @@ import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
 import { MessageChannel, Worker } from "node:worker_threads";
-import { extraWheelsDir, wheels } from "../scripts/lib/wheels.ts";
-import type { Lifecycle } from "../src/engine/client.ts";
-import type { Answer } from "../src/engine/machine.ts";
-import type { FileStore } from "../src/engine/store.ts";
+
 import type { Build, Op, PendingRow, RunOptions, RunResult } from "../src/engine/types.ts";
+
+import type { Answer } from "../src/engine/machine.ts";
+
+import type { Lifecycle } from "../src/engine/client.ts";
+import type { FileStore } from "../src/engine/store.ts";
+
+import { extraWheelsDir, wheels } from "../scripts/lib/wheels.ts";
 
 export const root = fileURLToPath(new URL("../..", import.meta.url));
 // DOFILE_WHEEL_DIR: a folder with another build of the wheel, to run the tests against it

@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
+
 import { filesOpen } from "../src/app/files/fold.ts";
 
 const D = await import("../src/app/editor/documents.ts");

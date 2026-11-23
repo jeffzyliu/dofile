@@ -4,12 +4,16 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildId } from "../scripts/build-id.ts";
+
+import type { GraphicsProgress, StartFiles } from "../src/engine/types.ts";
+
+import type { Answer } from "../src/engine/machine.ts";
+
 import { EngineClient } from "../src/engine/client.ts";
 import { PART_FAILED, PART_HEADER, PART_LANDED } from "../src/engine/lazy-part.ts";
-import type { Answer } from "../src/engine/machine.ts";
 import type { FileStore } from "../src/engine/store.ts";
-import type { GraphicsProgress, StartFiles } from "../src/engine/types.ts";
+
+import { buildId } from "../scripts/build-id.ts";
 import type { FakePort, Message, Post } from "./harness.ts";
 import { fakeWorker, live, runOn, sleep, starts, startWorker } from "./harness.ts";
 

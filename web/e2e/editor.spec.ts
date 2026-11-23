@@ -3,7 +3,9 @@
 // (the log's formatting is measured as computed styles from log items written through state.runWriter); those with an
 // engine start one per test.
 import { readFileSync } from "node:fs";
+
 import type { Page } from "@playwright/test";
+
 import {
   bannerOf,
   expect,

@@ -2,7 +2,9 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
+
 import type { Layout, OutputTab, PhoneTab } from "../types.ts";
+
 import { saved } from "./saved.ts";
 
 export const split = signal(saved.get("dofile.split") !== "0"); // kept in localStorage

@@ -3,10 +3,13 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
+
+import type { Results } from "../src/app/types.ts";
+
 import type { ResultRow } from "../src/app/output/format.ts";
 import { COPIED_MS, closeMatrix, copyRow, matrixFor, NO_ENGINE, readMatrix } from "../src/app/output/matrix.ts";
 import { copiedRow, openMatrices } from "../src/app/output/view.ts";
-import type { Results } from "../src/app/types.ts";
+
 import { client, readyEngine, S, tick, useWiring, writable } from "./wiring.ts";
 
 useWiring();

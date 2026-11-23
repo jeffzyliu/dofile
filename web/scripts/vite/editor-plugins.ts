@@ -1,12 +1,15 @@
 import { writeFileSync } from "node:fs";
+
 import type { Plugin } from "vite";
 import checker from "vite-plugin-checker";
+
+import { outDirOf } from "./paths.ts";
+
 import type { BuildInputs } from "../build-id.ts";
 import { headersFile } from "../site-pages.ts";
 import { engineBytesMeta, writeStartFiles } from "../start-files.ts";
 import { PRODUCTION } from "../urls.ts";
 import { hideHeadersFile, isolate, slash } from "./headers.ts";
-import { outDirOf } from "./paths.ts";
 import { isSitePage } from "./site-plugins.ts";
 
 /**

@@ -7,6 +7,7 @@
 // when a banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the
 // stand-in and for CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
 import type { Locator, Page } from "@playwright/test";
+
 import {
   bannerOf,
   engineState,

@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
 import { loadPyodide } from "pyodide";
+
 import { restoreOptions, unpack, writeGraphics } from "../src/engine/snapshot.ts";
 
 export const defaultDir = fileURLToPath(new URL("../public/snapshot", import.meta.url));

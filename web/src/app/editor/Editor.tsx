@@ -6,15 +6,21 @@ import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { signal } from "@preact/signals-core";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
-import { openFile } from "../files/open.ts";
-import { requestRun } from "../run.ts";
-import { startEngine } from "../start.ts";
+
+import type { RunHead } from "../types.ts";
+
 import { engine } from "../state/engine.ts";
 import { dialog, showToast } from "../state/notices.ts";
-import type { RunHead } from "../types.ts";
+
+import { requestRun } from "../run.ts";
+import { startEngine } from "../start.ts";
+
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { shownElement } from "../ui/focus-targets.ts";
 import { openMenuState } from "../ui/Menu.tsx";
+
+import { openFile } from "../files/open.ts";
+
 import { wholeLines } from "./cm.ts";
 import { codeOf, editorAsked, editorCommands } from "./commands.ts";
 import { activeTab, attachView, edited, save, selection, stateOf, tabs } from "./documents.ts";

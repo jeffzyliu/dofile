@@ -4,13 +4,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "fake-indexeddb/auto";
+
 import { IDBFactory } from "fake-indexeddb";
 import { loadPyodide } from "pyodide";
+
+import type { PendingRow } from "../src/engine/types.ts";
+
 import type { FileStore, RunChange } from "../src/engine/store.ts";
 import { CONFLICT, isConflict, openStore } from "../src/engine/store.ts";
 import { keepFiles, tabLock } from "../src/engine/tab.ts";
-import type { PendingRow } from "../src/engine/types.ts";
 import { crc32 } from "../src/engine/zip.ts";
+
 import { abortWrites, bytes, pendingRows, refuseWrites, text } from "./harness.ts";
 
 const fresh = () => openStore({ indexedDB: new IDBFactory() }); // a new, empty database

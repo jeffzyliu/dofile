@@ -1,13 +1,18 @@
 // The inline rename and the draft rows: the field's record, how it starts and how it ends (Enter, Esc, leaving the
 // field). Plain TypeScript (no JSX), so the Node tests run it; TreeRow.tsx's RenameField draws the field.
 import { signal } from "@preact/signals-core";
-import { isConflict } from "../../engine/store.ts";
-import { refresh } from "../files.ts";
+
 import { movedPath } from "../paths.ts";
+
 import { files } from "../state/files.ts";
 import { say, showToast } from "../state/notices.ts";
+
+import { isConflict } from "../../engine/store.ts";
+import { refresh } from "../files.ts";
 import { store } from "../store.ts";
+
 import { cancel } from "../ui/focus-targets.ts";
+
 import { openFile } from "./open.ts";
 import { createEntry, fail, NEW_NAMES, renameEntry } from "./ops.ts";
 import { baseName, freeName, joinPath, NAME_NOT_ALLOWED, nameProblem, newPathProblem, parentOf } from "./tree.ts";

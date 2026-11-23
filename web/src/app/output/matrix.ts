@@ -2,10 +2,13 @@
 // stale, the error) and the copy check's timer. An open matrix and the copied check belong to the `results` they were
 // read for (view.ts, openMatrices and copiedRow): after another run they are gone.
 
-import { call } from "../engine.ts";
+import type { Results } from "../types.ts";
+
 import { showToast } from "../state/notices.ts";
 import { macros, results } from "../state/run.ts";
-import type { Results } from "../types.ts";
+
+import { call } from "../engine.ts";
+
 import { copyText } from "./clip.ts";
 import type { ResultRow } from "./format.ts";
 import { copiedNote, full, hasValues, matrixTsv } from "./format.ts";

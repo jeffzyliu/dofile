@@ -12,13 +12,14 @@
 // the import of what a first graph needs run in one-task steps once the engine has been idle IDLE_MS (runIdleStep), so
 // a run sent meanwhile waits for one step at most.
 
+import type { FromWorker, SnapshotFile } from "./types.ts";
+
 import type { LandedPart, PartRead, PartWork } from "./lazy-part.ts";
 import { IDLE_MS, idleStep, nativeGate, partRegion, readPart, useNative, waitStep } from "./lazy-part.ts";
 import type { SeqRead, SeqRegion } from "./seqlock.ts";
 import { waitSeq } from "./seqlock.ts";
 import type { SnapshotPy } from "./snapshot.ts";
 import { hasNativeBrotli, unpackNative, unpackSteps, writeGraphics } from "./snapshot.ts";
-import type { FromWorker, SnapshotFile } from "./types.ts";
 import type { Browser, GraphicsArgs, PartSource } from "./worker-boot.ts";
 import { since } from "./worker-boot.ts";
 

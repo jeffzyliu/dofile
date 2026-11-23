@@ -2,6 +2,7 @@
 // The signals the views may only read are written here through a cast (a test is no view).
 import type { Page } from "@playwright/test";
 import type { Signal } from "@preact/signals";
+
 import type { DofileHook } from "./hook";
 
 type State = DofileHook["state"];

@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Worker } from "node:worker_threads";
+
 import type { SeqReader, SeqWriter } from "../src/engine/seqlock.ts";
 import { readSeq, seqRegion, waitSeq, writeSeq } from "../src/engine/seqlock.ts";
 

@@ -1,6 +1,7 @@
 // The modal trap: what a dialog and the full-size graph view each do when they open, while open and when they close.
 // docs/design/focus-targets.md, section 5; the rules it keeps are docs/web-page-flows.md, section 1.
 import { useLayoutEffect, useRef } from "preact/hooks";
+
 import { focusStable } from "../states/focus.ts";
 
 /** What the caller decides; the rest is the trap's. */

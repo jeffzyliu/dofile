@@ -1,8 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import type { Plugin } from "vite";
+
 import commandData from "../../src/stata/commands.json" with { type: "json" };
+import { outDirOf } from "./paths.ts";
+
 import type { BuildInputs } from "../build-id.ts";
 import { about } from "../build-id.ts";
 import {
@@ -16,7 +20,6 @@ import {
 } from "../site-pages.ts";
 import { EDITOR_URL, PRODUCTION, SITE_URL } from "../urls.ts";
 import { hideHeadersFile, slash } from "./headers.ts";
-import { outDirOf } from "./paths.ts";
 
 const web = new URL("../../", import.meta.url);
 

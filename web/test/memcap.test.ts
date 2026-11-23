@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
 import type { DeviceFacts } from "../src/engine/memcap.ts";
 import { capLine, chooseCap, factsOf, PHONE_CAP_MB } from "../src/engine/memcap.ts";
 import { patchAsm, patchHeapMax } from "../src/engine/snapshot.ts";

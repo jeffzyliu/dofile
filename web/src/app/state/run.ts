@@ -3,8 +3,10 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
-import { movedPath, within } from "../paths.ts";
+
 import type { BrowseRows, DataSummary, Graph, LastRun, LogItem, Macros, Memory, Results } from "../types.ts";
+
+import { movedPath, within } from "../paths.ts";
 
 export const runWriter = {
   log: signal<LogItem[]>([{ t: "head" }]), // "Clear log" keeps the head

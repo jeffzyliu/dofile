@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+
 import type { BuildInputs } from "../build-id.ts";
 import { inputs as readInputs, staged, staleness } from "../build-id.ts";
 import { listStartFiles } from "../start-files.ts";

@@ -2,15 +2,20 @@
 // (FileSwitcher). Ctrl/Cmd+W is the browser's: not bound. The tabs are editor/documents.ts's.
 import { signal } from "@preact/signals";
 import { useRef } from "preact/hooks";
-import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
-import { showPhone } from "../state/layout.ts";
+
 import type { OpenTab } from "../types.ts";
+
+import { showPhone } from "../state/layout.ts";
+
 import { useFocusRequest, useFocusTarget } from "../ui/focus-hooks.ts";
 import { fromNothing } from "../ui/focus-targets.ts";
 import { Icon } from "../ui/Icon";
 import { roveKey } from "../ui/keys.ts";
 import type { MenuItem } from "../ui/Menu";
 import { closeMenu, openMenu, openMenuState } from "../ui/Menu";
+
+import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
+
 import { focusAfterClose } from "./close-focus.ts";
 import { baseName, tabLabels } from "./tree.ts";
 

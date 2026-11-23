@@ -2,22 +2,27 @@
 // module that constructs or connects anything (test/imports.test.ts checks it).
 import "./styles/ui.css";
 import "./styles/app.css";
+
 import { effect } from "@preact/signals";
 import { render } from "preact";
-import { App } from "./app/App";
-import { tabs } from "./app/editor/documents.ts";
+
+import * as Layout from "./app/state/layout.ts";
+
 import { connectEngine, connectRun, lost, open } from "./app/engine.ts";
-import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
 import { connectFiles } from "./app/files.ts";
 import { handlers } from "./app/run.ts";
-import * as Layout from "./app/state/layout.ts";
 import { store } from "./app/store.ts";
-import { applyTheme } from "./app/theme.ts";
-import { watchViewport } from "./app/viewport.ts";
-import { watchWakeLock } from "./app/wakelock.ts";
 import { EngineClient } from "./engine/client.ts";
 import { capLine } from "./engine/memcap.ts";
 import { tabLock } from "./engine/tab.ts";
+
+import { tabs } from "./app/editor/documents.ts";
+
+import { App } from "./app/App";
+import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
+import { applyTheme } from "./app/theme.ts";
+import { watchViewport } from "./app/viewport.ts";
+import { watchWakeLock } from "./app/wakelock.ts";
 
 const here = (path: string) => new URL(`${import.meta.env.BASE_URL}${path}`, location.href).href;
 

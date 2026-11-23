@@ -1,5 +1,6 @@
 import type { RefObject } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
+
 import { findOpen } from "./find.ts";
 
 /** Keep the end of the log in view unless the visitor has scrolled up. The scroll box is `pre`'s parent, which App

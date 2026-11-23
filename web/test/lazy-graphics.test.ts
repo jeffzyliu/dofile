@@ -11,9 +11,11 @@ import type { TestContext } from "node:test";
 import { after, test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { format } from "node:util";
-import { buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
+
 import { EngineClient } from "../src/engine/client.ts";
 import { IDLE_MS } from "../src/engine/lazy-part.ts"; // how long the engine is idle before the part's next step
+
+import { buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
 import type { ConsoleLine } from "./harness.ts";
 import { endWorkers, extraWheels, live, nodeWorker, runOn, sleep, startWorker, wheel } from "./harness.ts";
 

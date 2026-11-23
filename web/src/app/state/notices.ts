@@ -3,6 +3,7 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { signal } from "@preact/signals-core";
+
 import type { Banner, Dialog, DialogName } from "../types.ts";
 
 const toastText = signal<string | null>(null);

@@ -1,6 +1,7 @@
 // What an e2e test sets up in the tabs (e2e/seed.ts calls these through the test hook), made with the documents' own
 // functions: a tab always has a document, and an unsaved one has an edit.
 import type { OpenTab } from "../types.ts";
+
 import { activate, activeTab, addDta, addText, close, stateOf, tabs, update } from "./documents.ts";
 
 /** Give the open text tab `path` an edit (a space at the end), so it is unsaved. */

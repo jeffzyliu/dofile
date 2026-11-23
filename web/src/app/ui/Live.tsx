@@ -2,7 +2,9 @@
 // each toast's words too. A toast is a confirmation, or an error that needs no action (a copy the browser refused, a
 // load that failed); anything the visitor must act on, or choose between, is a banner or a dialog.
 import type { ComponentChildren, Ref } from "preact";
+
 import { announce, holdToast, toast, toastError } from "../state/notices.ts";
+
 import { Icon } from "./Icon";
 
 export const LiveRegion = () => (

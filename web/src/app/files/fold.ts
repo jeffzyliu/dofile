@@ -3,7 +3,9 @@
 // stand-in for it.
 
 import { signal } from "@preact/signals-core";
+
 import { focusNow, shownElement } from "../ui/focus-targets.ts";
+
 import { focusTree } from "./tree-state.ts";
 
 /** Whether the folded file list is shown. */

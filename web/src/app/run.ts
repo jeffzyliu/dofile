@@ -8,14 +8,18 @@
 // what streamed in stays, with the reason as a note.
 
 import type { BrowseRows, ClientError, RunResult } from "../engine/types.ts";
-import { tabs } from "./editor/documents.ts";
-import * as engine from "./engine.ts";
-import { afterRun } from "./files.ts";
-import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
+import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
+
 import { layout, showPhone } from "./state/layout.ts";
 import { say } from "./state/notices.ts";
 import { runWriter as W } from "./state/run.ts";
-import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
+
+import * as engine from "./engine.ts";
+import { afterRun } from "./files.ts";
+
+import { tabs } from "./editor/documents.ts";
+
+import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
 
 /** The run in progress: its number, how it was started, what streamed in, and its promise. */
 type Current = {

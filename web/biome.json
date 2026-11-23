@@ -42,6 +42,44 @@
       }
     }
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              [":BUN:", ":NODE:"],
+              ":BLANK_LINE:",
+              ":PACKAGE:",
+              ":BLANK_LINE:",
+              ["**/types.ts"],
+              ":BLANK_LINE:",
+              ["**/paths.ts", "**/stata/**", "**/engine/machine.ts"],
+              ":BLANK_LINE:",
+              ["**/state/**"],
+              ":BLANK_LINE:",
+              [
+                "**/engine/**",
+                "**/engine.ts",
+                "**/run.ts",
+                "**/store.ts",
+                "**/files.ts",
+                "**/start.ts",
+                "**/files/actions*"
+              ],
+              ":BLANK_LINE:",
+              ["**/ui/**"],
+              ":BLANK_LINE:",
+              ["**/editor/**", "**/files/**", "**/log/**", "**/output/**", "**/states/**"],
+              ":BLANK_LINE:",
+              ":PATH:"
+            ]
+          }
+        }
+      }
+    }
+  },
   "plugins": ["./biome/architecture.grit"],
   "overrides": [
     {

@@ -29,9 +29,11 @@
 //   being told the operation failed, since nobody knows. The next turn starts; the store applies calls in the order
 //   they were made, so the next turn's calls land after the late one.
 
+import type { FileInfo } from "../types.ts";
+
 import type { Expect, FileStore } from "../../engine/store.ts";
 import { store } from "../store.ts";
-import type { FileInfo } from "../types.ts";
+
 import { SequentialPromiseQueue } from "./sequential-promise-queue.ts";
 
 declare const opBrand: unique symbol;

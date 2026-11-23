@@ -2,8 +2,10 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { readDta } from "../src/app/output/dta.ts";
 import { dtaInfo } from "../src/app/output/view.ts";
+
 import { client, readyEngine, tick, useWiring } from "./wiring.ts";
 
 useWiring();

@@ -8,10 +8,13 @@ import { RangeSet, RangeSetBuilder, StateEffect, StateField } from "@codemirror/
 import type { DecorationSet, ViewUpdate } from "@codemirror/view";
 import { Decoration, EditorView, GutterMarker, gutterLineClass, ViewPlugin } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+
 import { stata } from "../../stata/language.ts";
 import { isTypedInput, straighten } from "../../stata/straighten.ts";
+
 import { extOf } from "../files/tree.ts";
 import { classify } from "../log/classify.ts";
+
 import { CSV_COLORS, csvFields } from "./csv.ts";
 import { lineDeleted } from "./errormark.ts";
 

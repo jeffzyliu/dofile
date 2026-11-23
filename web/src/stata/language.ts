@@ -3,6 +3,7 @@
 // minimum length (`reg`, `gen`).
 import type { StringStream } from "@codemirror/language";
 import { StreamLanguage } from "@codemirror/language";
+
 import data from "./commands.json" with { type: "json" };
 
 const COMMANDS: Record<string, number> = data.commands;

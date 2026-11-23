@@ -4,8 +4,11 @@
 // another model's).
 
 import { useId } from "preact/hooks";
+
 import { macros, results } from "../state/run.ts";
+
 import { Icon } from "../ui/Icon";
+
 import { copyText } from "./clip.ts";
 import type { ResultGroup, ResultRow, ResultSection } from "./format.ts";
 import { full, sections, shown, sizeLabel } from "./format.ts";

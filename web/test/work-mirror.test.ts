@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { posix } from "node:path";
 import { test } from "node:test";
+
 import type { AppliedRun, RunChange, StoreCopy } from "../src/engine/store.ts";
 import type { MirrorFS, MirrorStore } from "../src/engine/work-mirror.ts";
 import { WorkMirror } from "../src/engine/work-mirror.ts";

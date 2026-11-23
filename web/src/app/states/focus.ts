@@ -1,6 +1,7 @@
 // Where the focus goes when what held it leaves the page (a banner, a dialog's opener): never <body>. The rules and who
 // uses this: docs/web-page-flows.md, section 1.
 import { useLayoutEffect, useRef } from "preact/hooks";
+
 import { focusNow } from "../ui/focus-targets.ts";
 
 /** Put the focus on the editor, or on the visible "More actions" button when the editor cannot take it (the Editor pane

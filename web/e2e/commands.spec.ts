@@ -2,7 +2,9 @@
 // build writes the list into the page, so it is there with no script; the script adds the filter.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
 import type { Page } from "@playwright/test";
+
 import { LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
 import { expect, test } from "./fixtures";
 

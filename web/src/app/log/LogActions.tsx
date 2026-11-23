@@ -1,13 +1,18 @@
 // The Log head's actions (docs/design/SPEC.md, section 3.5): three links (.log-link) and one "Log actions" ⋯ menu
 // button (.log-more); ui.css shows one by a container query on the head's width (the unsplit head only), so the tabs
 // are never clipped. The phone hides the Log head, so the same logMenuItems() are the "Log ⋯" button in its strip.
-import { saveAs } from "../files/save.ts";
-import { canClearLog } from "../run.ts";
+
 import { openDialog } from "../state/notices.ts";
 import { log } from "../state/run.ts";
+
+import { canClearLog } from "../run.ts";
+
 import { Icon } from "../ui/Icon";
 import type { MenuItem } from "../ui/Menu";
 import { MenuButton } from "../ui/Menu";
+
+import { saveAs } from "../files/save.ts";
+
 import { plainLog } from "./classify.ts";
 import { openFind } from "./find.ts";
 

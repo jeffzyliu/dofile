@@ -4,14 +4,19 @@
 import type { RefObject } from "preact";
 import { Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { codeOf } from "../editor/commands.ts";
-import { runheadWords } from "../editor/words.ts";
-import { ABOUT } from "../env";
+
+import type { RunHead } from "../types.ts";
+
 import { isPhone, wrap } from "../state/layout.ts";
 import { graphs, log } from "../state/run.ts";
-import type { RunHead } from "../types.ts";
+
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { isMac } from "../ui/Icon";
+
+import { codeOf } from "../editor/commands.ts";
+import { runheadWords } from "../editor/words.ts";
+
+import { ABOUT } from "../env";
 import { findAt, findOpen, findReturn, findText } from "./find.ts";
 import { useFollowEnd } from "./follow.ts";
 import type { Marker } from "./LogParts.tsx";

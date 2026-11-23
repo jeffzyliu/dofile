@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import type { PartEvent, PartFacts, PartRead, PartStep, PartWork, UnpackPhase } from "../src/engine/lazy-part.ts";
 import {
   failPart,

@@ -1,12 +1,17 @@
 // The command line's runner for pasted lines (paste.ts runInTurn takes it): one line run as Enter would run it, and the
 // wait for its end.
 import { effect } from "@preact/signals-core";
+
 import type { RunResult } from "../../engine/types.ts";
-import { runCommand } from "../run.ts";
-import { noEngine } from "../start.ts";
+
 import { engine } from "../state/engine.ts";
 import { lastRun } from "../state/run.ts";
+
+import { runCommand } from "../run.ts";
+import { noEngine } from "../start.ts";
+
 import { takesRun } from "../states/predicates.ts";
+
 import type { InTurn, RunOne } from "./paste.ts";
 import { inTurnWords, pastedLines } from "./paste.ts";
 

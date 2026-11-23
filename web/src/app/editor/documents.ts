@@ -7,15 +7,20 @@ import { EditorView, highlightActiveLineGutter, lineNumbers } from "@codemirror/
 import type { ReadonlySignal, Signal } from "@preact/signals-core";
 import { batch, computed, effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
-import { baseName } from "../files/tree.ts";
-import { fileTurn } from "../files/turns.ts";
+
+import type { OpenTab, RunHead } from "../types.ts";
+
 import { movedPath, within } from "../paths.ts";
+
 import { engine } from "../state/engine.ts";
 import { wrap } from "../state/layout.ts";
 import { addBanner, banners, dismiss, openDialog, say, showToast } from "../state/notices.ts";
 import { lastRun } from "../state/run.ts";
+
+import { baseName } from "../files/tree.ts";
+import { fileTurn } from "../files/turns.ts";
 import { runOn } from "../states/predicates.ts";
-import type { OpenTab, RunHead } from "../types.ts";
+
 import {
   languageOf,
   leaveFileDrops,

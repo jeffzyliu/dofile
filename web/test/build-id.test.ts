@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+
 import type { BuildInputs } from "../scripts/build-id.ts";
 import { askedKnobs, buildId, knobs, staleness } from "../scripts/build-id.ts";
 import { listStartFiles, writeStartFiles } from "../scripts/start-files.ts";

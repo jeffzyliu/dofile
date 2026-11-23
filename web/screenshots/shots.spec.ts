@@ -6,7 +6,11 @@
 // two baselines of one commit is not in this file (the report says which, and why).
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+
 import type { Locator, Page } from "@playwright/test";
+
+import { FAILED, FAILED_TWICE } from "../src/app/states/words.ts";
+
 import { expect, isPhone, ready, settle, startEngine, test, unblocked } from "../e2e/fixtures";
 import type { PhoneTab } from "../e2e/seed";
 import {
@@ -20,7 +24,6 @@ import {
   showPhoneTab,
   showTabs,
 } from "../e2e/seed";
-import { FAILED, FAILED_TWICE } from "../src/app/states/words.ts";
 
 // light, so "system" cannot differ between machines; no motion
 test.use({ colorScheme: "light", reducedMotion: "reduce" });

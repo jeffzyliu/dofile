@@ -9,6 +9,9 @@ import type { TestContext } from "node:test";
 import { mock, test } from "node:test";
 import { format } from "node:util";
 import { brotliCompressSync } from "node:zlib";
+
+import type { FromWorker } from "../src/engine/types.ts";
+
 import {
   failPart,
   IDLE_MS,
@@ -19,7 +22,6 @@ import {
   retryPart,
 } from "../src/engine/lazy-part.ts";
 import { packGraphics } from "../src/engine/snapshot.ts";
-import type { FromWorker } from "../src/engine/types.ts";
 import { graphicsWorker } from "../src/engine/worker-graphics.ts";
 
 const brotliWasm = createRequire(import.meta.url)("brotli-wasm");

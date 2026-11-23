@@ -4,17 +4,23 @@
 // is unmounted when another tab is made active.
 
 import { useEffect, useRef } from "preact/hooks";
+
 import { fileCommand } from "../../stata/quote.ts";
-import { formatSize } from "../bytes.ts";
-import { baseName } from "../files/tree.ts";
-import { runCommand } from "../run.ts";
+
 import { engine } from "../state/engine.ts";
 import { files } from "../state/files.ts";
 import { showToast } from "../state/notices.ts";
-import { workerReachable } from "../states/predicates.ts";
+
+import { runCommand } from "../run.ts";
+
 import { CommandBar } from "../ui/CommandBar";
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
+
+import { baseName } from "../files/tree.ts";
+import { workerReachable } from "../states/predicates.ts";
+
+import { formatSize } from "../bytes.ts";
 import { readDta } from "./dta.ts";
 import { count } from "./format.ts";
 import { VarTable } from "./VarTable";

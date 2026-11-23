@@ -4,10 +4,13 @@
 // back.
 
 import { useEffect, useRef, useState } from "preact/hooks";
+
 import { say as announce } from "../state/notices.ts";
 import { closeFullSize, graphFull, graphIndex, graphs, selectGraphAt } from "../state/run.ts";
+
 import { Key } from "../ui/Icon";
 import { useModalTrap } from "../ui/modal-trap.ts";
+
 import { canCopyImage, copyImage, exportPng } from "./clip.ts";
 import { graphAlt, graphTitle } from "./format.ts";
 import { GraphCard, Thumbs } from "./GraphTab";

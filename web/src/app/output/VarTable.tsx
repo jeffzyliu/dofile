@@ -1,6 +1,8 @@
 // The variables table of the Data tab and of a .dta's tab; the name buttons, the marked row and the arrow keys only when
 // `pick` is given.
+
 import type { DataSummary } from "../types.ts";
+
 import { roveKey } from "../ui/keys.ts";
 
 type Variable = Pick<

@@ -3,6 +3,7 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { signal } from "@preact/signals-core";
+
 import type { Macros, Matrix, Results } from "../../engine/types.ts";
 
 /** The variable the Data tab picked: it scrolls Browse to its column and marks it; null: none. */

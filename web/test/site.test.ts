@@ -9,6 +9,9 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
+import data from "../src/stata/commands.json" with { type: "json" };
+
 import { bigFiles, LIMIT, NEAR } from "../scripts/check-sizes.ts";
 import {
   canonicalURL,
@@ -33,7 +36,6 @@ import {
   SITE_OUT,
 } from "../scripts/urls.ts";
 import { countText, filterNames } from "../src/site/filter.ts";
-import data from "../src/stata/commands.json" with { type: "json" };
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 const web = (p: string) => readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8");

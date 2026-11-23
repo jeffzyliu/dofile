@@ -2,6 +2,7 @@
 // scrim), centered on a desktop and a bottom sheet under 700 px (app.css). docs/design/SPEC.md, section 3.10.
 import type { ComponentChildren } from "preact";
 import { useId, useLayoutEffect, useRef } from "preact/hooks";
+
 import { isHeldEnter } from "./keys.ts";
 import { useModalTrap } from "./modal-trap.ts";
 

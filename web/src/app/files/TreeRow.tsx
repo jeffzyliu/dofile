@@ -1,15 +1,19 @@
 // A row of the file tree and its inline rename field (docs/design/SPEC.md, section 3.1). The keys follow
 // docs/web-page-flows.md; the rename and the draft rows end in rename.ts.
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { formatSize } from "../bytes.ts";
-import { activeTab, tabs } from "../editor/documents.ts";
+
 import { fresh } from "../state/files.ts";
 import { openDialog } from "../state/notices.ts";
+
 import { useFocusOnMount, useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { roveKey } from "../ui/keys.ts";
 import type { MenuItem } from "../ui/Menu";
 import { closeMenu, openMenu, openMenuState } from "../ui/Menu";
+
+import { activeTab, tabs } from "../editor/documents.ts";
+
+import { formatSize } from "../bytes.ts";
 import { openFile } from "./open.ts";
 import { downloadEntry } from "./ops.ts";
 import type { Renaming } from "./rename.ts";

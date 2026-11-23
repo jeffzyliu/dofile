@@ -10,7 +10,9 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
+
 import { loadPyodide } from "pyodide";
+
 import type { BundleIndex, SnapshotPy } from "../src/engine/snapshot.ts";
 import {
   bundle,
@@ -22,6 +24,7 @@ import {
   zeroFreeMemory,
   zeroLibraryCopies,
 } from "../src/engine/snapshot.ts";
+
 import { inputs, knobs } from "./build-id.ts";
 import { installEngine } from "./install-engine.ts";
 

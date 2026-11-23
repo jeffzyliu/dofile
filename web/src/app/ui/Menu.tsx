@@ -4,6 +4,7 @@
 import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
+
 import { roveKey } from "./keys.ts";
 
 export type MenuItem =

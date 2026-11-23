@@ -1,7 +1,10 @@
 // Where the focus goes after a tab closed from the keyboard or the close-tab dialog. Plain TypeScript (no JSX), so the Node
 // tests run it; the tabs, the tree's rows and the editor take the request from their render (ui/focus-targets.ts).
-import { activeTab } from "../editor/documents.ts";
+
 import { ask, fromAnywhere, fromNothing, shownElement } from "../ui/focus-targets.ts";
+
+import { activeTab } from "../editor/documents.ts";
+
 import { focusTree, treeShown } from "./tree-state.ts";
 
 /** After a tab closed (its element, which may have had the focus, is gone): the selected tab takes the focus, else the

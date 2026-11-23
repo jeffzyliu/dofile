@@ -2,12 +2,15 @@
 // The host keys each view on the whole value, so a new value (clash 1 of 5, then clash 2) is a new <Dialog> and its
 // focus starts again. A dialog that another replaces is unmounted with no answer: its view treats that as Cancel.
 import type { ComponentType } from "preact";
+
+import type { DialogName, DialogOf } from "./types.ts";
+
+import { dialog } from "./state/notices.ts";
+
 import { ClashDialog, CloseTabDialog, DeleteAllDialog, DeleteDialog } from "./files/dialogs";
 import { ClearLogDialog } from "./log/ClearLogDialog";
-import { dialog } from "./state/notices.ts";
 import { DownloadDialog, OtherTabDialog } from "./states/DownloadDialog";
 import { ResetDialog } from "./states/ResetDialog";
-import type { DialogName, DialogOf } from "./types.ts";
 
 const VIEWS: { [K in DialogName]: ComponentType<{ dialog: DialogOf<K> }> } = {
   download: DownloadDialog,
