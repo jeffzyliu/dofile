@@ -1453,7 +1453,7 @@ test("Run is for .do and .ado tabs only: on a .txt or .csv tab the Run buttons a
     await open(page, name);
     await expect(run).toHaveAttribute("aria-disabled", "true");
     await expect(run).toHaveAttribute("title", REASON);
-    await expect(run).toHaveAccessibleName(`Run is not available: ${REASON}`);
+    await expect(run).toHaveAccessibleName("Run is not available: only .do and .ado files can run");
     if (!isPhone(page)) await expect(page.getByRole("button", { name: "Run selection" })).toBeDisabled();
     await run.click({ force: true }); // aria-disabled: Playwright waits for "enabled" otherwise
     await expect(toastOf(page)).toHaveText(REASON);
