@@ -1122,7 +1122,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
     delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Opens, closes,
     renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
-    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
+    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `showFullSize()` (phone); the phone's
     `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
     `editor/documents.ts` `save(path)` and `focusNow("editor")` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
@@ -1167,8 +1167,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
     `log/CommandLine.tsx` (`CommandLine`), `log/LogActions.tsx` (`LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too),
     `log/PhoneStrip.tsx` (`PhoneStrip`: draws the short form), `log/find.ts` (Find's signals and `openFind`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
-    save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
-    Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
+    save-failed and run-changed), `outputTab` (a graph link; `outputTab` "log" when Find opens with the
+    Output pane unsplit), and selects a graph with `selectGraph` (a graph link), and opens the full-size view with `showFullSize` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
     ("Reset now"), `openFile` (Go to line in a file that is not open), `store.write`, `saveAs` (Download log, the
     save-failed banner's Download), `reloadFromStore` (the run-changed banner's "Reload from the
