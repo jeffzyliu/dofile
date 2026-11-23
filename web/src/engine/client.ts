@@ -262,7 +262,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       if (!list.built || !(await this.caches.has(name))) return false; // has() first: open() would make an empty one
       const cache = await this.caches.open(name);
       for (const f of list.files) if (f.download && !(await cache.match(new URL(f.path, list.base).href))) return false;
-      return true;
+      // without a shared buffer the graphics part is a start file too (download())
+      const part = list.snapshot && this.#graphicsOf({ built: list.built, files: list.snapshot });
+      return !part || Boolean(part.region) || Boolean(await cache.match(part.url));
     } catch {
       return false;
     }
@@ -311,11 +313,15 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     // did not): nothing reads them again, and they keep tens of MB. Skipped while a worker is live, which may be
     // reading this Cache.
     if (!this.#live) await dropUnlisted(cache, list);
-    // the files below, not the page's own (here already) nor the graphics part, which follows the start; its progress
-    // is said here first so that the dialog can show its size
+    // the files below, not the page's own (here already). With a shared buffer the graphics part follows the start: its
+    // progress is said here first so that the dialog can show its size. Without one it is a start file, which the
+    // worker writes at boot.
     const part = this.#graphicsOf(build);
-    if (part) this.#graphicsSay(part, {});
-    const total = list.download - (list.snapshot?.graphics?.size ?? 0);
+    if (part?.region) this.#graphicsSay(part, {});
+    const files = list.files.filter((f) => f.download);
+    if (part && !part.region)
+      files.push({ path: part.url, size: part.file.size, compressed: part.file.size, download: true });
+    const total = list.download - (part?.region ? part.file.size : 0);
     const got = new Map<StartFile, number>();
     let received = 0;
     let last = -1;
@@ -367,7 +373,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
       throw e?.kind || isStorageRefusal(e) ? e : fail(String(e?.message ?? e), "failed", { reason: "download" });
     };
     try {
-      await Promise.all(list.files.filter((f) => f.download).map((f) => one(f).catch(failed)));
+      await Promise.all(files.map((f) => one(f).catch(failed)));
     } catch (e: any) {
       // the browser would not keep a file
       if (isStorageRefusal(e)) return { cached: false, why: `${e.name}: ${e.message}`, build };
