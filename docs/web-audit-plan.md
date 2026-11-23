@@ -23,8 +23,9 @@ Section 2 lists the decisions; all are made.
 
 Left for after the audit (section 8): R2, the DOM test harness of R3, R4, and the rest of R6.
 
-About 53 builder items: the proposal's 42 for B, less 3 halves, plus 3 design notes that were not counted or are new, the `echoLines` pilot, 3.0 and the spacing pass,
-N7, R5, R3r (counted as one more: the registry is larger than the handles it replaces), R7r, R1's 3 and C5. Scaled from
+About 53 builder items: the proposal's 42 for B, less 3 halves, plus 3 design notes that were not counted or are new,
+N7, R5, R3r (counted as one more: the registry is larger than the handles it replaces), R7r, R1's 3 and C5, and three
+from the naming survey: the `echoLines` pilot, 3.0 and the spacing pass. Scaled from
 the proposal's guess for B, that is 13 to 21 million agent tokens. The proposal said 45 to 47 for this scope; that left
 out the notes and N7.
 
@@ -217,11 +218,11 @@ literals), and promise callbacks (one spelling). Renames follow rule 12.
 |---|---|---|
 | 3.0: the glossary's vocabulary applied across `web/` (touches `types.ts` and SPEC section 6); starts after the maintainer has chosen the words (`web/STYLE.md`, Glossary) | phase 2 | 3.0 |
 | W1, W2: sweep of `src/engine/`, the Python files, controllers and state | 3.0 | 3.1 |
-| W3, W4: sweep of the views and `src/stata/` | phase 2 | 3.2 |
-| W6, W7: CSS deletions; scripts, config, site, sample, HTML | phase 2 | 3.3 |
+| W3, W4: sweep of the views and `src/stata/` | 3.0 | 3.2 |
+| W6, W7: CSS deletions; scripts, config, site, sample, HTML | 3.0 | 3.3 |
 | W5: sweep of `test/` and `e2e/`, with what the other sweeps logged for it; it takes the test helpers (one `until`, one encode and decode pair, distinct `settle` and `settled`) | 3.1 to 3.3 | 3.4 |
 | Spacing pass: `web/STYLE.md`'s Spacing rule over `web/`, whitespace only; its blank-line commits and its comment-move commits are separate; the whitespace commits go in `.git-blame-ignore-revs`; the pull request is merged with a merge commit | 3.1 to 3.4 | 3.7 |
-| Doc sync: `web/CLAUDE.md`, `web/README.md`, `docs/test-map.md`, SPEC sections 5, 6 and 8, `docs/web-engine-data-flow.md`; among them `web/CLAUDE.md`'s claim that every request gets a ticket (tickets are per worker start, 01-F7) | the sweeps | 3.5 |
+| Doc sync: `web/CLAUDE.md`, `web/README.md`, `docs/test-map.md`, SPEC sections 5, 6 and 8, `docs/web-engine-data-flow.md`; among them `web/CLAUDE.md`'s claim that every request gets a ticket (tickets are per worker start, 01-F7) | the sweeps and the spacing pass | 3.5 |
 | Whole-diff review, G0 to head, by an Opus reviewer that has read none of the items; its report to `docs/archive/web-audit-surveys/` | 3.5 | 3.6 |
 | The census again, by an `orchestrate:surveyor`, with `docs/archive/web-audit-surveys/census/`, against report 04; its report to the same folder | 3.5 | 3.6 |
 
