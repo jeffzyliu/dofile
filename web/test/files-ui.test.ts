@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
-import type { ClashAnswer, ClashFacts } from "../src/app/files/upload.ts";
+import type { ClashAnswer, ClashFacts, Incoming } from "../src/app/files/upload.ts";
 
 const S = await import("../src/app/state.ts");
 const { store } = await import("../src/app/store.ts");
@@ -619,6 +619,32 @@ test("a path in the use and import commands: quoted, compound quotes for a doubl
     assert.ok("problem" in fileCommand("use", bad), JSON.stringify(bad));
   const made = fileCommand("import delimited", "a`b'.csv");
   assert.equal("problem" in made && made.problem, "Its name has a character a command can't use: rename the file.");
+});
+
+test("uploads apply in the order of the calls, a read that ends later included (two quick drops of one path); a failed read rejects its upload and the next goes on", async () => {
+  await reset({});
+  let endFirstRead = (_items: Incoming[]) => {};
+  const firstRead = new Promise<Incoming[]>((resolve) => {
+    endFirstRead = resolve;
+  });
+  const { seen, stop } = answering([{ replace: true, isForRest: false }]);
+
+  const first = Up.upload(firstRead);
+  const second = Up.upload(Promise.resolve([{ path: "a.do", data: enc("second drop") }]));
+  endFirstRead([{ path: "a.do", data: enc("first") }]);
+  await Promise.all([first, second]);
+  stop();
+
+  assert.deepEqual(
+    seen.map((s) => s.now?.uploadedBytes),
+    [11],
+    "the second upload is the one asked about",
+  );
+  assert.equal(await textOf("a.do"), "second drop");
+
+  await assert.rejects(Up.upload(Promise.reject(new Error("unreadable"))), /unreadable/);
+  await Up.upload([{ path: "b.do", data: enc("b") }]);
+  assert.equal(await textOf("b.do"), "b");
 });
 
 // ---- upload.ts: the clash flow with other dialogs and other uploads ----

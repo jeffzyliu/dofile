@@ -221,7 +221,7 @@ async function endDraft(r: Renaming, name: string | null, leaving: boolean) {
 }
 
 function send(items: Promise<Incoming[]>) {
-  items.then(upload).catch(fail("The upload", "The upload failed"));
+  upload(items).catch(fail("The upload", "The upload failed")); // in its place in the queue now, before its read ends
 }
 
 const askDelete = (path: string) => {

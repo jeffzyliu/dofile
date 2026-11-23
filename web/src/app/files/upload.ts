@@ -93,12 +93,17 @@ const uploadQueue = new SequentialPromiseQueue();
  *  with no question: keeping loses nothing. A clash waits while another dialog is open: it never replaces one. A Replace writes only over the file the dialog showed: one changed while it was open is asked again ("changed while you were deciding"), even after "Do the same" with Replace; one deleted meanwhile is written without asking. Each write takes a turn (files/turns.ts), with the list it was checked against.
  *  Replacing an open file reloads it in the editor; one that is no longer UTF-8 text closes its tab. Ends with the
  *  toast "3 files uploaded". A file the store refuses (a path where a folder is, the quota) or whose name holds a
- *  control character is counted, and its reason goes to the console. Uploads run one at a time.
+ *  control character is counted, and its reason goes to the console. Uploads run one at a time, in the order of the
+ *  calls: two quick drops of one path apply in drop order, whichever read ends first.
+ *  @param items - the items, or their read still under way (intake.ts), which the upload waits for in its place; a read
+ *  that fails rejects the upload, and the uploads after it go on.
  *  @param words - "sample" (a restore, sample.ts) has the dialog and the toast say "Sample restored", "The sample is
  *  already here" (nothing to write, nothing asked), "Couldn't restore the sample".
  *  @returns the paths written */
-export async function upload(items: Incoming[], words: WordsOf = "upload"): Promise<string[]> {
-  return uploadQueue.enqueue(() => uploadNow(items, words));
+export async function upload(items: Incoming[] | Promise<Incoming[]>, words: WordsOf = "upload"): Promise<string[]> {
+  const read = Promise.resolve(items);
+  read.catch(() => {}); // a read that fails while it waits for its place is not an unhandled rejection: the task takes it
+  return uploadQueue.enqueue(async () => uploadNow(await read, words));
 }
 
 async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
