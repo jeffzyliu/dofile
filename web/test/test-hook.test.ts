@@ -14,25 +14,28 @@ const walk = (dir: string): string[] =>
   );
 const all = walk(".");
 
+// Any way to name a module: from "x", a bare import "x", import("x") or export ... from "x", with or without the extension.
+const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+const names = (text: string, name: string) =>
+  new RegExp(`(?:\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'][^"']*/${name}(?:\\.ts)?["']`).test(text);
+const importers = (name: string) => all.filter((f) => names(code(read(f)), name));
+
 test("only main.tsx's flagged dynamic import reaches the test hook module", () => {
-  const importers = (name: string) =>
-    all.filter(
-      (f) => new RegExp(`from "[^"]*/${name}\\.ts"`).test(read(f)) || read(f).includes(`import("./app/${name}.ts")`),
-    );
   assert.deepEqual(importers("test-hook"), ["main.tsx"]);
+  const main = code(read("main.tsx"));
   assert.match(
-    read("main.tsx"),
+    main,
     /if \(testMode !== null\) \(await import\("\.\/app\/test-hook\.ts"\)\)\.installTestHook\(client\)/,
   );
-  assert.ok(!/^import .*test-hook/m.test(read("main.tsx")), "main.tsx imports it only dynamically");
-  // the tab seeds and the hook's state join are used by the hook alone (type imports aside)
+  assert.equal(main.match(/test-hook/g)?.length, 1, "main.tsx names it once, in the flagged dynamic import");
+  // the tab seeds and the hook's state join are used by the hook alone
   assert.deepEqual(importers("seeds"), ["app/test-hook.ts"]);
   assert.deepEqual(importers("hook-state"), ["app/test-hook.ts"]);
 });
 
 test("nothing but the test hook module writes <html data-engine> or window.__dofile", () => {
-  for (const pattern of [/dataset\.engine/, /__dofile/]) {
-    const files = all.filter((f) => pattern.test(read(f).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")));
+  for (const pattern of [/dataset\.engine|dataset\[|["'`]data-engine["'`]/, /__dofile/]) {
+    const files = all.filter((f) => pattern.test(code(read(f))));
     assert.deepEqual(
       files.map((f) => relative(".", f)),
       ["app/test-hook.ts"],
