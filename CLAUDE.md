@@ -42,7 +42,8 @@ Layers, bottom up (`src/dofile/`):
   (`odt<N>` for an `ODT-N` issue, `patch1` for PATCH-1) and apply in name order, so a patch that builds on another must
   sort after it. `engine.about()` reads the `VENDORED` stamp.
 - `engine.py`: the only adapter over OpenDTA's `Session`. `Engine.run(code)` returns a `Result` and never raises.
-  Return codes beyond Stata's: 9999 (a Python exception escaped the engine), 603 (sandbox refused a file), 1 (`--Break--`
+  Return codes beyond Stata's: 9999 (a Python exception escaped outside a command; inside a command an IndexError, KeyError or ValueError is
+  r(198) with an `engine error: <Type>: <message>` line in the log, PATCH-5), 603 (sandbox refused a file), 1 (`--Break--`
   from an interrupt; data kept).
 - `sandbox.py`: installed once per process. Dangerous commands (`shell`, `erase`, `cd`, `copy`, `webuse`, ...) become
   rc 199, and a PEP 578 audit hook blocks subprocesses and network access, confines writes to the workdir and reads to
