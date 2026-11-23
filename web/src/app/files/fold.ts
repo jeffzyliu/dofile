@@ -2,7 +2,7 @@
 // when it opens and folds. No DOM of its own: the button is held as the two calls the moves make on it, so a Node test
 // runs the moves with a stand-in for it.
 
-import { signal } from "@preact/signals";
+import { signal } from "@preact/signals-core";
 import { focusTree } from "./tree-state.ts";
 
 /** The Files button, as far as the moves need it. A button with no client rects is not drawn (the list is not folded:
