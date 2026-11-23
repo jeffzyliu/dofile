@@ -47,14 +47,17 @@ the worker to look at the header, nothing more. It is sent only when there is a 
 
 The unpack is one state written as four flags: none, `native`, `decode` (brotli-wasm under way), `decoded` (not
 written), `graphicsWritten`, then warmed (`warmAt < 0`); `graphicsError` stops all idle work. Two can hold at once:
-`native` with `decode` (a graph decodes while the browser's decoder runs; its result is then dropped).
+`native` with `decode` (a graph decodes while the browser's decoder runs; its result is then dropped, unless the
+graph found the copy damaged: race 13).
 
 ## 2. The 22 variables as one record
 
-All at `worker.ts:70-97`, one `let` each. S8 moved none of them. It moved what surrounds them: the boot work into `worker-boot.ts`
-(`startEngine`, which calls back through the hook `lazyGraphics` that `table`'s `boot` entry defines; `since` went there too), and
-the dispatch into `worker-dispatch.ts`, whose hook `arrived` now counts `runs`. Four are written by `table`'s handlers for boot
-and dispatch: `snapshotBase` and `brotliWasm` (mount), `started` (startup), `runs` (run).
+All at `worker.ts:70-97`, one `let` each. S8 moved none of them. It moved what surrounds them: the boot work into
+`worker-boot.ts` (`startEngine`, which calls back through the hook `lazyGraphics` that `table`'s `boot` entry defines;
+`since` went there too), and the dispatch into `worker-dispatch.ts`, whose hook `arrived` now counts `runs`. Eight are
+written by `table`'s handlers, so R1b's record is called from each of them: `snapshotBase` and `brotliWasm` (mount),
+`share` (boot, in the hook `lazyGraphics`), `started` and `idleSince` (startup), `runs` (run's `arrived`, then its
+`finally`), `askedAt` (run's start), `idleSince` and `writtenInRun` again (run's `finally`).
 
 | Group | Today | Proposed field (names R1's to choose) |
 |---|---|---|
@@ -68,7 +71,8 @@ and dispatch: `snapshotBase` and `brotliWasm` (mount), `started` (startup), `run
 Read but owned elsewhere (they stay): `interrupt` (boot), `brotliMode` (mount), `py`, `browser`. Dead today:
 `share.error` is never set to a reason (only cleared, `fetchPartNow`), so `partNow`'s failed branch without a buffer
 cannot be reached. Names the naming survey gives R1: `askedAt` (the tries when this run asked again), `at` in
-`fetchPartNow` (a URL), `damaged(e)` (a verb's job: it drops the copy; not the field `damaged` of `GraphicsPart` in `client.ts`).
+`fetchPartNow` (a URL), `damaged(e)` (a verb's job: it drops the copy; not the field `damaged` of `GraphicsPart` in
+`client.ts`).
 
 ## 3. What stays a side effect
 
@@ -93,15 +97,15 @@ reason); the console lines `[dofile] graphics part: landed (cache|network)`, `wr
 `test/harness.ts`) through `EngineClient` with a `SharedArrayBuffer`. The page half reads the part's `file:` URL with
 `fs` (`#downloadGraphics`), lands it, and the test's `scatter` waits for it. Tried at e496b4c (snapshot at
 `SNAPSHOT_QUALITY=5`): the run logs "landed (network)", "written in a run (unpack (wasm) ...)", "in the run, after the
-write". A scratch test (not committed) that waited 4 s before its graph got "written while idle (unpack (native) ...)" and
-"warmed": Node 26 has `DecompressionStream("brotli")`, so the native path and the idle steps run too. Nothing asserts
-any of it, and the lines go to the process's stdout, not to the test.
+write". A scratch test (not committed) that waited 4 s before its graph got "written while idle (unpack (native) ...)"
+and "warmed": Node 26 has `DecompressionStream("brotli")`, so the native path and the idle steps run too. Nothing
+asserts any of it, and the lines go to the process's stdout, not to the test.
 
 **Without a buffer it cannot run as is.** Tried: with `SharedArrayBuffer` removed from the test's thread, the worker
-thread died at `startup` ("Cannot read properties of undefined (reading 'href')"): `prefetch` reads
-`self.location.href` outside its `try`, and its rejection is unhandled. Node also has no `XMLHttpRequest` (`fetchPartNow`)
-and its `fetch` refuses `file:` URLs. `test/node-worker.ts` would need stand-ins for all three (guess: a few lines,
-the synchronous request on `readFileSync`).
+thread died at `startup` ("Cannot read properties of undefined (reading 'href')"): `prefetch` reads `self.location.href`
+outside its `try`, and its rejection is unhandled. Node also has no `XMLHttpRequest` (`fetchPartNow`) and its `fetch`
+refuses `file:` URLs. `test/node-worker.ts` would need stand-ins for all three (guess: a few lines, the synchronous
+request on `readFileSync`).
 
 **What a held or damaged part needs.** The page's fetch of a `file:` URL bypasses the client's `fetch` option, so a test
 cannot hold it (the e2e spec holds it with a route). A damaged copy can be had by pointing the snapshot folder's
@@ -120,9 +124,20 @@ or a second worker of its own. This also rules out, for R1, the "decode on anoth
    (`partTries`'s doc), so the retry shows as new tries, not as the new fetch's failure. Ordered by load order.
 2. A page retry while `startNative` reads the part: `copyNow()` is read before `partNow()`, so a native failure is
    charged to the copy it read. Ordered by load order.
-3. A copy landing while a graph reads a failed part's reason: the state is an `Atomics.load`, the length (`partData`)
-   a plain read after it; the reason could come out as the next copy's bytes. Not ordered. Guess: harmless (only the
-   text), and it needs a whole fetch between two loads.
+3. **A page retry while a graph reads a failed part's reason gives a false success.** Not ordered. The state is an
+   `Atomics.load` (`partNow`), the length a plain read after it (`partData`), and `retryPart` stores length 0 first. A
+   retry between the two (the `online` event's `#retryGraphics`; no fetch needed) makes the reason "". When the graph
+   has already asked again and that fetch failed (`give-up`), `waitGraphics` returns that "", which is its answer for
+   "written": `browser.py`'s `ensure` sets `ready`. That graph then fails on the missing matplotlib (an import error,
+   not rc 199 "graphs are not available"; its rc was not checked), and every later graph skips the wait and fails the
+   same way, sending no `again`, until a copy is written while idle (`graphics_written`), which needs a page fetch to
+   land; a reload also clears it. Forced with the real `lazy-part.ts` functions (the reviewer's script, re-run here):
+   `{"step":"give-up","reason":""}`; `browser.py`'s reading of "" is read, not run. Rating: rare (a few instructions
+   wide, and only while the browser goes online during a graph's wait after its asked-for fetch failed), but a wrong
+   answer rather than a slow one; no data is lost. **Fixed in R1b, as its first change, test first**: a case in
+   `test/lazy-part.test.ts` that forces `retryPart` between the state load and the length read (as the reviewer's
+   script does) and expects no "" (the graph waits again, or gets a non-empty reason); it fails today. The fix: read
+   the state again after the copy and read again if it moved, or let `give-up` never answer "".
 4. The graph's `again` and the `online` event: both go through `#retryGraphics`, whose guard (failed, not loading)
    starts one fetch; the graph's `askedAt` makes either fetch's failure final for it. Ordered by the guard.
 5. The part lands before `startup` is answered: the op `graphics` arrives, `nativeSoon` and `idleSoon` return on
@@ -143,6 +158,23 @@ or a second worker of its own. This also rules out, for R1, the "decode on anoth
     draws. As `damaged()`'s comment says; R1 keeps it or the maintainer changes it.
 12. Each failed page fetch adds one `online` listener (`once`); they pile up until the browser is online, each a no-op
     after the first. Not a race; noted.
+13. **A native decode of a copy a graph has already found damaged is written again** (read, not run). The part lands,
+    `startNative` starts; a graph comes first (race 7), decodes with brotli-wasm, and `writeGraphics` throws:
+    `damaged()` posts `damaged`, clears `decode` and `decoded`, and the graph's catch clears `graphicsError`. The page
+    drops the Cache entry and fetches again. After the run the native promise resolves; its guard
+    (`!graphicsWritten && !decode && !decoded`) holds, so the damaged copy becomes `decoded`, the idle step writes it,
+    it throws again, and a second `damaged` goes out with `graphicsError` set. If the fresh copy has landed by then,
+    `#refetchDamaged` drops a good copy and fetches a third time, and the next graph reports damage (rc 199) although
+    a good copy is there. Not ordered. Rare: it needs bytes brotli accepts but the write rejects, and a graph during
+    the native decode. The cause: `damaged` and `again` carry no copy number, and the native result is not tied to the
+    copy it read (`startNative` keeps `copy` only for a failure); two graphs of one run (a `capture` loop) can send the
+    same stale `damaged` twice too. R1b keeps the native result only while `copyNow()` is still the copy it read and no
+    damage was found on that copy; R1c could take `damaged` with the copy (tries) it is about.
+14. **Without a buffer, a graph's own download cannot be broken off** (read, not run). There is no interrupt buffer
+    (`client.ts`, `start()`), and `fetchPartNow`'s synchronous request holds the worker for the whole download
+    (its comment says so). A Break or the run's timeout therefore resets the worker (rc 9998, the data gone); the
+    next worker has no copy (`copies` 0, the page's progress set back to pending by `start()`) and starts its
+    `prefetch` from zero. Ordered, by the reset; it costs the data and the download.
 
 ## 7. Tests
 
@@ -165,7 +197,9 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
   way to hold the page's fetch of a `file:` part.
 - c. Node, real worker, without a buffer: `prefetch` lands and the idle steps take it; a graph during `prefetch`
   fetches itself; damage gives a `?fresh=` address. Needs section 4's stand-ins in `test/node-worker.ts`.
-- d. Pure tables for whatever R1 makes pure (idle step, native gate, page transitions), as `lazy-part.test.ts` does.
+- d. Pure tables for whatever R1 makes pure (idle step, native gate, page transitions), as `lazy-part.test.ts` does,
+  with two cases written to fail first: race 3 (a retry between the state and the length read) and race 13 (a native
+  result of a copy found damaged is not kept).
 
 ## 8. R1 in three items (proposed)
 
@@ -173,7 +207,8 @@ subscription let go), and in CPython `tests/test_browser.py` (the two `lazy_grap
    failures or removed (the test says which); no change to behaviour.
 2. **R1b, the worker's machine (2.3, after R1a).** The 22 variables as one record (section 2) in a module `worker.ts`
    imports statically; the idle step and the native gate as pure functions next to `waitStep`; the renames; `table`'s
-   hooks call it; wire and words unchanged (section 3). Tests d for the worker.
+   hooks call it; wire and words unchanged (section 3). Tests d for the worker. Its two behaviour fixes come first,
+   each with its failing test: race 3 (no "" from a failed part) and race 13 (the native result tied to its copy).
 3. **R1c, the page's machine and the docs (2.4).** `client.ts`'s part as one state with its transitions (no rewrite of
    `progress.state` to steer a guard; `progress` becomes derived for the status bar); the `online` listener once per
    part; race 10 checked against `live`. Then `docs/lazy-matplotlib.md` brought up to date (list below),
