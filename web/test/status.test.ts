@@ -46,44 +46,71 @@ const say = (more: Partial<StatusInput>, form: StatusForm) => statusParts({ ...b
 const ended = (more: Partial<LastRun> = {}): LastRun =>
   ({ kind: "file", path: "a.do", rc: 0, line: null, seconds: 0.38, ...more }) as LastRun;
 
-const states: [EngineState, string, string][] = [
-  [{ s: "checking-lock" }, "state <Loading>", "state <Loading>"],
-  [{ s: "checking-cache" }, "state <Loading>", "state <Loading>"],
-  [{ s: "none" }, "state No engine yet", "state No engine yet"],
-  [{ s: "asking" }, "state No engine yet", "state No engine yet"],
-  [{ s: "declined" }, "state <No engine> · Start engine downloads it", "state <No engine> · Start engine downloads it"],
-  [
+/** Every engine state, with its words in the bar and in the strip (the type fails the check for a state left out). */
+const states: { [S in EngineState["s"]]: [EngineState & { s: S }, string, string] } = {
+  "checking-lock": [{ s: "checking-lock" }, "state <Loading>", "state <Loading>"],
+  "checking-cache": [{ s: "checking-cache" }, "state <Loading>", "state <Loading>"],
+  none: [{ s: "none" }, "state No engine yet", "state No engine yet"],
+  asking: [{ s: "asking" }, "state No engine yet", "state No engine yet"],
+  declined: [
+    { s: "declined" },
+    "state <No engine> · Start engine downloads it",
+    "state <No engine> · Start engine downloads it",
+  ],
+  downloading: [
     { s: "downloading", received: 1, total: 2, t0: AGO },
     "state <Starting> · downloading",
     "state <Starting> · downloading",
   ],
-  [{ s: "ready" }, "state <Ready>", "state <Ready>"],
-  [{ s: "running", run, t0: AGO }, "state <Running> lines 14–15 · 3.4 s", "state <Running> lines 14–15"],
-  [{ s: "running", run: { kind: "file", fresh_locals: true }, t0: AGO }, "state <Running> · 3.4 s", "state <Running>"],
-  [
+  "starting-list": [
+    { s: "starting-list", stage: "download", t0: AGO, done: {} },
+    "state <Starting> · downloading the engine (step 1 of 5) · 3.4 s",
+    "state <Starting> · downloading the engine (step 1 of 5) · 3.4 s",
+  ],
+  "starting-worker": [
+    { s: "starting-worker", stage: "packages", t0: AGO, done: {} },
+    "state <Starting> · loading packages (step 4 of 5) · 3.4 s",
+    "state <Starting> · loading packages (step 4 of 5) · 3.4 s",
+  ],
+  ready: [{ s: "ready" }, "state <Ready>", "state <Ready>"],
+  running: [{ s: "running", run, t0: AGO }, "state <Running> lines 14–15 · 3.4 s", "state <Running> lines 14–15"],
+  breaking: [
+    { s: "breaking", run, t0: AGO, resetAt: NOW + 4000 },
+    "state <Stopping> · resets in 4 s",
+    "state <Stopping> · resets in 4 s · 3.4 s",
+  ],
+  waiting: [
+    { s: "waiting", run, t0: AGO },
+    "state <Waiting> · Break after this command",
+    "state <Waiting> · Break after this command · 3.4 s",
+  ],
+  failed: [
     { s: "failed", reason: "unknown", detail: "", message: "" },
     "state <Not started> · the engine didn't start",
     "state <Not started> · the engine didn't start",
   ],
-  [
+  "failed-twice": [
     { s: "failed-twice", reason: "unknown", detail: "", message: "" },
     "state <Stopped> · failed twice",
     "state <Stopped> · failed twice",
   ],
-  [
+  "other-tab-idle": [
     { s: "other-tab-idle" },
     "state <Paused> · another tab has the engine",
     "state <Paused> · another tab has the engine",
   ],
-  [
+  "other-tab-taking": [
     { s: "other-tab-taking" },
     "state <Paused> · another tab has the engine",
     "state <Paused> · another tab has the engine",
   ],
-];
+};
 
 test("each state's words: the bar says the run's timer, the strip leaves it out", () => {
-  for (const [st, full, short] of states) {
+  const noLines: EngineState = { s: "running", run: { kind: "file", fresh_locals: true }, t0: AGO };
+  assert.equal(say({ st: noLines }, "full")[0], "state <Running> · 3.4 s");
+  assert.equal(say({ st: noLines }, "short")[0], "state <Running>");
+  for (const [st, full, short] of Object.values(states)) {
     assert.equal(say({ st }, "full")[0], full, st.s);
     assert.equal(say({ st }, "short")[0], short, st.s);
   }
@@ -181,7 +208,7 @@ test("the strip says the state's words where it has no last run, and when a run 
 
 test("the strip has no affiliation, no files note and no separate timer, in any state", () => {
   const withAll = { lastRun: ended(), persisted: true, memory: { heap_bytes: 1, data_bytes: 0 } };
-  for (const [st] of states) {
+  for (const [st] of Object.values(states)) {
     for (const t of ["timer", "affiliation", "note"]) {
       assert.equal(
         say({ st, ...withAll }, "short").some((s) => s.startsWith(t)),
