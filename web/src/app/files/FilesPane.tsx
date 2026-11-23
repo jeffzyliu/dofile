@@ -1,14 +1,20 @@
 // The file panel (docs/design/SPEC.md, section 3.1): the head menu and the body (tree, dropzone). Files change through the
 // store (ops.ts, upload.ts), never the worker.
 import { useRef } from "preact/hooks";
-import { activeTab } from "../editor/documents.ts";
-import { downloadAll } from "../files.ts";
-import { restoreSample } from "../sample.ts";
+
 import { files, hasFiles } from "../state/files.ts";
 import { openDialog } from "../state/notices.ts";
+
+import { downloadAll } from "../files.ts";
+
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
-import { MenuButton, type MenuItem } from "../ui/Menu";
+import type { MenuItem } from "../ui/Menu";
+import { MenuButton } from "../ui/Menu";
+
+import { activeTab } from "../editor/documents.ts";
+
+import { restoreSample } from "../sample.ts";
 import { send, useDrop } from "./drop.ts";
 import { fromFileList } from "./intake.ts";
 import { renaming, startDraft } from "./rename.ts";

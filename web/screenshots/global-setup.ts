@@ -2,6 +2,7 @@
 // e2e/global-setup.ts checks for the e2e run, for the editor only: the screenshots never visit the landing page).
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { EDITOR_OUT, LOCAL_EDITOR_URL, LOCAL_SITE_URL } from "../scripts/urls.ts";
 
 export default async function globalSetup() {

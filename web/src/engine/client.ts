@@ -2,21 +2,6 @@
 // It decides nothing: the controller (app/engine.ts) calls it when the state machine says. One worker is live at a
 // time; `n` is that worker's ticket, which the transport only compares.
 
-import type { PartEvent, PartFacts, PartFetch } from "./lazy-part.ts";
-import {
-  failPart,
-  landPart,
-  PART_HEADER,
-  partReason,
-  partRegion,
-  partStep,
-  readOwnPart,
-  retryPart,
-} from "./lazy-part.ts";
-import type { Ending, Reply } from "./machine.ts";
-import type { SeqRegion } from "./seqlock.ts";
-import { isStorageRefusal, openCache } from "./snapshot.ts";
-import type { FileStore } from "./store.ts";
 import type {
   About,
   Build,
@@ -35,6 +20,23 @@ import type {
   Startup,
   Wheel,
 } from "./types.ts";
+
+import type { FileStore } from "./store.ts";
+
+import type { PartEvent, PartFacts, PartFetch } from "./lazy-part.ts";
+import {
+  failPart,
+  landPart,
+  PART_HEADER,
+  partReason,
+  partRegion,
+  partStep,
+  readOwnPart,
+  retryPart,
+} from "./lazy-part.ts";
+import type { Ending, Reply } from "./machine.ts";
+import type { SeqRegion } from "./seqlock.ts";
+import { isStorageRefusal, openCache } from "./snapshot.ts";
 
 /** One file of the build's list of start files. */
 type StartFile = StartFiles["files"][number];

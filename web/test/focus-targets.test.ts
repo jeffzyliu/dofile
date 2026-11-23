@@ -6,7 +6,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { focusStable } from "../src/app/states/focus.ts";
+
+import type { TargetName } from "../src/app/ui/focus-targets.ts";
 import {
   ask,
   cancel,
@@ -17,9 +18,10 @@ import {
   register,
   shownElement,
   TARGET_NAMES,
-  type TargetName,
   takeRequest,
 } from "../src/app/ui/focus-targets.ts";
+
+import { focusStable } from "../src/app/states/focus.ts";
 
 interface Fake {
   isConnected: boolean;

@@ -2,6 +2,7 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
+
 import type { FileInfo } from "../types.ts";
 
 export const filesWriter = {

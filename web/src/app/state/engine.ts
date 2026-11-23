@@ -3,6 +3,7 @@
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { signal } from "@preact/signals-core";
+
 import type { GraphicsProgress } from "../../engine/types.ts";
 import type { EngineState } from "../types.ts";
 

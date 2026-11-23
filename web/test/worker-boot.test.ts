@@ -8,9 +8,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { pathToFileURL } from "node:url";
+
+import type { MountArgs, Stage, Startup } from "../src/engine/types.ts";
+
 import type { SnapshotPy } from "../src/engine/snapshot.ts";
 import { isStorageRefusal } from "../src/engine/snapshot.ts";
-import type { MountArgs, Stage, Startup } from "../src/engine/types.ts";
 import { ROOT } from "../src/engine/work-mirror.ts";
 import type { Browser } from "../src/engine/worker-boot.ts";
 import { fetchBytes, snapshotCache, startEngine, startPython, watchFetch } from "../src/engine/worker-boot.ts";

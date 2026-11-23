@@ -1,10 +1,13 @@
 // One run's text as the parts the log draws: its lines by kind, then what goes after them (graph links, notes, Go to
 // line, the end notes). LogParts.tsx draws them.
 
-import { jumpLine } from "../editor/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
+
+import { jumpLine } from "../editor/words.ts";
+
 import { commandEnd, echoed, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
-import { classify, type LineKind, type LogLine, runError } from "./classify.ts";
+import type { LineKind, LogLine } from "./classify.ts";
+import { classify, runError } from "./classify.ts";
 import { noteFor } from "./notes.ts";
 
 export type TextItem = Extract<LogItem, { t: "text" }>;

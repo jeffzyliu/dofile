@@ -1,19 +1,26 @@
 // The log (docs/design/SPEC.md, section 3.5). Reads `log` (LogItem[]) and draws the head, then per run its run-head and
 // its text (run-parts.ts makes its parts, LogParts.tsx draws them), each line by its kind (classify.ts). The head,
 // run-heads and the page's notes are shown only: Download log has the runs' text alone.
-import { Fragment, type RefObject } from "preact";
+import type { RefObject } from "preact";
+import { Fragment } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { codeOf } from "../editor/commands.ts";
-import { runheadWords } from "../editor/words.ts";
-import { ABOUT } from "../env";
+
+import type { RunHead } from "../types.ts";
+
 import { isPhone, wrap } from "../state/layout.ts";
 import { graphs, log } from "../state/run.ts";
-import type { RunHead } from "../types.ts";
+
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { isMac } from "../ui/Icon";
+
+import { codeOf } from "../editor/commands.ts";
+import { runheadWords } from "../editor/words.ts";
+
+import { ABOUT } from "../env";
 import { findAt, findOpen, findReturn, findText } from "./find.ts";
 import { useFollowEnd } from "./follow.ts";
-import { drawRunParts, GraphLink, type Marker, marked } from "./LogParts.tsx";
+import type { Marker } from "./LogParts.tsx";
+import { drawRunParts, GraphLink, marked } from "./LogParts.tsx";
 import { runParts } from "./run-parts.ts";
 
 const ART = [

@@ -2,10 +2,14 @@
 // toolbar's Run, Run selection, the phone's Run, the reset banner's "Run the file again" and Ctrl/Cmd+Enter; the engine's
 // own gate (takesRun) combines with it in canRunFile. A typed `do x.txt` is not gated: it keeps Stata's behaviour.
 
-import { computed, type ReadonlySignal } from "@preact/signals-core";
+import type { ReadonlySignal } from "@preact/signals-core";
+import { computed } from "@preact/signals-core";
+
+import type { EngineState } from "../types.ts";
+
 import { extOf } from "../files/tree.ts";
 import { takesRun } from "../states/predicates.ts";
-import type { EngineState } from "../types.ts";
+
 import { activeTab } from "./documents.ts";
 
 /** Why Run is off on a tab that is not a .do or .ado file: the button's title and the toast of Ctrl/Cmd+Enter. */

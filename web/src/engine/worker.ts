@@ -3,9 +3,11 @@
 // client.ts. One op at a time; `boot` and `graphics` run outside the queue. A new op gets an entry in `table` (its type,
 // OpTable in worker-dispatch.ts, comes from Ops).
 
-import type { SnapshotPy } from "./snapshot.ts";
-import { openStore } from "./store.ts";
 import type { About, RunOptions, Stage, Startup, ToWorker } from "./types.ts";
+
+import { openStore } from "./store.ts";
+
+import type { SnapshotPy } from "./snapshot.ts";
 import type { MirrorStore } from "./work-mirror.ts";
 import { WorkMirror } from "./work-mirror.ts";
 import type { Browser } from "./worker-boot.ts";

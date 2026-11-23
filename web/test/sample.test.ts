@@ -8,9 +8,12 @@ import { readFileSync } from "node:fs";
 import { beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import "fake-indexeddb/auto";
+
 import { effect } from "@preact/signals-core";
-import { moduleText } from "../scripts/make-sample.ts";
+
 import type { ClashAnswer } from "../src/app/files/upload.ts";
+
+import { moduleText } from "../scripts/make-sample.ts";
 
 // localStorage and a page's location, which Node lacks: state/saved.ts reads the first at load, sample.ts the second when
 // called

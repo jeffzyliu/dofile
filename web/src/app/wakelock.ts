@@ -3,8 +3,10 @@
 // without it gets no lock and no message. test/wakelock.test.ts drives this with a fake `wakeLock` and document.
 
 import type { ReadonlySignal } from "@preact/signals-core";
-import { engine as engineState } from "./state/engine.ts";
+
 import type { EngineState, EngineStateName } from "./types.ts";
+
+import { engine as engineState } from "./state/engine.ts";
 
 /** Whether the lock is wanted in each engine state: while the engine works for the visitor, not while it is idle,
  *  absent, failed, or waiting for an answer. A Record, so a state added to the machine needs an answer here. */

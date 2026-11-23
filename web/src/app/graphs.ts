@@ -1,8 +1,10 @@
 // The session's graphs: a run's, and a .png opened from the files. Their numbers count from 1 until "Clear log".
 
-import { selectGraph, runWriter as W } from "./state/run.ts";
-import { resolvedTheme } from "./theme.ts";
 import type { Graph } from "./types.ts";
+
+import { selectGraph, runWriter as W } from "./state/run.ts";
+
+import { resolvedTheme } from "./theme.ts";
 
 export const MAX_GRAPHS = 20; // the graphs a session keeps; the oldest go first
 

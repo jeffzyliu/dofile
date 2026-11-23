@@ -2,9 +2,11 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
+
+import { cancel, register } from "../src/app/ui/focus-targets.ts";
+
 import { filesOpen, foldFiles, onFilesKey } from "../src/app/files/fold.ts";
 import { focusWanted } from "../src/app/files/tree-state.ts";
-import { cancel, register } from "../src/app/ui/focus-targets.ts";
 
 /** The Files button as the registry reads it: focus(), isConnected, getClientRects() and the document's focus. */
 const toggle = (rects = 1) => {

@@ -1,6 +1,7 @@
 // The phone's strip (docs/design/SPEC.md, section 3.6): under the phone's top bar, on every view (the phone has no
 // status bar): draws the parts of status.ts's short form. Its children go at its right end.
 import type { ComponentChildren } from "preact";
+
 import { editorCommands } from "../editor/commands.ts";
 import { GraphsLoading, statusNow } from "../editor/StatusBar";
 import type { StatusPart } from "../editor/status.ts";

@@ -3,6 +3,9 @@
 
 import type { BrotliWasmType } from "brotli-wasm";
 import { loadPyodide } from "pyodide";
+
+import type { About, BootArgs, MountArgs, SnapshotFile, SnapshotFiles, Stage, Startup } from "./types.ts";
+
 import { MIB } from "./memcap.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
 import {
@@ -15,7 +18,6 @@ import {
   withHeapCap,
   writeGraphics,
 } from "./snapshot.ts";
-import type { About, BootArgs, MountArgs, SnapshotFile, SnapshotFiles, Stage, Startup } from "./types.ts";
 import { ROOT } from "./work-mirror.ts";
 
 /** dofile.browser (src/dofile/browser.py): JSON text in and out. */

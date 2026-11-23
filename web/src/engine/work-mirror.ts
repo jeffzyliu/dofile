@@ -1,8 +1,9 @@
 // The worker's copy of the files in /work, an in-memory folder: filled from the store at mount, given the page's changes
 // through the journal (`sync`), and a run's changes written back to the store. Contract: SPEC section 7.
 
-import type { AppliedRun, FileStore, RunChange, StoreCopy } from "./store.ts";
 import type { FileChange, FileInfo, PageError, StoreCause, StoreError } from "./types.ts";
+
+import type { AppliedRun, FileStore, RunChange, StoreCopy } from "./store.ts";
 
 export const ROOT = "/work";
 const HIDDEN = ".dofile";

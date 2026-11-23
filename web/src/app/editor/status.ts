@@ -4,10 +4,12 @@
 // 612 MB"). The views, StatusBar.tsx and log/PhoneStrip.tsx, only draw the parts. No DOM and no signal: the signals'
 // values and the clock come in as arguments, so Node tests it (test/status.test.ts).
 import type { GraphicsProgress } from "../../engine/types.ts";
-import { megabytes } from "../bytes.ts";
+import type { EngineState, LastRun, Memory } from "../types.ts";
+
 import { breakAsked, engineLoading, engineUp } from "../states/predicates.ts";
 import { stageStatus, stagesOf } from "../states/words.ts";
-import type { EngineState, LastRun, Memory } from "../types.ts";
+
+import { megabytes } from "../bytes.ts";
 import { jumpLine, lastRunWords, linesWords, memoryTitle, memoryWords, ticking } from "./words.ts";
 
 /** LICENSE-POLICY.md's sentence; the status bar shows it short. */

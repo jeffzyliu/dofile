@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+
 import { inputs, staged } from "../scripts/build-id.ts";
 import { stage } from "../scripts/stage.ts";
 import { RUNTIME_FILES } from "../scripts/start-files.ts";

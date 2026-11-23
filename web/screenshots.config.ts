@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
+
 import { defineConfig, devices } from "@playwright/test";
+
 import { LOCAL_EDITOR_URL } from "./scripts/urls.ts";
 
 // The screenshot run (docs/web-audit-plan.md, N7): kept out of `npm run e2e` and of CI (its own config, its own folder

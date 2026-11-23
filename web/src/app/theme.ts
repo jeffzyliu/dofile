@@ -2,8 +2,10 @@
 // sets it from localStorage before the first paint, so a dark page does not flash light.
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, effect, signal } from "@preact/signals-core";
-import { saved } from "./state/saved.ts";
+
 import type { Theme } from "./types.ts";
+
+import { saved } from "./state/saved.ts";
 
 const asTheme = (v: string | null): Theme => (v === "light" || v === "dark" ? v : "system");
 const chosen = signal<Theme>(asTheme(saved.get("dofile.theme"))); // kept in localStorage

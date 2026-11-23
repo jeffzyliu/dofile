@@ -2,16 +2,20 @@
 // loads kblog.ts only with ?kblog): the hook `window.__dofile`, the tab seeds behind it, and the engine's state on <html>.
 // Without the flag none of it is loaded, so none of it runs (test/test-hook.test.ts).
 import { effect } from "@preact/signals";
-import type { EngineClient } from "../engine/client.ts";
-import { selection } from "./editor/documents.ts";
-import { documentSeeds } from "./editor/seeds.ts";
-import { breakRun, drops, reset, start } from "./engine.ts";
-import { focusWanted } from "./files/tree-state.ts";
-import { hookState } from "./hook-state.ts";
-import { runCode } from "./run.ts";
+
 import * as Engine from "./state/engine.ts";
 import * as Files from "./state/files.ts";
+
+import type { EngineClient } from "../engine/client.ts";
+import { breakRun, drops, reset, start } from "./engine.ts";
+import { runCode } from "./run.ts";
 import { store } from "./store.ts";
+
+import { selection } from "./editor/documents.ts";
+import { documentSeeds } from "./editor/seeds.ts";
+import { focusWanted } from "./files/tree-state.ts";
+
+import { hookState } from "./hook-state.ts";
 
 /** Set `window.__dofile` and keep `<html data-engine>` at the engine's state name (no CSS reads it). With ?test=manual the
  *  page starts no engine until the test calls start(). The store is blocked until the tab lock answers: wait for

@@ -1,10 +1,14 @@
 // A drop of files on the page, and the one way an upload starts from a drop or a picked file.
 import { useEffect } from "preact/hooks";
+
 import { dialog } from "../state/notices.ts";
+
 import { store } from "../store.ts";
+
 import { entriesOf, fromDrop } from "./intake.ts";
 import { fail } from "./ops.ts";
-import { type Incoming, upload } from "./upload.ts";
+import type { Incoming } from "./upload.ts";
+import { upload } from "./upload.ts";
 
 export function send(items: Promise<Incoming[]>) {
   upload(items).catch(fail("The upload", "The upload failed")); // in its place in the queue now, before its read ends

@@ -3,7 +3,9 @@
 // and the page's notes too), one line at a time. The state is signals, since the Log pane may be drawn again when the
 // layout changes.
 import { signal } from "@preact/signals-core";
+
 import { isPhone, outputTab, split } from "../state/layout.ts";
+
 import { ask, fromAnywhere } from "../ui/focus-targets.ts";
 
 export const findOpen = signal(false);

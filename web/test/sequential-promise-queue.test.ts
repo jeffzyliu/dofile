@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { SequentialPromiseQueue } from "../src/app/files/sequential-promise-queue.ts";
 
 test("tasks run one at a time in the order enqueued; each call resolves with its task's value", async () => {

@@ -3,8 +3,11 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type RunPart, type RunPartsInput, runParts, type TextItem } from "../src/app/log/run-parts.ts";
+
 import type { Graph, LastRun } from "../src/app/types.ts";
+
+import type { RunPart, RunPartsInput, TextItem } from "../src/app/log/run-parts.ts";
+import { runParts } from "../src/app/log/run-parts.ts";
 
 const desktop: RunPartsInput = { head: null, phone: false, graphs: [], mac: false, sentCode: () => undefined };
 const phone: RunPartsInput = { ...desktop, phone: true };

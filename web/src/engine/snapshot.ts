@@ -4,6 +4,7 @@
 
 import type { BrotliWasmType } from "brotli-wasm";
 import type { PyodideAPI, PyodideConfig } from "pyodide";
+
 import type { SnapshotFile } from "./types.ts";
 
 // Pyodide's Emscripten module, plus what its types leave out: patchAsm's library log and replay, and the loader's

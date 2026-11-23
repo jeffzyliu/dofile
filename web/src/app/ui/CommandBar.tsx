@@ -1,9 +1,12 @@
 // The bar over a file that has a command (Import, Load) and its Copy button; the off rule is start.ts barButton.
 import type { fileCommand } from "../../stata/quote.ts";
-import { copyText } from "../output/clip.ts";
-import { barButton, startFirst, startOffer } from "../start.ts";
+
 import { engine } from "../state/engine.ts";
 import { showToast } from "../state/notices.ts";
+
+import { barButton, startFirst, startOffer } from "../start.ts";
+
+import { copyText } from "../output/clip.ts";
 import { takesRun } from "../states/predicates.ts";
 
 type Props = {

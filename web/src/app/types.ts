@@ -1,6 +1,5 @@
 // The page's state model: docs/design/SPEC.md, section 8. The signals that hold these are in state/ (one module per owner).
 
-import type { Equal, Expect, State, Ticket } from "../engine/machine.ts";
 import type {
   About,
   BrowseRows,
@@ -16,6 +15,8 @@ import type {
   Stage,
   StoreCause,
 } from "../engine/types.ts";
+
+import type { Equal, Expect, State, Ticket } from "../engine/machine.ts";
 
 // Defined in engine/types.ts: the state machine uses them, and engine/ never imports app/.
 export type {

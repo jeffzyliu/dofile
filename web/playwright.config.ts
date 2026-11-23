@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+
 import { LOCAL_EDITOR_URL, LOCAL_SITE_URL } from "./scripts/urls.ts";
 
 // The site in three engines and an iPhone profile, served by two `vite preview`s as the two Workers are: the landing and

@@ -4,7 +4,14 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { ChangeSet, Text } from "@codemirror/state";
+
+import type { LastRun, RunHead } from "../src/app/types.ts";
+
+import type { RoveAxis } from "../src/app/ui/keys.ts";
+import { ignoreHeldEnter, isHeldEnter, roveKey } from "../src/app/ui/keys.ts";
+
 import { CSV_COLORS, csvFields } from "../src/app/editor/csv.ts";
 import { lineDeleted, onLastRun, onRunStart } from "../src/app/editor/errormark.ts";
 import { isRunKey, isSaveKey } from "../src/app/editor/keys.ts";
@@ -32,9 +39,8 @@ import {
 import { commandEnd, echoed, echoLines, inBlocks, nestedTarget, unsavedTarget } from "../src/app/log/align.ts";
 import { classify, hintParts, plainLog, runError } from "../src/app/log/classify.ts";
 import { matches } from "../src/app/log/find.ts";
-import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
-import type { LastRun, RunHead } from "../src/app/types.ts";
-import { ignoreHeldEnter, isHeldEnter, type RoveAxis, roveKey } from "../src/app/ui/keys.ts";
+import type { RunOne } from "../src/app/log/paste.ts";
+import { inTurnWords, opensBlock, pastedLines, runInTurn } from "../src/app/log/paste.ts";
 
 // a log as the engine writes it (the engine's own text: hints on, as browser.py runs it)
 const LOG = `. clear

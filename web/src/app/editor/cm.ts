@@ -3,28 +3,18 @@
 import { json } from "@codemirror/lang-json";
 import { markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import {
-  type EditorState,
-  type Extension,
-  RangeSet,
-  RangeSetBuilder,
-  StateEffect,
-  StateField,
-} from "@codemirror/state";
-import {
-  Decoration,
-  type DecorationSet,
-  EditorView,
-  GutterMarker,
-  gutterLineClass,
-  ViewPlugin,
-  type ViewUpdate,
-} from "@codemirror/view";
+import type { EditorState, Extension } from "@codemirror/state";
+import { RangeSet, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import type { DecorationSet, ViewUpdate } from "@codemirror/view";
+import { Decoration, EditorView, GutterMarker, gutterLineClass, ViewPlugin } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+
 import { stata } from "../../stata/language.ts";
 import { isTypedInput, straighten } from "../../stata/straighten.ts";
+
 import { extOf } from "../files/tree.ts";
 import { classify } from "../log/classify.ts";
+
 import { CSV_COLORS, csvFields } from "./csv.ts";
 import { lineDeleted } from "./errormark.ts";
 

@@ -5,7 +5,10 @@
 // Events come in by two doors: dispatch() for an action or lost() (no ticket), and reply() for an answer to an effect
 // (the one place a ticket is put on an event). Both enqueue, then transition, then the signal, then perform.
 
-import type { Builds, Lifecycle, Reader } from "../engine/client.ts";
+import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
+import { BREAK_GRACE_MS } from "../engine/types.ts";
+import type { EngineState, RunHead } from "./types.ts";
+
 import type {
   Answered,
   AnyAnswer,
@@ -22,15 +25,18 @@ import type {
   TicketedEffect,
 } from "../engine/machine.ts";
 import { initial, RC_RESET, transition } from "../engine/machine.ts";
-import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
-import { BREAK_GRACE_MS } from "../engine/types.ts";
-import { block, own } from "./files.ts";
+
 import { engineBytes, engineWriter, graphicsWriter } from "./state/engine.ts";
 import * as Notices from "./state/notices.ts";
-import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
-import { resolvedTheme } from "./theme.ts";
-import type { EngineState, RunHead } from "./types.ts";
+
+import type { Builds, Lifecycle, Reader } from "../engine/client.ts";
+import { block, own } from "./files.ts";
+
 import { ask as askFocus, fromAnywhere } from "./ui/focus-targets.ts";
+
+import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
+
+import { resolvedTheme } from "./theme.ts";
 
 // ---- the wiring ----
 

@@ -3,11 +3,16 @@
 
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import { FAILED, FAILED_TWICE, UPDATED } from "../src/app/states/words.ts";
+
 import type { EngineStateName, RunHead } from "../src/app/types.ts";
-import { focusRequest } from "../src/app/ui/focus-targets.ts";
-import { EngineClient } from "../src/engine/client.ts";
 import type { FileInfo, Results, RunResult } from "../src/engine/types.ts";
+
+import { EngineClient } from "../src/engine/client.ts";
+
+import { focusRequest } from "../src/app/ui/focus-targets.ts";
+
+import { FAILED, FAILED_TWICE, UPDATED } from "../src/app/states/words.ts";
+
 import { fakeWorker, sleep, starts } from "./harness.ts";
 import {
   BUILD,

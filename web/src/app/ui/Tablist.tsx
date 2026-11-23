@@ -2,9 +2,11 @@
 // Home and End go to the ends. Each tab is `${idPrefix}-tab-${id}`; the selected one controls
 // `${idPrefix}-panel-${id}`: give the panel that id, role="tabpanel" and aria-labelledby the tab (tabpanelProps does
 // it).
-import { type Signal, useSignal } from "@preact/signals";
+import type { Signal } from "@preact/signals";
+import { useSignal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
+
 import { useFocusRequest } from "./focus-hooks.ts";
 import { roveKey } from "./keys.ts";
 

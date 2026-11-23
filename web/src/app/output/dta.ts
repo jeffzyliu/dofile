@@ -1,6 +1,7 @@
 // Reads a .dta file's variables for the .dta tab (DtaView.tsx) and keeps the answer in view.ts `dtaInfo`.
 
 import { call } from "../engine.ts";
+
 import { dtaInfo } from "./view.ts";
 
 const asking = new Map<string, string>(); // path -> key of the describe_file in flight

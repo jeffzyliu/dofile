@@ -2,16 +2,20 @@
 // download-failed banners. Views change files through the store itself; each change calls store.onChange, which lists
 // the store again here. docs/design/SPEC.md, sections 3.1 and 7.
 
-import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
+
+import { persisted, filesWriter as W } from "./state/files.ts";
+import * as Notices from "./state/notices.ts";
+
+import { keepFiles } from "../engine/tab.ts";
+
 import { ranOver, tabs } from "./editor/documents.ts";
 import { decodeText } from "./files/open.ts";
 import { saveAs } from "./files/save.ts";
 import { fileTurn, turnsOn } from "./files/turns.ts";
 import { reloadTab } from "./files/upload.ts";
+
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
-import { persisted, filesWriter as W } from "./state/files.ts";
-import * as Notices from "./state/notices.ts";
 
 type Store = {
   list(): Promise<FileInfo[]>;

@@ -1,17 +1,23 @@
 // The Log pane's command line (docs/design/SPEC.md, section 3.5): the field, its history (↑ ↓) and its Run button.
 import { signal } from "@preact/signals-core";
 import { useRef } from "preact/hooks";
+
 import { isTypedInput, straightenInserted } from "../../stata/straighten.ts";
-import { refusedRunWords } from "../editor/words.ts";
-import { runCommand } from "../run.ts";
-import { startEngine, startHint, startOffer } from "../start.ts";
+
 import { engine } from "../state/engine.ts";
 import { isPhone } from "../state/layout.ts";
 import { showToast } from "../state/notices.ts";
 import { history } from "../state/run.ts";
-import { takesRun } from "../states/predicates.ts";
+
+import { runCommand } from "../run.ts";
+import { startEngine, startHint, startOffer } from "../start.ts";
+
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
+
+import { refusedRunWords } from "../editor/words.ts";
+import { takesRun } from "../states/predicates.ts";
+
 import { inTurnWords, runInTurn } from "./paste.ts";
 import { pastePlan, putBack, runOne } from "./pasterun.ts";
 

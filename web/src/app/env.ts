@@ -1,6 +1,8 @@
 // What the page's URL and build say, read once at load.
-import { chooseCap, factsOf } from "../engine/memcap.ts";
+
 import type { About } from "../engine/types.ts";
+
+import { chooseCap, factsOf } from "../engine/memcap.ts";
 
 const q = new URLSearchParams(location.search);
 

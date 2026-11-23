@@ -8,14 +8,18 @@
 // turns it off ("Start engine" pressed by keyboard after a failed start becomes "Starting…"). A press then says why in
 // a toast, except while a run is on, where a second Enter must stay silent.
 
-import * as eng from "../engine.ts";
-import { startEngine, startOffer } from "../start.ts";
 import { engine, isolated } from "../state/engine.ts";
 import { showPhone } from "../state/layout.ts";
 import { showToast } from "../state/notices.ts";
-import { engineStarting, otherTab, runOn, takesRun } from "../states/predicates.ts";
+
+import * as eng from "../engine.ts";
+import { startEngine, startOffer } from "../start.ts";
+
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
+
+import { engineStarting, otherTab, runOn, takesRun } from "../states/predicates.ts";
+
 import { since } from "./clock.ts";
 import { editorCommands } from "./commands.ts";
 import { activeTab, save, selection, tabs } from "./documents.ts";

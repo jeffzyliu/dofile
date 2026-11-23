@@ -9,10 +9,10 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach } from "node:test";
+
 import type { ReadonlySignal, Signal } from "@preact/signals-core";
+
 import type { Banner, EngineState, EngineStateName, LastRun, LogItem, RunHead } from "../src/app/types.ts";
-import type { Builds, Lifecycle, Reader } from "../src/engine/client.ts";
-import type { Ending, Reply } from "../src/engine/machine.ts";
 import type {
   Build,
   CrashCause,
@@ -25,6 +25,11 @@ import type {
   RunResult,
   StoreCause,
 } from "../src/engine/types.ts";
+
+import type { Ending, Reply } from "../src/engine/machine.ts";
+
+import type { Builds, Lifecycle, Reader } from "../src/engine/client.ts";
+
 import { sleep } from "./harness.ts";
 
 // A log item and a banner with every member's fields, for reading in assertions: a test reads the fields of the member

@@ -3,18 +3,30 @@
 
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
-import { BannerSlot } from "./banners";
-import { DialogHost } from "./dialogs";
+
+import type { OutputTab, PhoneTab } from "./types.ts";
+
+import { engine } from "./state/engine.ts";
+import { files, hasFiles } from "./state/files.ts";
+import { isPhone, layout, outputTab, phoneTab, setSplit, showPhone, split, toggleWrap, wrap } from "./state/layout.ts";
+
+import { downloadAll } from "./files.ts";
+
+import { useFocusTarget } from "./ui/focus-hooks.ts";
+import { Icon } from "./ui/Icon";
+import { LiveRegion, ToastHost } from "./ui/Live";
+import type { MenuItem } from "./ui/Menu";
+import { MenuButton, MenuHost } from "./ui/Menu";
+import { Tablist, tabpanelProps } from "./ui/Tablist";
+
 import { activeTab, tabs } from "./editor/documents.ts";
 import { Editor } from "./editor/Editor";
 import { PhoneRun, RunControls } from "./editor/RunControls";
 import { StatusBar } from "./editor/StatusBar";
-import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
 import { FilesBody, FilesHead, fileMenuItems, NewFileButton } from "./files/FilesPane";
 import { filesOpen, foldFiles, onFilesKey } from "./files/fold.ts";
-import { downloadAll } from "./files.ts";
 import { CommandLine } from "./log/CommandLine";
 import { LogActions, logMenuItems } from "./log/LogActions";
 import { LogView } from "./log/LogView";
@@ -22,18 +34,13 @@ import { PhoneStrip } from "./log/PhoneStrip";
 import { DtaView } from "./output/DtaView";
 import { FullSize } from "./output/FullSize";
 import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
-import { engine } from "./state/engine.ts";
-import { files, hasFiles } from "./state/files.ts";
-import { isPhone, layout, outputTab, phoneTab, setSplit, showPhone, split, toggleWrap, wrap } from "./state/layout.ts";
 import { takesReset } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
+
+import { BannerSlot } from "./banners";
+import { DialogHost } from "./dialogs";
+import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { cycleTheme, THEME_ARIA, THEME_LABEL, theme } from "./theme.ts";
-import type { OutputTab, PhoneTab } from "./types.ts";
-import { useFocusTarget } from "./ui/focus-hooks.ts";
-import { Icon } from "./ui/Icon";
-import { LiveRegion, ToastHost } from "./ui/Live";
-import { MenuButton, MenuHost, type MenuItem } from "./ui/Menu";
-import { Tablist, tabpanelProps } from "./ui/Tablist";
 
 /** Wrap lines leaves the menu open, so the visitor sees it flip. */
 const wrapItem = (): MenuItem => ({ label: "Wrap lines", checked: wrap.value, onSelect: toggleWrap, keepOpen: true });

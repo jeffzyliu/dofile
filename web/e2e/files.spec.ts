@@ -4,7 +4,9 @@
 // dialog's Save saves through the editor and closes the tab (editor.spec.ts types real edits).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import type { Page } from "@playwright/test";
+
 import { bannerOf, expect, isPhone, putFiles, settle, storedText, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 import type { DofileHook } from "./hook";
 import { markDirty, openDialog } from "./seed";

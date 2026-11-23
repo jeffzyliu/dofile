@@ -5,12 +5,17 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import "fake-indexeddb/auto";
+
 import { IDBFactory } from "fake-indexeddb";
-import { EngineClient } from "../src/engine/client.ts";
+
+import type { BrowseRows, DataSummary, FileInfo } from "../src/engine/types.ts";
+
 import type { Answer } from "../src/engine/machine.ts";
+
+import { EngineClient } from "../src/engine/client.ts";
 import type { FileStore } from "../src/engine/store.ts";
 import { openStore } from "../src/engine/store.ts";
-import type { BrowseRows, DataSummary, FileInfo } from "../src/engine/types.ts";
+
 import {
   bytes,
   endWorkers,

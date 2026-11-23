@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
+
 import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { effect } from "@preact/signals-core";

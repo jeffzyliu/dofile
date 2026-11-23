@@ -2,6 +2,7 @@
 // handler's arguments and result are its op's own. Each @ts-expect-error below fails the check if the type let it pass.
 
 import type { Op } from "../src/engine/types.ts";
+
 import type { table } from "../src/engine/worker.ts";
 import type { OpTable } from "../src/engine/worker-dispatch.ts";
 

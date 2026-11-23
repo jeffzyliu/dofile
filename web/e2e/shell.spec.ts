@@ -15,15 +15,8 @@ import {
   test,
   toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
-import {
-  type EngineSeed,
-  type Selection,
-  seedEditorBox,
-  seedLog,
-  seedStatusBar,
-  showEngine,
-  showPhoneTab,
-} from "./seed";
+import type { EngineSeed, Selection } from "./seed";
+import { seedEditorBox, seedLog, seedStatusBar, showEngine, showPhoneTab } from "./seed";
 
 test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; Run is Start engine, which brings the prompt back; a run does nothing and opens no prompt", async ({
   page,

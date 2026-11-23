@@ -1,6 +1,8 @@
 // Which engine states mean what, for the views: guards made from the groups in engine/machine.ts, which decides the
 // state. A view asks one of these, never a set of state names.
 
+import type { EngineState } from "../types.ts";
+
 import {
   accepts,
   BREAK_ASKED,
@@ -12,7 +14,6 @@ import {
   UP,
   WORKER_LIVE,
 } from "../../engine/machine.ts";
-import type { EngineState } from "../types.ts";
 
 /** An engine exists: it can be reset, and the graphics part is fetched for it. */
 export const engineUp = member(UP);

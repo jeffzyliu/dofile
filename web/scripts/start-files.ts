@@ -6,8 +6,11 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
+
 import type { SnapshotManifest, StartFiles } from "../src/engine/types.ts";
-import { type BuildInputs, buildId, readManifest, staleness } from "./build-id.ts";
+
+import type { BuildInputs } from "./build-id.ts";
+import { buildId, readManifest, staleness } from "./build-id.ts";
 import { EDITOR_OUT } from "./urls.ts";
 
 // Pyodide's own files that the snapshot start needs; scripts/stage.ts copies them from the npm package into public/pyodide/

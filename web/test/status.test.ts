@@ -2,8 +2,11 @@
 // run's words, the memory, the graphics ring, and which parts only the desktop's bar has. No DOM.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type StatusForm, type StatusInput, type StatusPart, statusParts } from "../src/app/editor/status.ts";
+
 import type { EngineState, LastRun, RunHead } from "../src/app/types.ts";
+
+import type { StatusForm, StatusInput, StatusPart } from "../src/app/editor/status.ts";
+import { statusParts } from "../src/app/editor/status.ts";
 
 const NOW = 100_000;
 const AGO = NOW - 3400;

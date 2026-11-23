@@ -2,8 +2,10 @@
 
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+
 import type { RunHead } from "../src/app/types.ts";
 import type { Results } from "../src/engine/types.ts";
+
 import { sleep } from "./harness.ts";
 import type { Later } from "./wiring.ts";
 import {

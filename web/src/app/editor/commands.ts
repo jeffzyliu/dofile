@@ -5,6 +5,7 @@
 // Call through the object (`editorCommands.runFile(path)`), never destructure it or keep a field
 // (`const { runFile } = editorCommands`): the copy would keep the no-op.
 import { signal } from "@preact/signals-core";
+
 import type { RunHead } from "../types.ts";
 
 /** The code each run of the editor sent, by its head (the object run.ts keeps in the run-head item). The log needs the

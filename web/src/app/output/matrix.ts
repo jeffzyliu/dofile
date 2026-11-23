@@ -2,13 +2,18 @@
 // stale, the error) and the copy check's timer. An open matrix and the copied check belong to the `results` they were
 // read for (view.ts, openMatrices and copiedRow): after another run they are gone.
 
-import { call } from "../engine.ts";
+import type { Results } from "../types.ts";
+
 import { showToast } from "../state/notices.ts";
 import { macros, results } from "../state/run.ts";
-import type { Results } from "../types.ts";
+
+import { call } from "../engine.ts";
+
 import { copyText } from "./clip.ts";
-import { copiedNote, full, hasValues, matrixTsv, type ResultRow } from "./format.ts";
-import { copiedRow, type OpenMatrix, openMatrices } from "./view.ts";
+import type { ResultRow } from "./format.ts";
+import { copiedNote, full, hasValues, matrixTsv } from "./format.ts";
+import type { OpenMatrix } from "./view.ts";
+import { copiedRow, openMatrices } from "./view.ts";
 
 export const NO_ENGINE = "the engine isn't running";
 export const COPIED_MS = 2000; // as the landing page's Copy (src/site/site.ts)

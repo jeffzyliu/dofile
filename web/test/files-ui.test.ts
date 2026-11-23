@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
+
 import type { ClashAnswer, ClashFacts, Incoming } from "../src/app/files/upload.ts";
 
 const { S } = await import("./state-all.ts");

@@ -1,6 +1,8 @@
 // Focus moved by the component that draws the target, from its own render: docs/web-page-flows.md, section 1.
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { type From, focusRequest, fromNothing, register, type TargetName, takeRequest } from "./focus-targets.ts";
+
+import type { From, TargetName } from "./focus-targets.ts";
+import { focusRequest, fromNothing, register, takeRequest } from "./focus-targets.ts";
 
 type Target = { current: HTMLElement | null };
 

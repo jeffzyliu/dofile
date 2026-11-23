@@ -3,10 +3,14 @@
 // types.ts and in SPEC.md section 8 together.
 // `phone: "every"`: on a phone every view's slot draws it, so it is seen whichever view is shown.
 import type { ComponentType } from "preact";
-import { RunChangedBanner, SaveFailedBanner } from "./editor/banners";
-import { NotTextBanner } from "./files/banners";
+
+import type { Banner, BannerName, BannerOf, Place } from "./types.ts";
+
 import { isPhone } from "./state/layout.ts";
 import { banners } from "./state/notices.ts";
+
+import { RunChangedBanner, SaveFailedBanner } from "./editor/banners";
+import { NotTextBanner } from "./files/banners";
 import {
   DownloadFailedBanner,
   EditorStateBanners,
@@ -15,7 +19,6 @@ import {
   StorageBanner,
   StoreFailedBanner,
 } from "./states/banners";
-import type { Banner, BannerName, BannerOf, Place } from "./types.ts";
 
 const VIEWS: { [K in BannerName]: { place: Place; phone?: "every"; view: ComponentType<{ banner: BannerOf<K> }> } } = {
   reset: { place: "log", view: ResetBanner },

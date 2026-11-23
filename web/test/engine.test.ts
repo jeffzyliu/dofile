@@ -12,12 +12,17 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
 import { Worker } from "node:worker_threads";
+
 import { IDBFactory } from "fake-indexeddb";
-import { about, buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
-import { EngineClient } from "../src/engine/client.ts";
-import type { Answer } from "../src/engine/machine.ts";
-import { openStore } from "../src/engine/store.ts";
+
 import type { DataSummary, Matrix, ReadOps } from "../src/engine/types.ts";
+
+import type { Answer } from "../src/engine/machine.ts";
+
+import { EngineClient } from "../src/engine/client.ts";
+import { openStore } from "../src/engine/store.ts";
+
+import { about, buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
 import { endWorkers, extraWheels, live, runOn, startWorker, nodeWorker as storeWorker, wheel } from "./harness.ts";
 
 /** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */

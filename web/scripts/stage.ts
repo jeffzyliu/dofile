@@ -7,8 +7,11 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type BuildInputs, inputs, publicDir, type StageRecord } from "./build-id.ts";
+
 import { web } from "./lib/paths.ts";
+
+import type { BuildInputs, StageRecord } from "./build-id.ts";
+import { inputs, publicDir } from "./build-id.ts";
 import { extraWheelsDir, wheelDir } from "./lib/wheels.ts";
 import { RUNTIME_FILES } from "./start-files.ts";
 

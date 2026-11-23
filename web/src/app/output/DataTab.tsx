@@ -3,11 +3,15 @@
 // variable name (`pickedVar`) only scrolls Browse to its column and marks it: no command, nothing in the log.
 
 import { useEffect, useRef } from "preact/hooks";
-import { binarySize } from "../bytes.ts";
-import { moreRows } from "../run.ts";
+
+import type { BrowseRows, DataSummary } from "../types.ts";
+
 import { banners, say } from "../state/notices.ts";
 import { data, memory, rows } from "../state/run.ts";
-import type { BrowseRows, DataSummary } from "../types.ts";
+
+import { moreRows } from "../run.ts";
+
+import { binarySize } from "../bytes.ts";
 import { count, cutCell } from "./format.ts";
 import { VarTable } from "./VarTable";
 import { filterText, focusVar, loadingRows, openCells, pickedVar, pickVar } from "./view.ts";

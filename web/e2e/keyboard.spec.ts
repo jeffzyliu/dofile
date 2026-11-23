@@ -3,6 +3,7 @@
 // with viewport.ts's attributes set by script, the editor's caret with a stand-in visualViewport, and the overlay; what
 // Safari does is for the real iPhone. Every profile runs them at a phone's size (the phone layout is under 700 px).
 import type { Page } from "@playwright/test";
+
 import { expect, settled, test, unblocked } from "./fixtures"; // storage kept by default (fixtures.ts)
 import { seedGraphs, showPhoneTab } from "./seed";
 

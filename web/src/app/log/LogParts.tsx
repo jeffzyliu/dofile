@@ -1,19 +1,25 @@
 // What the log draws from its parts (run-parts.ts) and its other items: Find's marks, graph links, `help x` links, Go to
 // line.
 import type { ComponentChildren } from "preact";
-import { editorCommands } from "../editor/commands.ts";
-import { refusedRunWords } from "../editor/words.ts";
-import { graphOpenName } from "../output/format.ts";
-import { cardTheme } from "../output/GraphTab";
-import { runCommand } from "../run.ts";
-import { startFirst, startOffer } from "../start.ts";
+
+import type { Graph } from "../types.ts";
+
 import { engine } from "../state/engine.ts";
 import { isPhone, outputTab } from "../state/layout.ts";
 import { showToast } from "../state/notices.ts";
 import { graphs, selectGraph, showFullSize } from "../state/run.ts";
-import type { Graph } from "../types.ts";
+
+import { runCommand } from "../run.ts";
+import { startFirst, startOffer } from "../start.ts";
+
 import { Icon } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
+
+import { editorCommands } from "../editor/commands.ts";
+import { refusedRunWords } from "../editor/words.ts";
+import { graphOpenName } from "../output/format.ts";
+import { cardTheme } from "../output/GraphTab";
+
 import { hintParts } from "./classify.ts";
 import { matches } from "./find.ts";
 import type { RunPart } from "./run-parts.ts";
