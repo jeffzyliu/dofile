@@ -200,7 +200,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
     dropped from the Cache, a copy counted, fetched again with `cache: "reload"`; a second damaged copy in a row fails the
-    part with no fetch until a graph's `again` (decision B); failed: the reason written, then the worker's `again` and
+    part with no fetch until a graph's `again`, and drops it from the Cache (decision B); failed: the reason written, then the worker's `again` and
     the browser's `online` fetch it again.
 - `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
   counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
@@ -226,7 +226,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   and a real shared region (a small brotli part; Node's `DecompressionStream` as the browser's decoder, held when a test
   needs it): the idle steps stop for a run in flight and go on at its end with nothing else to wake them; a graph after
   the write answers at once, with no second unpack or write; race 13: the decoder's late result of a copy a graph found
-  damaged meanwhile is dropped, not written; one browser decode at a time (a fresh copy waits for the running one); race
+  damaged meanwhile is dropped, not written; one browser decode at a time (a fresh copy waits for the running one); a
+  Break during a graph's own unpack while the decoder runs: nothing is written until the decoder ends; race
   11, with both decoders: damage an idle step finds blocks only its copy (a graph before the fresh copy waits, not saying
   it, and the fresh copy is written while idle); damage the page has not acted on is said by the next graph, and the one
   after waits rather than unpack that copy again; finding 15: a warm step's throw is a warning that stops the warm-up

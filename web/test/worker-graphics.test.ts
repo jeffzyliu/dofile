@@ -50,8 +50,19 @@ assert.ok([1, 2, 3].every((n) => copyOf(n).length === SIZE) && SIZE !== RAW);
  * @param brotli - mount's `brotli`: "wasm" forces brotli-wasm
  * @param failWrites - how many writes of the part throw first (the part's damage, as the worker sees it)
  * @param page - the page answers `damaged` as it does: one more copy, pending (retryPart)
+ * @param breakInUnpack - a Break arrives as the brotli-wasm unpack begins (the interrupt is set)
  */
-function part({ brotli, failWrites = 0, page = false }: { brotli?: "wasm"; failWrites?: number; page?: boolean } = {}) {
+function part({
+  brotli,
+  failWrites = 0,
+  page = false,
+  breakInUnpack = false,
+}: {
+  brotli?: "wasm";
+  failWrites?: number;
+  page?: boolean;
+  breakInUnpack?: boolean;
+} = {}) {
   const sab = new SharedArrayBuffer(PART_HEADER + SIZE);
   const region = partRegion(sab);
   const posted: FromWorker[] = [];
@@ -60,6 +71,18 @@ function part({ brotli, failWrites = 0, page = false }: { brotli?: "wasm"; failW
   let fails = failWrites;
   let warmThrows = false;
   let waitGraphics: (ms: number) => string = () => assert.fail("lazy_graphics was not called");
+  const interrupt = new Int32Array(new SharedArrayBuffer(4));
+  const wasm = breakInUnpack
+    ? {
+        ...brotliWasm,
+        DecompressStream: new Proxy(brotliWasm.DecompressStream, {
+          construct(Real, args) {
+            Atomics.store(interrupt, 0, 1);
+            return new Real(...args);
+          },
+        }),
+      }
+    : brotliWasm;
   const py = {
     FS: {
       mkdirTree() {},
@@ -84,14 +107,14 @@ function part({ brotli, failWrites = 0, page = false }: { brotli?: "wasm"; failW
   const g = graphicsWorker({
     py: () => py as never,
     browser: () => engine as never,
-    interrupt: () => null,
+    interrupt: () => interrupt,
     errorOf: (e) => ({ message: e instanceof Error ? e.message : String(e) }),
     post(m) {
       posted.push(m);
       if (page && "graphics" in m && m.graphics === "damaged") retryPart(region);
     },
   });
-  g.mounted({ snapshotURL: "", built: 0, brotliWasm, brotliMode: brotli });
+  g.mounted({ snapshotURL: "", built: 0, brotliWasm: wasm, brotliMode: brotli });
   g.bootHooks().lazyGraphics(engine as never, { file: { name: "graphics.bin", raw: RAW, size: SIZE } } as never, sab);
   return {
     g,
@@ -204,6 +227,24 @@ test("one browser decode at a time: a fresh copy that lands while the decoder st
   await until(() => w.written.length === 2, "copy 2 written while idle");
   assert.deepEqual(w.written, [1, 2]);
   assert.equal(native.most, 1);
+});
+
+test("a Break during a graph's own unpack while the browser's decoder still runs: the idle steps wait for the decoder's end before they write", async (t) => {
+  const native = heldDecoder(t);
+  const w = part({ breakInUnpack: true });
+  w.land(1);
+  w.g.startupAnswered();
+  await until(() => native.started === 1, "the browser's decoder began");
+  w.g.runArrived();
+  w.g.runStarts();
+  assert.equal(w.wait(), "break", "the graph's brotli-wasm unpack took over, then the Break");
+  w.g.runEnded();
+  await sleep(3 * IDLE_MS);
+  assert.deepEqual(w.written, [], "nothing written while the decoder runs");
+  native.release(); // its result: dropped
+  await until(() => w.written.length === 1, "written after the decoder's end");
+  assert.deepEqual(w.written, [1]);
+  assert.equal(native.started, 1);
 });
 
 for (const brotli of [undefined, "wasm"] as const)
