@@ -1,6 +1,6 @@
 # dofile MCP server: schema
 
-For dofile `0.1.x`. Describes `dofile-mcp` (`src/dofile/mcp_server.py`, `mcp==2.3.0`).
+For dofile `0.2.x`. Describes `dofile-mcp` (`src/dofile/mcp_server.py`, `mcp==2.3.0`).
 <!-- Edit that version only when the minor version changes (patch releases never change this schema while dofile is 0.x);
      tests/test_version.py checks it against pyproject.toml. -->
 
