@@ -38,7 +38,7 @@ export const putBack = (lines: readonly string[], r: InTurn, fieldText: string):
  *  next pasted line starts before the page takes any other input. A Run or an Enter pressed between two pasted lines is
  *  then refused as during any run. `done` settling ends the wait too (the first of the two wins), so no wait outlives
  *  its run. */
-function whenEnds(before: unknown, done: Promise<RunResult>): Promise<number | "taken"> {
+async function whenEnds(before: unknown, done: Promise<RunResult>): Promise<number | "taken"> {
   return new Promise((settle) => {
     let stop = () => {};
     let over = false;

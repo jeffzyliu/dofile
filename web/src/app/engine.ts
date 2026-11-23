@@ -446,7 +446,7 @@ export function run(code: string, head: RunHead): boolean {
 
 /** A read op: the page's one way to ask the engine for data. It raises no event. Rejects with the transport's error:
  *  kind "no-engine" with no worker, "reset" when a reset cut it. */
-export function call<K extends ViewOp>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
+export async function call<K extends ViewOp>(op: K, args?: ReadOps[K]["args"]): Promise<ReadOps[K]["result"]> {
   return connected().reader.query(op, args);
 }
 

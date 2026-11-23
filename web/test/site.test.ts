@@ -123,7 +123,7 @@ async function withGlobals(globals: Record<string, unknown>, body: () => Promise
 
 test("the editor's address for the landing and commands pages is the build's site address (env.ts)", async () => {
   // a query makes a second instance of the module: it reads the globals when it loads
-  const loadEnv = (query: string): Promise<typeof import("../src/app/env.ts")> =>
+  const loadEnv = async (query: string): Promise<typeof import("../src/app/env.ts")> =>
     import(new URL(`../src/app/env.ts?${query}`, import.meta.url).href);
   const page = (url: string) => ({ __ABOUT__: {}, __DEV_SITE_PORT__: 5174, location: new URL(url) });
   await withGlobals({ ...page("http://localhost:5173/"), __SITE_URL__: "https://site.test/" }, async () => {
