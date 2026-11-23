@@ -24,7 +24,7 @@ const ART = [
   "▀█▄▄▄██  ▀█▄▄▄█▀   ██    ██  ▀█▄  ▀█▄▄▄▄▄",
 ]; // banner B2, "book+drop+skew" (docs/design/mockups/art.js): each line slanted by its height above the last
 
-/** The log's head: the banner and the versions (shown only). A plain function, as runText is. */
+/** The log's head: the banner and the versions (shown only). A plain function, as drawRunParts is. */
 function logHead(m: Marker) {
   const commit = (ABOUT.engine_commit ?? "").slice(0, 7);
   return (
