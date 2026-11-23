@@ -32,7 +32,8 @@ import type { OutputTab, PhoneTab } from "./types.ts";
 import { useFocusTarget } from "./ui/focus-hooks.ts";
 import { Icon } from "./ui/Icon";
 import { LiveRegion, ToastHost } from "./ui/Live";
-import { MenuButton, MenuHost, type MenuItem } from "./ui/Menu";
+import type { MenuItem } from "./ui/Menu";
+import { MenuButton, MenuHost } from "./ui/Menu";
 import { Tablist, tabpanelProps } from "./ui/Tablist";
 
 /** Wrap lines leaves the menu open, so the visitor sees it flip. */

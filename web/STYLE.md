@@ -57,6 +57,8 @@ discriminant tags `s`, `d`, `b`, `t`, `do` (SPEC, tests, the e2e hook); wire nam
 Before a rename, grep `biome/architecture.grit` and `test/imports.test.ts`: they match identifiers by name.
 Renames happen inside the restructure that owns the file, and never in the same commit as a spacing change.
 
+Imports: a type import is its own `import type` line, apart from the value import of the same module (Biome `useImportType`, `separatedType`).
+
 ### Glossary
 
 One word per concept. Wire names (the worker protocol, `start-files.json`, the test hook, state tags, SPEC) keep their

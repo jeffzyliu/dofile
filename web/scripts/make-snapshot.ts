@@ -11,15 +11,14 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { loadPyodide } from "pyodide";
+import type { BundleIndex, SnapshotPy } from "../src/engine/snapshot.ts";
 import {
-  type BundleIndex,
   bundle,
   inflate,
   makeOptions,
   makeSnapshot,
   packGraphics,
   patchAsm,
-  type SnapshotPy,
   zeroFreeMemory,
   zeroLibraryCopies,
 } from "../src/engine/snapshot.ts";

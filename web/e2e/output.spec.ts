@@ -9,11 +9,11 @@
 //    show in the log), so only the full-size view is checked there, opened through `showFullSize`.
 import type { Page } from "@playwright/test";
 import { engineState, expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
+import type { PhoneTab } from "./seed";
 import {
   addBanner,
   closeDialog,
   openDialog,
-  type PhoneTab,
   seedGraphs,
   showGraphFull,
   showPhoneTab,

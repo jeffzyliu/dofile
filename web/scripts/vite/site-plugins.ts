@@ -3,7 +3,8 @@ import { dirname, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 import commandData from "../../src/stata/commands.json" with { type: "json" };
-import { about, type BuildInputs } from "../build-id.ts";
+import type { BuildInputs } from "../build-id.ts";
+import { about } from "../build-id.ts";
 import {
   canonicalURL,
   engineMB,

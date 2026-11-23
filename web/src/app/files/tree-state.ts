@@ -3,7 +3,8 @@
 import { computed, signal } from "@preact/signals-core";
 import { within } from "../paths.ts";
 import { files } from "../state/files.ts";
-import { ask, cancel, type From, focusRequest, fromAnywhere, fromNothing, shownElement } from "../ui/focus-targets.ts";
+import type { From } from "../ui/focus-targets.ts";
+import { ask, cancel, focusRequest, fromAnywhere, fromNothing, shownElement } from "../ui/focus-targets.ts";
 import { folderOrAbove, parentOf } from "./tree.ts";
 
 export const folded = signal<ReadonlySet<string>>(new Set());

@@ -29,7 +29,8 @@
       "style": {
         "noNonNullAssertion": "off",
         "noDescendingSpecificity": "off",
-        "useSingleVarDeclarator": "error"
+        "useSingleVarDeclarator": "error",
+        "useImportType": { "level": "error", "options": { "style": "separatedType" } }
       },
       "suspicious": {
         "noExplicitAny": "off",

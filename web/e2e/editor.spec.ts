@@ -18,11 +18,11 @@ import {
   toastOf,
   toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
+import type { LastRun } from "./seed";
 import {
   activateTab,
   addBanner,
   clearToast,
-  type LastRun,
   openDialog,
   seedGraphs,
   seedLastRun,

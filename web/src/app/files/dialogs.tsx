@@ -13,7 +13,8 @@ import { focusAfterClose } from "./close-focus.ts";
 import { deleteAll, deleteEntries } from "./ops.ts";
 import { baseName, shortDate } from "./tree.ts";
 import { focusTree } from "./tree-state.ts";
-import { answerClash, type ClashAnswer, clashNow, WORDS } from "./upload.ts";
+import type { ClashAnswer } from "./upload.ts";
+import { answerClash, clashNow, WORDS } from "./upload.ts";
 
 const close = () => {
   closeDialog();

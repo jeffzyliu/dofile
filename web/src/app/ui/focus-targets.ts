@@ -1,6 +1,7 @@
 // The focus registry: components register named targets, callers move the focus to one by name. Plain TypeScript, so the
 // Node tests run it; the hook that registers from a component is ui/focus-hooks.ts `useFocusTarget`.
-import { type ReadonlySignal, signal } from "@preact/signals-core";
+import type { ReadonlySignal } from "@preact/signals-core";
+import { signal } from "@preact/signals-core";
 
 /** Whether a request may take the focus from `at`, the element that has it. */
 export type From = (at: Element | null) => boolean;

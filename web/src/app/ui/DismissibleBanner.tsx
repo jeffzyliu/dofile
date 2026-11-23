@@ -1,7 +1,8 @@
 import { dismiss } from "../state/notices.ts";
 import { useFocusOnLeave } from "../states/focus.ts";
 import type { Banner as BannerRecord } from "../types.ts";
-import { Banner, type BannerProps } from "./Live";
+import type { BannerProps } from "./Live";
+import { Banner } from "./Live";
 
 /** A registry banner with a Dismiss button after its `actions`. Dismissing it by keyboard hands the focus on rather
  *  than to the page (useFocusOnLeave). */

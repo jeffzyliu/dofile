@@ -4,7 +4,8 @@
 import { jumpLine } from "../editor/words.ts";
 import type { Graph, LogItem, RunHead } from "../types.ts";
 import { commandEnd, echoed, echoLines, nestedTarget, unsavedTarget } from "./align.ts";
-import { classify, type LineKind, type LogLine, runError } from "./classify.ts";
+import type { LineKind, LogLine } from "./classify.ts";
+import { classify, runError } from "./classify.ts";
 import { noteFor } from "./notes.ts";
 
 export type TextItem = Extract<LogItem, { t: "text" }>;

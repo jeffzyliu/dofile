@@ -6,13 +6,13 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 import zlib from "node:zlib";
+import type { SnapshotPy } from "../src/engine/snapshot.ts";
 import {
   hasNativeBrotli,
   inflate,
   isDeadWeight,
   isStorageRefusal,
   packGraphics,
-  type SnapshotPy,
   unpack,
   unpackAsync,
   unpackNative,

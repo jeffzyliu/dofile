@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, searchForWorkspaceRoot, type UserConfig } from "vite";
-import { about, type BuildInputs, buildId, inputs as readInputs, staged } from "./scripts/build-id.ts";
+import type { UserConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
+import type { BuildInputs } from "./scripts/build-id.ts";
+import { about, buildId, inputs as readInputs, staged } from "./scripts/build-id.ts";
 import { SITE_FILES } from "./scripts/site-pages.ts";
 import {
   DEV_EDITOR_PORT,

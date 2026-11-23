@@ -1,7 +1,8 @@
 // The editor's view (docs/design/SPEC.md, sections 3.3 and 4): one CodeMirror 6 view, mounted once, which shows the
 // active text tab of editor/documents.ts (attachView). mount() fills editorCommands.
 
-import { EditorState, Prec, type StateEffect } from "@codemirror/state";
+import type { StateEffect } from "@codemirror/state";
+import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { signal } from "@preact/signals-core";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";

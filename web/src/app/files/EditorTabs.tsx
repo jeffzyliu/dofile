@@ -9,7 +9,8 @@ import { useFocusRequest, useFocusTarget } from "../ui/focus-hooks.ts";
 import { fromNothing } from "../ui/focus-targets.ts";
 import { Icon } from "../ui/Icon";
 import { roveKey } from "../ui/keys.ts";
-import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
+import type { MenuItem } from "../ui/Menu";
+import { closeMenu, openMenu, openMenuState } from "../ui/Menu";
 import { focusAfterClose } from "./close-focus.ts";
 import { baseName, tabLabels } from "./tree.ts";
 

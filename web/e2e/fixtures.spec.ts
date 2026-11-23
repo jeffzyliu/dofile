@@ -2,7 +2,8 @@
 // nothing else is. The page is a stand-in whose goto fails as scripted, because a real stalled navigation does not repeat
 // the same way in each engine (Chromium aborts the retry while the stalled request is still pending); no browser is
 // needed. The fixture itself is exercised by every other spec's page.goto.
-import { errors, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { errors } from "@playwright/test";
 import { expect, retryFirstGoto, test } from "./fixtures";
 
 /** A page at `url()` whose goto calls take the next of `outcomes` (an Error to throw, or "ok"); `calls` counts them. */

@@ -19,18 +19,8 @@ import {
   toastOf,
   toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
-import {
-  addBanner,
-  type Banner,
-  clearToast,
-  closeDialog,
-  dismissBanner,
-  type EngineSeed,
-  type PhoneTab,
-  seedLog,
-  showEngine,
-  showPhoneTab,
-} from "./seed";
+import type { Banner, EngineSeed, PhoneTab } from "./seed";
+import { addBanner, clearToast, closeDialog, dismissBanner, seedLog, showEngine, showPhoneTab } from "./seed";
 
 /** The focus is in the editor: on `[data-editor]` or inside it (4b's CodeMirror focuses its `.cm-content`). */
 const inEditor = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]")));

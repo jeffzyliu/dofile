@@ -6,7 +6,8 @@ import { canClearLog } from "../run.ts";
 import { openDialog } from "../state/notices.ts";
 import { log } from "../state/run.ts";
 import { Icon } from "../ui/Icon";
-import { MenuButton, type MenuItem } from "../ui/Menu";
+import type { MenuItem } from "../ui/Menu";
+import { MenuButton } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
 import { openFind } from "./find.ts";
 

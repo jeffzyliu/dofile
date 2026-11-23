@@ -6,7 +6,8 @@ import { engine, graphicsPart } from "../state/engine.ts";
 import { persisted } from "../state/files.ts";
 import { lastRun, memory } from "../state/run.ts";
 import { resetsIn, since } from "./clock.ts";
-import { type StatusForm, type StatusPart, statusParts } from "./status.ts";
+import type { StatusForm, StatusPart } from "./status.ts";
+import { statusParts } from "./status.ts";
 
 /** The parts of the bar or the strip, from the signals (read here, so the view that calls it follows them). */
 export const statusNow = (form: StatusForm) =>

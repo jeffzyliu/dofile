@@ -35,7 +35,8 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
-import { type BrowserContext, type BrowserType, chromium, firefox, type Page, webkit } from "@playwright/test";
+import type { BrowserContext, BrowserType, Page } from "@playwright/test";
+import { chromium, firefox, webkit } from "@playwright/test";
 import { arg } from "../scripts/lib/args.ts";
 import { EDITOR_OUT } from "../scripts/urls.ts";
 

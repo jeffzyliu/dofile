@@ -13,7 +13,8 @@ import { store } from "../store.ts";
 import { decodeText, noteNotText } from "./open.ts";
 import { saveAs } from "./save.ts";
 import { baseName, extOf, freeName, joinPath, parentOf } from "./tree.ts";
-import { fileTurn, type Io, type Turn } from "./turns.ts";
+import type { Io, Turn } from "./turns.ts";
+import { fileTurn } from "./turns.ts";
 
 /** A failure handler for a call whose promise nobody awaits: the cause to the console, `said` to the visitor. */
 export const fail = (what: string, said: string) => (e: unknown) => {

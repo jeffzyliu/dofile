@@ -3,7 +3,8 @@
 // store, no tab lock: a visitor reading the landing page must not touch the editor's files or its lock).
 import "../styles/ui.css";
 import "./site.css";
-import { ARIA, KEY, NEXT, type Theme, WORD } from "./theme.ts";
+import type { Theme } from "./theme.ts";
+import { ARIA, KEY, NEXT, WORD } from "./theme.ts";
 
 function stored(): Theme {
   try {

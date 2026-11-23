@@ -32,9 +32,11 @@ import {
 import { commandEnd, echoed, echoLines, inBlocks, nestedTarget, unsavedTarget } from "../src/app/log/align.ts";
 import { classify, hintParts, plainLog, runError } from "../src/app/log/classify.ts";
 import { matches } from "../src/app/log/find.ts";
-import { inTurnWords, opensBlock, pastedLines, type RunOne, runInTurn } from "../src/app/log/paste.ts";
+import type { RunOne } from "../src/app/log/paste.ts";
+import { inTurnWords, opensBlock, pastedLines, runInTurn } from "../src/app/log/paste.ts";
 import type { LastRun, RunHead } from "../src/app/types.ts";
-import { ignoreHeldEnter, isHeldEnter, type RoveAxis, roveKey } from "../src/app/ui/keys.ts";
+import type { RoveAxis } from "../src/app/ui/keys.ts";
+import { ignoreHeldEnter, isHeldEnter, roveKey } from "../src/app/ui/keys.ts";
 
 // a log as the engine writes it (the engine's own text: hints on, as browser.py runs it)
 const LOG = `. clear

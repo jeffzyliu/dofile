@@ -1,9 +1,11 @@
 // The open tabs and their documents (docs/design/workspace.md, section 2): one record per tab, with no DOM; `tabs`,
 // `activeTab`, `selection` and each dot are computed from the records.
 
-import { Compartment, EditorState, type Extension, type StateEffect, type TransactionSpec } from "@codemirror/state";
+import type { Extension, StateEffect, TransactionSpec } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
-import { batch, computed, effect, type ReadonlySignal, type Signal, signal, untracked } from "@preact/signals-core";
+import type { ReadonlySignal, Signal } from "@preact/signals-core";
+import { batch, computed, effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
 import { baseName } from "../files/tree.ts";
 import { fileTurn } from "../files/turns.ts";
@@ -23,8 +25,10 @@ import {
   setRunLines,
   wholeLines,
 } from "./cm.ts";
-import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
-import { editorText, type FileForm, fileText, followRun, formOf, savedForm } from "./ranover.ts";
+import type { MarkChange } from "./errormark.ts";
+import { onLastRun, onRunStart } from "./errormark.ts";
+import type { FileForm } from "./ranover.ts";
+import { editorText, fileText, followRun, formOf, savedForm } from "./ranover.ts";
 
 interface TextPart {
   kind: "text";

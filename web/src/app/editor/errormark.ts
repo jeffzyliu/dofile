@@ -9,7 +9,8 @@
 //    state) clears it;
 //  - a command-line command and a run of another file leave it alone.
 // No DOM (only @codemirror/state's types), so Node tests it. Editor.tsx applies what these answer.
-import { type ChangeSet, MapMode, type Text } from "@codemirror/state";
+import type { ChangeSet, Text } from "@codemirror/state";
+import { MapMode } from "@codemirror/state";
 import type { LastRun, RunHead } from "../types.ts";
 
 /** What to do to the marks: clear none, one file's or all, then set one (the file's path and the run's line). */

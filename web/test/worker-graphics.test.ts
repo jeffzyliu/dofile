@@ -5,7 +5,8 @@
 
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { mock, type TestContext, test } from "node:test";
+import type { TestContext } from "node:test";
+import { mock, test } from "node:test";
 import { format } from "node:util";
 import { brotliCompressSync } from "node:zlib";
 import {

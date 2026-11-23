@@ -8,10 +8,10 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, isPhone, ready, settle, startEngine, test, unblocked } from "../e2e/fixtures";
+import type { PhoneTab } from "../e2e/seed";
 import {
   addBanner,
   openDialog,
-  type PhoneTab,
   seedLastRun,
   seedLog,
   seedStatusBar,
