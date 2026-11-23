@@ -55,8 +55,8 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
    row in the tab order when the tree is shown (`focusTree`), else `focusNow("editor")`. When that moves nothing, the
    close-tab dialog's own hand-back follows (its opener, else `focusStable`).
 7. **A focus request is taken by the render of the component that draws the target.** The action sets a signal (the
-   tree's `focusWanted`, the open-file tabs' `tabAsked` and `closeAsked`, a tablist's own, Find's `findAsked`, the
-   editor's `editorAsked`); the target takes it in a layout effect of its own render (`ui/focus-hooks.ts`
+   tree's `focusWanted`, the open-file tabs' `tabAsked` and `closeAsked`, a tablist's own, Find's `findAsked`; the
+   editor's is the registry's `ask("editor")`); the target takes it in a layout effect of its own render (`ui/focus-hooks.ts`
    `useFocusRequest`, or a plain layout effect where taking it is more than a focus: Go to line, a closed tab), and the
    request ends there, taken or not. No timer stands in for that render: Preact renders the queued components
    shallowest first, so `App` shows a pane, and the dialog host closes its dialog, before a deeper target takes its
@@ -286,7 +286,7 @@ On a phone one view shows at a time, so the Editor pane is often hidden and `foc
 
 ### Tests that hold this
 
-No Node test covers the focus; the rules hold only in a browser.
+`web/test/focus-targets.test.ts` covers the registry and `focusStable`'s order (the stand-in elements); the rest of the rules hold only in a browser.
 
 - `web/e2e/keyboard.spec.ts`: "a tap on the phone's command line focuses it without scrolling the page, …"
 - `web/e2e/states.spec.ts`:
