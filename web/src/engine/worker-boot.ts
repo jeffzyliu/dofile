@@ -45,7 +45,7 @@ type StageOf = (id: Stage) => void;
 export type GraphicsArgs = NonNullable<BootArgs["graphics"]>;
 /** Where the graphics part is and how to unpack it, from `mount`, for boot's fetch of it without a shared buffer. */
 export type PartSource = {
-  snapshotBase: string; // mount's `snapshot`
+  snapshotURL: string; // mount's `snapshot`
   built: number; // names the snapshot's Cache
   brotliWasm: BrotliWasmType | null;
   brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
@@ -321,11 +321,11 @@ export async function startPython(
 async function writePartAtStart(
   py: SnapshotPy,
   file: SnapshotFile,
-  { snapshotBase, built, brotliWasm, brotliMode }: PartSource,
+  { snapshotURL, built, brotliWasm, brotliMode }: PartSource,
 ): Promise<void> {
   const t0 = performance.now();
-  const url = `${snapshotBase}${file.name}`;
-  const isFile = snapshotBase.startsWith("file:"); // Node, the tests: no Cache API by design
+  const url = `${snapshotURL}${file.name}`;
+  const isFile = snapshotURL.startsWith("file:"); // Node, the tests: no Cache API by design
 
   // a refusal was said already, by mount's read of the heap
   const cache = isFile

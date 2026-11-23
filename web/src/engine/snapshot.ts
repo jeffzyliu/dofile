@@ -391,7 +391,7 @@ export function hasNativeBrotli() {
 }
 
 /** `inflate` with the native decoder. */
-export async function inflateNative(input: Uint8Array<ArrayBuffer>, rawSize: number): Promise<Uint8Array> {
+export async function unpackNative(input: Uint8Array<ArrayBuffer>, rawSize: number): Promise<Uint8Array> {
   const out = new Uint8Array(rawSize);
   const reader = new Blob([input])
     .stream()
@@ -451,7 +451,7 @@ export async function unpackAsync(
 ): Promise<[Uint8Array, "native" | "wasm" | "none"]> {
   if (native && bytes.length === file.size && bytes.length !== file.raw) {
     try {
-      return [await inflateNative(bytes, file.raw), "native"];
+      return [await unpackNative(bytes, file.raw), "native"];
     } catch (e: any) {
       console.warn(`[dofile] native brotli failed (${e?.message ?? e}); using brotli-wasm`);
     }

@@ -239,7 +239,7 @@ estimated splits) are the study's, not checked again here.
   `makeSnapshot`, the `zero*` pair, `bundle`, `packGraphics` and `isDeadWeight` share a module with the runtime codec and
   the page's Cache helpers, and some size checks are written twice. The build-only helpers are imported only by
   `scripts/make-snapshot.ts` and `test/snapshot.test.ts`. Left because it is not graphics state, so R1 does not need it,
-  and the runtime half (`hasNativeBrotli`, `inflateNative`, `unpackSteps`, `writeGraphics`) is imported by `worker.ts`'s
+  and the runtime half (`hasNativeBrotli`, `unpackNative`, `unpackSteps`, `writeGraphics`) is imported by `worker.ts`'s
   graphics section, which R1 owns: a split must not run while that section changes. Taken by W1 (the sweep of
   `src/engine/`) after R1. 2026-11-22.
 

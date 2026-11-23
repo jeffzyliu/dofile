@@ -1333,7 +1333,7 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
   assert.deepEqual(page.header(), [0, 0, 1], "pending at once, one more try");
   await f.release();
   await until(() => page.states.at(-1) === "failed", "failed again");
-  assert.equal(page.header()[2], 1, "the try a waiting graph asked for has failed: tries moved on from its askedAt");
+  assert.equal(page.header()[2], 1, "the try a waiting graph asked for has failed: tries moved on from its askedOn");
   assert.match(reason(), /could not be downloaded/);
   await sleep(5);
   online.shift()!(); // back online

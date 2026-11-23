@@ -213,10 +213,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   `readPart` sees it (the bytes only when asked for; an empty reason never read back empty), and the header's layout
   (state, length, copy, counter) and size.
 - `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
-  does (Break, write, decode, ask again once per run, a final failure with its reason, wait, also on a
+  does (Break, write, unpack, ask again once per run, a final failure with its reason, wait, also on a
   busy read); races 1 to 3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy,
-  never the empty reason (the answer for written); and when the browser's own decoder is used (never when mount forces
-  brotli-wasm; not on the copy it failed on, again on a fresh one).
+  never the empty reason (the answer for written); when the browser's own decoder is used (never when mount forces
+  brotli-wasm; not on the copy it failed on, again on a fresh one); the native gate (started, no unpack, none under way,
+  no damage to say, and only then a read: a landed, brotli-sized copy, or a read without the bytes on its copy); and
+  what an idle step does (a run in flight, IDLE_MS of idle, then by the unpack's phase; with none, the native gate or
+  brotli-wasm, nothing on a busy or unlanded read).
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
 - `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one

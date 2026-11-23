@@ -2,9 +2,12 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PartRead } from "../src/engine/lazy-part.ts";
+import type { PartRead, PartWork, UnpackPhase } from "../src/engine/lazy-part.ts";
 import {
   failPart,
+  IDLE_MS,
+  idleStep,
+  nativeGate,
   PART_HEADER,
   partReason,
   partRegion,
@@ -16,7 +19,7 @@ import {
 import type { SeqRead, SeqReader } from "../src/engine/seqlock.ts";
 import { readSeq } from "../src/engine/seqlock.ts";
 
-const idle = { interrupted: false, decoded: false, decoding: false, askedAt: null };
+const idle = { interrupted: false, unpacked: false, unpacking: false, askedOn: null };
 const offline = partReason("offline");
 // a read that counts how often it is made
 const reader = (part: PartRead) => {
@@ -34,20 +37,20 @@ const landed = (copy = 0): PartRead => ({ state: "landed", copy, bytes: null });
 const pending = (copy = 0): PartRead => ({ state: "pending", copy });
 const failed = (copy = 0): PartRead => ({ state: "failed", copy, reason: offline });
 
-test("waitStep: a Break comes first, then a decoded part is written, then a decode goes on; none of them reads the part", () => {
+test("waitStep: a Break comes first, then an unpacked part is written, then an unpack goes on; none of them reads the part", () => {
   const r = reader(landed());
-  assert.equal(waitStep({ ...idle, interrupted: true, decoded: true, decoding: true }, r.read), "break");
-  assert.equal(waitStep({ ...idle, decoded: true, decoding: true }, r.read), "write");
-  assert.equal(waitStep({ ...idle, decoding: true }, r.read), "decode-more");
+  assert.equal(waitStep({ ...idle, interrupted: true, unpacked: true, unpacking: true }, r.read), "break");
+  assert.equal(waitStep({ ...idle, unpacked: true, unpacking: true }, r.read), "write");
+  assert.equal(waitStep({ ...idle, unpacking: true }, r.read), "unpack-more");
   assert.equal(r.reads, 0, "the part (a copy of up to 33 MB) is not read");
 });
 
-test("waitStep: a part that landed is decoded; one that is pending, or a busy read, waits", () => {
+test("waitStep: a part that landed is unpacked; one that is pending, or a busy read, waits", () => {
   const r = reader(landed());
-  assert.equal(waitStep(idle, r.read), "decode");
+  assert.equal(waitStep(idle, r.read), "unpack");
   assert.equal(r.reads, 1);
   assert.equal(waitStep(idle, readOf(pending())), "wait");
-  assert.equal(waitStep({ ...idle, askedAt: 3 }, readOf(pending(4))), "wait");
+  assert.equal(waitStep({ ...idle, askedOn: 3 }, readOf(pending(4))), "wait");
   assert.equal(
     waitStep(idle, () => ({ seq: 7, busy: true })),
     "wait",
@@ -56,14 +59,14 @@ test("waitStep: a part that landed is decoded; one that is pending, or a busy re
 });
 
 test("waitStep: a failed part is asked for again once per run; that fetch's failure (the copy moved on) is final, with its reason", () => {
-  assert.equal(waitStep(idle, readOf(failed(2))), "ask-again", "first: ask the page (askedAt := 2)");
-  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(failed(2))), "wait", "the page has not begun");
+  assert.equal(waitStep(idle, readOf(failed(2))), "ask-again", "first: ask the page (askedOn := 2)");
+  assert.equal(waitStep({ ...idle, askedOn: 2 }, readOf(failed(2))), "wait", "the page has not begun");
   assert.deepEqual(
-    waitStep({ ...idle, askedAt: 2 }, readOf(failed(3))),
+    waitStep({ ...idle, askedOn: 2 }, readOf(failed(3))),
     { giveUp: offline },
     "the asked-for fetch failed",
   );
-  assert.equal(waitStep({ ...idle, askedAt: 2 }, readOf(pending(3))), "wait", "the asked-for fetch is on its way");
+  assert.equal(waitStep({ ...idle, askedOn: 2 }, readOf(pending(3))), "wait", "the asked-for fetch is on its way");
 });
 
 test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed part gives a whole snapshot or busy, never the reason "" (the answer for written)', () => {
@@ -101,7 +104,7 @@ test('races 1 to 3: a page retry anywhere inside a graph\'s read of a failed par
           ),
         waitMs,
       );
-      const step = waitStep({ ...idle, askedAt: 0 }, () => read);
+      const step = waitStep({ ...idle, askedOn: 0 }, () => read);
 
       const where = `retry after read ${after}, waitMs ${waitMs}`;
       assert.ok(readCount >= after, `${where}: the retry was made`);
@@ -125,4 +128,83 @@ test("useNative: after the native decoder failed on a copy, that copy goes to br
   assert.equal(useNative(undefined, true, 0, 0), false, "the copy it failed on");
   assert.equal(useNative(undefined, true, 0, 1), true, "the page fetched it again (or the worker did)");
   assert.equal(useNative(undefined, false, 0, 1), false, "still only where there is a native decoder");
+});
+
+// The part's work for the native gate and the idle step: brotli-sized is 4 bytes of a 10-byte part; the native decoder
+// failed on copy 9.
+const work: PartWork = {
+  started: true,
+  phase: "none",
+  native: false,
+  damage: false,
+  useNative: (copy) => copy !== 9,
+  file: { size: 4, raw: 10 },
+};
+const landedBytes = (n: number, copy = 0): PartRead => ({ state: "landed", copy, bytes: new Uint8Array(n) });
+
+test("nativeGate: started, nothing unpacked or under way, no damage to say; else the part is not read", () => {
+  const r = reader(landedBytes(4));
+  assert.deepEqual(nativeGate(work, r.read), landedBytes(4));
+  assert.equal(r.reads, 1);
+  const closed: [string, Partial<PartWork>][] = [
+    ["before startup is answered", { started: false }],
+    ["the browser's decoder is under way", { native: true }],
+    ["damage not yet said", { damage: true }],
+    ...(["unpacking", "unpacked", "written", "warming", "warmed"] as UnpackPhase[]).map(
+      (phase): [string, Partial<PartWork>] => [phase, { phase }],
+    ),
+  ];
+  for (const [why, flags] of closed) {
+    const shut = reader(landedBytes(4));
+    assert.equal(nativeGate({ ...work, ...flags }, shut.read), null, why);
+    assert.equal(shut.reads, 0, `${why}: not read`);
+  }
+});
+
+test("nativeGate: only a landed, brotli-sized copy the decoder has not failed on; a read without the bytes passes on its copy", () => {
+  assert.equal(
+    nativeGate(work, () => ({ seq: 3, busy: true })),
+    null,
+    "busy",
+  );
+  assert.equal(nativeGate(work, readOf(pending())), null, "pending");
+  assert.equal(nativeGate(work, readOf(failed())), null, "failed");
+  assert.equal(nativeGate(work, readOf(landedBytes(4, 9))), null, "the copy the decoder failed on");
+  assert.deepEqual(nativeGate(work, readOf(landedBytes(4, 10))), landedBytes(4, 10), "a fresh copy after it");
+  assert.equal(nativeGate(work, readOf(landedBytes(3))), null, "not the compressed size");
+  assert.equal(nativeGate({ ...work, file: { size: 4, raw: 4 } }, readOf(landedBytes(4))), null, "stored, not brotli");
+  assert.deepEqual(nativeGate(work, readOf(landed())), landed(), "without the bytes: the copy decides");
+  assert.equal(nativeGate(work, readOf(landed(9))), null, "without the bytes, the failed copy");
+});
+
+test("idleStep: a run in flight, then IDLE_MS of idle, then the phase decides; none of them reads the part", () => {
+  const at = { ...work, runsInFlight: 0, idleFor: IDLE_MS };
+  const r = reader(landedBytes(4));
+  assert.equal(idleStep({ ...at, runsInFlight: 1, phase: "unpacked" }, r.read), "run");
+  assert.equal(idleStep({ ...at, idleFor: IDLE_MS - 1, phase: "unpacked" }, r.read), "later");
+  const byPhase: [UnpackPhase, string][] = [
+    ["unpacked", "write"],
+    ["unpacking", "unpack-more"],
+    ["written", "warm"],
+    ["warming", "warm"],
+    ["warmed", "none"],
+  ];
+  for (const [phase, step] of byPhase) assert.equal(idleStep({ ...at, phase }, r.read), step, phase);
+  assert.equal(r.reads, 0, "the part (a copy of up to 33 MB) is not read");
+});
+
+test("idleStep: with nothing unpacked, a landed copy goes to the native gate when it fits, else to brotli-wasm", () => {
+  const at = { ...work, runsInFlight: 0, idleFor: IDLE_MS };
+  assert.equal(idleStep(at, readOf(landedBytes(4))), "native");
+  assert.equal(idleStep({ ...at, native: true }, readOf(landedBytes(4))), "native", "the gate, not a second unpack");
+  assert.equal(idleStep(at, readOf(landedBytes(4, 9))), "unpack", "the copy the decoder failed on");
+  assert.equal(idleStep(at, readOf(landedBytes(3))), "unpack", "not brotli-sized: brotli-wasm says what is wrong");
+  assert.equal(idleStep({ ...at, useNative: () => false }, readOf(landedBytes(4))), "unpack", "no native decoder");
+  assert.equal(
+    idleStep(at, () => ({ seq: 1, busy: true })),
+    "none",
+    "busy",
+  );
+  assert.equal(idleStep(at, readOf(pending())), "none");
+  assert.equal(idleStep(at, readOf(failed())), "none");
 });
