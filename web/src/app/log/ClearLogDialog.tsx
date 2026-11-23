@@ -2,12 +2,12 @@
 // streaming run's text item.
 
 import { clearLog } from "../run.ts";
-import { dialog } from "../state.ts";
+import { closeDialog } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 
 const close = () => {
-  dialog.value = null;
+  closeDialog();
 };
 
 export function ClearLogDialog(_: { dialog: DialogOf<"clear-log"> }) {

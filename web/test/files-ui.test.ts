@@ -36,9 +36,9 @@ async function reset(files: Record<string, string | Uint8Array> = {}) {
     await store.write(path, typeof data === "string" ? enc(data) : data);
   await refresh();
   for (const t of D.tabs.value) D.close(t.path);
-  S.dialog.value = null;
+  S.closeDialog();
   S.layout.value = "desktop";
-  S.phoneTab.value = "files";
+  S.showPhone("files");
   S.outputTab.value = "data";
   S.closeFullSize();
   for (const b of S.banners.value) S.dismiss(b);
@@ -177,13 +177,13 @@ test("openFile on a phone shows the Editor view for a text or .dta tab; a .png g
   S.layout.value = "phone";
   await openFile("a.do");
   assert.equal(S.phoneTab.value, "editor");
-  S.phoneTab.value = "files";
+  S.showPhone("files");
   await openFile("data/w.dta");
   assert.equal(S.phoneTab.value, "editor");
   assert.deepEqual(D.tabs.value.at(-1), { path: "data/w.dta", kind: "dta", dirty: false });
   assert.equal(D.activeTab.value, "data/w.dta");
   assert.equal(D.stateOf("data/w.dta"), undefined, "a .dta tab has no document");
-  S.phoneTab.value = "files";
+  S.showPhone("files");
   await openFile("out/g.png");
   assert.equal(S.graphFull.value, true);
   assert.equal(S.phoneTab.value, "files", "a graph is no tab");
@@ -385,7 +385,7 @@ function answering(answers: ClashAnswer[]) {
     const now = Up.clashNow();
     store.list().then((l) => {
       seen.push({ dialog: d, now, inStore: l.map((f) => f.path).sort() });
-      S.dialog.value = null;
+      S.closeDialog();
       Up.answerClash(answers.shift() ?? "stop");
     });
   });
@@ -656,7 +656,7 @@ const until = async (ok: () => boolean, what: string) => {
 const clashOf = () => (S.dialog.value?.d === "clash" ? S.dialog.value.path : null);
 /** The clash dialog's answer, as ClashDialog gives it: it closes, then answers. */
 const give = (a: ClashAnswer) => {
-  S.dialog.value = null;
+  S.closeDialog();
   Up.answerClash(a);
 };
 
@@ -683,11 +683,11 @@ test("a second upload waits for the first: it writes nothing and asks nothing un
 
 test("a clash never replaces another dialog: it waits until that one has closed", async () => {
   await reset({ "a.do": "old a" });
-  S.dialog.value = { d: "download" };
+  S.openDialog({ d: "download" });
   const done = Up.upload([{ path: "a.do", data: enc("new a") }]);
   await sleep(30);
   assert.deepEqual(S.dialog.value, { d: "download" });
-  S.dialog.value = null;
+  S.closeDialog();
   await until(() => clashOf() === "a.do", "the clash is asked once the other dialog has closed");
   give("stop");
   assert.deepEqual(await done, []);
@@ -698,11 +698,11 @@ test("another dialog put in the clash's place with no answer keeps yours for eve
   await reset({ "a.do": "old a", "b.do": "old b" });
   const done = Up.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "the clash is asked");
-  S.dialog.value = { d: "other-tab" }; // as the engine controller does when another tab takes the engine
+  S.openDialog({ d: "other-tab" }); // as the engine controller does when another tab takes the engine
   assert.deepEqual(await done, ["y.do"]);
   assert.deepEqual(S.dialog.value, { d: "other-tab" }, "the upload's end leaves the other dialog open");
   assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
-  S.dialog.value = null;
+  S.closeDialog();
   assert.deepEqual(await Up.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload is not held up");
 });
 
@@ -753,11 +753,11 @@ test("another dialog put in the place of a clash, with an unsaved file's clash a
   edit("b.do");
   const done = Up.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "the clash is asked");
-  S.dialog.value = { d: "other-tab" }; // another tab took the engine
+  S.openDialog({ d: "other-tab" }); // another tab took the engine
   assert.deepEqual(await done, ["y.do"], "it does not wait for the other dialog to ask about b.do");
   assert.deepEqual(S.dialog.value, { d: "other-tab" });
   assert.deepEqual(await Up.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload runs");
-  S.dialog.value = null;
+  S.closeDialog();
   await sleep(30);
   assert.equal(S.dialog.value, null, "no clash is asked once the other dialog has closed");
   assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
@@ -1017,14 +1017,14 @@ test("a clash waits again for a dialog opened while its file was read: it never 
   try {
     give({ replace: false, isForRest: false });
     await sleep(10);
-    S.dialog.value = { d: "delete", paths: ["x.do"] };
+    S.openDialog({ d: "delete", paths: ["x.do"] });
     release();
     await sleep(30);
     assert.deepEqual(S.dialog.value, { d: "delete", paths: ["x.do"] }, "the other dialog stays");
   } finally {
     store.read = read;
   }
-  S.dialog.value = null;
+  S.closeDialog();
   await until(() => clashOf() === "b.do", "b is asked once it has closed");
   give("stop");
   assert.deepEqual(await done, []);
@@ -1036,7 +1036,7 @@ test("rename: a .dta tab renamed to .csv opens again as text in its place; an un
   await reset({ "a.do": "1", "w.dta": "a,b\n1,2\n", "c.do": "3" });
   for (const p of ["a.do", "w.dta", "c.do"]) await openFile(p);
   D.activate("a.do");
-  S.phoneTab.value = "files";
+  S.showPhone("files");
   await Ops.renameEntry("w.dta", "w.csv");
   assert.deepEqual(
     D.tabs.value.map((t) => [t.path, t.kind]),

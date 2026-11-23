@@ -53,7 +53,7 @@ async function empty() {
   await refresh();
   memory.clear();
   for (const t of D.tabs.value) D.close(t.path);
-  S.dialog.value = null;
+  S.closeDialog();
   S.layout.value = "desktop";
   for (const b of S.banners.value) S.dismiss(b);
 }
@@ -117,7 +117,7 @@ function answering(answers: ClashAnswer[]) {
     if (d?.d !== "clash") return;
     seen.push({ dialog: d, words: clashNow()?.words });
     queueMicrotask(() => {
-      S.dialog.value = null;
+      S.closeDialog();
       answerClash(answers.shift() ?? "stop");
     });
   });

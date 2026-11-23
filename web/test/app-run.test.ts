@@ -520,3 +520,32 @@ test("the full-size view opens and closes through its owner's functions", () => 
   S.closeFullSize();
   assert.equal(S.graphFull.value, false);
 });
+
+test("openDialog shows a dialog in the place of the open one; closeDialog closes any, or only its own (a kind or the object)", () => {
+  assert.equal(S.closeDialog(), false, "none open: nothing closed");
+  const download = { d: "download" } as const;
+  S.openDialog(download);
+  assert.equal(S.dialog.value, download);
+  assert.equal(S.closeDialog("reset"), false, "another kind: stays");
+  assert.equal(S.closeDialog({ d: "download" }), false, "another object of the same kind: stays");
+  assert.equal(S.dialog.value, download);
+  assert.equal(S.closeDialog(download), true, "its own object");
+  assert.equal(S.dialog.value, null);
+  const first = { d: "clash", path: "a.do", index: 1, total: 2 } as const;
+  const second = { d: "clash", path: "b.do", index: 2, total: 2 } as const;
+  S.openDialog(first);
+  S.openDialog(second);
+  assert.equal(S.closeDialog(first), false, "replaced meanwhile: the new one stays open");
+  assert.equal(S.dialog.value, second);
+  assert.equal(S.closeDialog("clash"), true, "its own kind");
+  S.openDialog({ d: "reset" });
+  assert.equal(S.closeDialog(), true, "no argument: whatever is open");
+  assert.equal(S.dialog.value, null);
+});
+
+test("showPhone shows a view of the phone's bottom bar", () => {
+  for (const tab of ["files", "log", "data", "results", "editor"] as const) {
+    S.showPhone(tab);
+    assert.equal(S.phoneTab.value, tab);
+  }
+});

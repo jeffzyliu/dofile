@@ -404,7 +404,7 @@ test("an empty or partial cache asks; the lock lost while the cache check is pen
   assert.deepEqual(S.engine.value, { s: "asking" });
   assert.equal(client.downloads.length, 0, "nothing downloads before the visitor says so");
 
-  S.dialog.value = null;
+  S.closeDialog();
   const answer = later<boolean>();
   await load({ cached: answer });
   assert.deepEqual(S.engine.value, { s: "checking-cache" });

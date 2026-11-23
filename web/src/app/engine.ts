@@ -354,11 +354,10 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock, handles: Ha
       case "engine-gone":
         return runs.engineGone();
       case "show-dialog":
-        S.dialog.value = { d: effect.dialog };
+        S.openDialog({ d: effect.dialog });
         return;
       case "close-dialog":
-        if (S.dialog.value?.d !== effect.dialog) return;
-        S.dialog.value = null;
+        if (!S.closeDialog(effect.dialog)) return;
         // the page is inert while a dialog is open: the editor takes the focus from the render that removed it
         if (effect.focusEditor) askFocus("editor", { from: fromAnywhere });
         return;

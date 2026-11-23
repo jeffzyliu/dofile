@@ -3,7 +3,7 @@
 // are never clipped. The phone hides the Log head, so the same logMenuItems() are the "Log ⋯" button in its strip.
 import { saveAs } from "../files/save.ts";
 import { canClearLog } from "../run.ts";
-import { dialog, log } from "../state.ts";
+import { log, openDialog } from "../state.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem } from "../ui/Menu";
 import { plainLog } from "./classify.ts";
@@ -15,7 +15,7 @@ function downloadLog() {
 
 /** Asks first (ClearLogDialog): the log and the graphs cannot be brought back. */
 const askClearLog = () => {
-  dialog.value = { d: "clear-log" };
+  openDialog({ d: "clear-log" });
 };
 
 export const LogActions = () => (

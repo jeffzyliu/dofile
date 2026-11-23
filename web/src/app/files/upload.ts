@@ -5,7 +5,7 @@ import { effect } from "@preact/signals-core";
 import { type Expect, isConflict } from "../../engine/store.ts";
 import { CONTROL } from "../../stata/quote.ts";
 import { close, reload, tabs } from "../editor/documents.ts";
-import { dialog, showToast } from "../state.ts";
+import { closeDialog, dialog, openDialog, showToast } from "../state.ts";
 import type { Dialog, FileInfo } from "../types.ts";
 import { decodeText } from "./open.ts";
 import { SequentialPromiseQueue } from "./sequential-promise-queue.ts";
@@ -216,7 +216,7 @@ async function uploadNow(items: Incoming[], words: WordsOf): Promise<string[]> {
       changedWhileAsked = true; // the file found instead of the one expected: asked again
     }
   }
-  if (lastClashDialog !== null && dialog.value === lastClashDialog) dialog.value = null;
+  if (lastClashDialog !== null) closeDialog(lastClashDialog);
   if (words === "sample") {
     if (failedCount) showToast("Couldn't restore the sample", "error");
     else if (writtenPaths.length) showToast("Sample restored");
@@ -242,7 +242,7 @@ async function askClash(
   const shown: Dialog = { d: "clash", path: clash.path, index: index + 1, total: clashCount };
   const answer = await new Promise<ClashAnswer>((resolve) => {
     answerWith = resolve;
-    dialog.value = shown;
+    openDialog(shown);
     // another dialog put in its place (another tab took the engine), with no answer: Esc's meaning. Here, not only
     // in the view, so an upload never waits for an answer that cannot come (the uploads after it would wait too).
     const stop = effect(() => {

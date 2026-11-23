@@ -24,7 +24,7 @@ export const showEngine = (page: Page, engine: EngineSeed, dialog?: Dialog) =>
   page.evaluate(
     (v) => {
       (window.__dofile.state.engine as Writable<"engine">).value = v.engine as EngineState;
-      if (v.dialog) window.__dofile.state.dialog.value = v.dialog;
+      if (v.dialog) window.__dofile.state.openDialog(v.dialog);
     },
     { engine, dialog },
   );
@@ -34,7 +34,7 @@ export const showPhoneTab = (page: Page, tab: PhoneTab, also: { toast?: string; 
   page.evaluate(
     (v) => {
       const S = window.__dofile.state;
-      S.phoneTab.value = v.tab;
+      S.showPhone(v.tab);
       if (v.also.engine) (S.engine as Writable<"engine">).value = v.also.engine as EngineState;
       if (v.also.toast !== undefined) S.showToast(v.also.toast);
     },
@@ -57,12 +57,12 @@ export const showUnsplitOutput = (page: Page, tab: "graph" | "log") =>
 
 export const openDialog = (page: Page, dialog: Dialog) =>
   page.evaluate((d) => {
-    window.__dofile.state.dialog.value = d;
+    window.__dofile.state.openDialog(d);
   }, dialog);
 
 export const closeDialog = (page: Page) =>
   page.evaluate(() => {
-    window.__dofile.state.dialog.value = null;
+    window.__dofile.state.closeDialog();
   });
 
 export const showToast = (page: Page, text: string) => page.evaluate((t) => window.__dofile.state.showToast(t), text);
@@ -132,7 +132,7 @@ export const showTabs = (page: Page, tabs: Tabs, active: string | null, phoneTab
   page.evaluate(
     (v) => {
       window.__dofile.documents.showTabs(v.tabs, v.active);
-      if (v.phoneTab) window.__dofile.state.phoneTab.value = v.phoneTab;
+      if (v.phoneTab) window.__dofile.state.showPhone(v.phoneTab);
     },
     { tabs, active, phoneTab },
   );
@@ -146,7 +146,7 @@ export const seedEditorBox = (
   page.evaluate(
     (v) => {
       const d = window.__dofile;
-      d.state.dialog.value = null;
+      d.state.closeDialog();
       (d.state.engine as Writable<"engine">).value = v.engine as EngineState;
       d.documents.showTabs(v.tabs, v.active, v.selection?.[1] ?? 1);
       d.documents.selectLines(v.selection);

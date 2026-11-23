@@ -3,19 +3,19 @@
 // reset while the dialog is open (it failed, another tab took it), the dialog closes itself.
 import { useEffect } from "preact/hooks";
 import * as eng from "../engine.ts";
-import { dialog, engine, engineRuns } from "../state.ts";
+import { closeDialog, engine, engineRuns, openDialog } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { engineUp } from "./predicates.ts";
 import { resetAsks } from "./words.ts";
 
 export function askReset() {
-  if (resetAsks(engine.value.s, engineRuns.value)) dialog.value = { d: "reset" };
+  if (resetAsks(engine.value.s, engineRuns.value)) openDialog({ d: "reset" });
   else eng.reset();
 }
 
 const close = () => {
-  if (dialog.value?.d === "reset") dialog.value = null;
+  closeDialog("reset");
 };
 
 export function ResetDialog(_: { dialog: DialogOf<"reset"> }) {

@@ -10,7 +10,7 @@
 
 import * as eng from "../engine.ts";
 import { startEngine, startOffer } from "../start.ts";
-import { engine, isolated, phoneTab, showToast } from "../state.ts";
+import { engine, isolated, showPhone, showToast } from "../state.ts";
 import { engineStarting, otherTab, runOn, takesRun } from "../states/predicates.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";
@@ -234,7 +234,7 @@ export function PhoneRun() {
         onClick={() => {
           if (Date.now() - st.t0 < 600) return;
           pressBreak();
-          phoneTab.value = "log"; // Break's countdown, "wait for it" and the outcome show in the Log view
+          showPhone("log"); // Break's countdown, "wait for it" and the outcome show in the Log view
         }}
       >
         <Labels at={RUN.length + 1 + BREAK.indexOf(brk.label)} labels={all} />

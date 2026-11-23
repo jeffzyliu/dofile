@@ -3,7 +3,7 @@
 import { signal } from "@preact/signals";
 import { useRef } from "preact/hooks";
 import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
-import { phoneTab } from "../state.ts";
+import { showPhone } from "../state.ts";
 import type { OpenTab } from "../types.ts";
 import { useFocusRequest, useFocusTarget } from "../ui/focus-hooks.ts";
 import { fromNothing } from "../ui/focus-targets.ts";
@@ -152,7 +152,7 @@ const switcherItems = (): MenuItem[] => {
     {
       label: "Show all files",
       onSelect: () => {
-        phoneTab.value = "files";
+        showPhone("files");
       },
     },
   ];

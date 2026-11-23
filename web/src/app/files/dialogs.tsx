@@ -5,7 +5,7 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
 import { close as closeTab, save as saveTab } from "../editor/documents.ts";
 import { refresh } from "../files.ts";
-import { dialog, files } from "../state.ts";
+import { closeDialog, dialog, files } from "../state.ts";
 import type { DialogOf } from "../types.ts";
 import { Dialog } from "../ui/Dialog";
 import { focusAfterClose } from "./close-focus.ts";
@@ -15,7 +15,7 @@ import { focusTree } from "./tree-state.ts";
 import { answerClash, type ClashAnswer, clashNow, WORDS } from "./upload.ts";
 
 const close = () => {
-  dialog.value = null;
+  closeDialog();
 };
 
 /** Run `cancel` when the view is unmounted before it answered. Returns `answered()`, to call when it answers. A layout

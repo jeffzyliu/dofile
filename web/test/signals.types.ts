@@ -11,8 +11,5 @@ type Flags = { [K in keyof typeof S]: "value" extends keyof (typeof S)[K] ? Writ
 type WritableSignals = { [K in keyof Flags]: Flags[K] extends true ? K : never }[keyof Flags];
 
 export type OnlyTheViewsOwnSignalsAreWritable = Expect<
-  Same<
-    WritableSignals,
-    "dialog" | "split" | "outputTab" | "phoneTab" | "pickedVar" | "theme" | "wrap" | "layout" | "isolated"
-  >
+  Same<WritableSignals, "split" | "outputTab" | "pickedVar" | "theme" | "wrap" | "layout" | "isolated">
 >;

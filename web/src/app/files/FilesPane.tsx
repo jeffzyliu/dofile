@@ -4,7 +4,7 @@ import { useRef } from "preact/hooks";
 import { activeTab } from "../editor/documents.ts";
 import { downloadAll } from "../files.ts";
 import { restoreSample } from "../sample.ts";
-import { dialog, files, hasFiles } from "../state.ts";
+import { files, hasFiles, openDialog } from "../state.ts";
 import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem } from "../ui/Menu";
@@ -43,7 +43,7 @@ export const fileMenuItems = (): MenuItem[] => [
     danger: true,
     disabled: !hasFiles.value,
     onSelect: () => {
-      dialog.value = { d: "delete-all", count: files.value.filter((f) => !f.dir).length };
+      openDialog({ d: "delete-all", count: files.value.filter((f) => !f.dir).length });
     },
   },
 ];
