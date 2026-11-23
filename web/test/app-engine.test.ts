@@ -83,6 +83,22 @@ test("with nothing cached the page asks; Download counts bytes, the stages come 
   assert.deepEqual(client.calls.at(-1), ["memory", undefined]);
 });
 
+test("the machine's close-dialog closes its own dialog only: a dialog that replaced it stays, and the editor is not asked for the focus", async () => {
+  setUp({});
+  engine.open();
+  await tick();
+  engine.start();
+  state("downloading");
+  client.dl.done.ok(DONE);
+  await tick();
+  S.openDialog({ d: "other-tab" }); // took the place of the download dialog
+  const before = focusRequest.value;
+  client.worker.reply({ type: "started" }); // the machine closes the download dialog and asks for the editor's focus
+  assert.deepEqual(S.engine.value, { s: "ready" });
+  assert.deepEqual(S.dialog.value, { d: "other-tab" });
+  assert.equal(focusRequest.value, before);
+});
+
 test("start files all cached: the page starts with no dialog; ?snapshot=0 has no list and starts at Python", async () => {
   await load({ cached: true });
   state("downloading");

@@ -1326,7 +1326,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
     banners above the editor and the log, and the reset and storage banners (the unused memory banner view was removed in the post-merge review); `DownloadFailedBanner` was built in
     step 3, "Try again" (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d
-    reworded it: "Step 4d: decided words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
+    reworded it: "Step 4d: decided words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Opens the reset dialog (`openDialog`) and closes download and other-tab (`closeDialog(kind)`), `banners` (only `dismiss`). Calls `start`,
     `ask()` (the declined banner's "Start engine" leads back to `asking`, section 5), `decline`,
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
