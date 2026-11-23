@@ -271,7 +271,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
-- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set).
+- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set); `writeStartFiles` leaves neither `manifest.json` nor `stage.json` in the built folder.
+- `stage.test.ts`: `scripts/stage.ts` into a temporary folder (copies, removes an older wheel, writes `stage.json` last) and `staged()`: each of a missing record, another wheel, extra wheel or Pyodide version, and a missing or cut-short file gives a reason that names `npm run stage`.
+- `snapshot-inputs.test.ts`: `scripts/snapshot-inputs.txt`, the one list of the snapshot's inputs (read by `web.yml` and the `build-web` cache key through `snapshot-inputs.sh`): every pathspec matches a tracked file, the shell reader gives the table's lines, the workflows keep no list of their own, and every file `make-snapshot.ts` imports (transitively, runtime imports) is in the `[build]` section.
 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
