@@ -456,7 +456,7 @@ export const table: OpTable = {
         fromSnapshot,
         stage,
         startup,
-        lazyGraphics: (engine, graphics) => {
+        lazyGraphics(engine, graphics) {
           share = { ...graphics, hdr: graphics.sab ? partHeader(graphics.sab) : null };
           engine.lazy_graphics(waitGraphics);
         },
@@ -615,9 +615,11 @@ async function runNow({ code, fresh_locals, plot_theme }: { code: string } & Run
 }
 
 const dispatch = dispatcher(table, {
-  post: (message, transfer) => self.postMessage(message, transfer),
+  post(message, transfer) {
+    self.postMessage(message, transfer);
+  },
   errorOf: errorForPage,
-  afterResult: () => {
+  afterResult() {
     const outOfStep = mirror?.takeOutOfStep();
     if (outOfStep) self.postMessage({ folderError: outOfStep }); // after the run's answer, so the page keeps its result
   },

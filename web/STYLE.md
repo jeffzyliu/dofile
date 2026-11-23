@@ -22,4 +22,5 @@ knowledge (browser quirks, measured numbers, why a simpler way failed) on the li
   syntactic, so an inferred type is not seen). Where it must not be (a cached promise, a promise-like object, a
   deliberate synchronous throw): `// biome-ignore lint/plugin: <reason>`.
 - **In an object literal, a named function is a method** (`async handle(args) { ... }`), not an arrow property
-  (`handle: async (args) => ...`), unless it needs the enclosing `this`. Not checked by a rule.
+  (`handle: async (args) => ...`), unless it needs the enclosing `this`. Not checked by a rule; older files still have arrow
+  properties: convert a file's when you change it.
