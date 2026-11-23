@@ -24,7 +24,7 @@ checks are named `ci / ci ok`, `web / web ok` and `lint / lint ok`.
 
 | Workflow | Trigger | What it runs | Required check | Secrets, variables |
 |---|---|---|---|---|
-| `ci.yml` | pull request; called by `deploy.yml`; by hand | ruff (`poe lint`); `poe ci` on Ubuntu and macOS × Python 3.12, 3.13, 3.14 (a pull request: 3.14 only, as macOS runners are scarce). A pull request that touches none of its files skips the jobs | `ci ok` | none |
+| `ci.yml` | pull request; called by `deploy.yml`; by hand | ruff (`poe lint`); `poe ci` on Ubuntu × Python 3.12, 3.13, 3.14 and macOS × 3.14 (a pull request: 3.14 only on both; macOS runners are scarce). A pull request that touches none of its files skips the jobs | `ci ok` | none |
 | `web.yml` | pull request; called by `deploy.yml`; by hand | `npm run check`, the `commands.json` diff, `npm test`, a production build; Biome strict; e2e, one job per Playwright project (4); the memory snapshot and `check-snapshot`. Same skipping | `web ok` | none |
 | `lint.yml` | pull request; called by `deploy.yml`; by hand | actionlint and shellcheck, when `.github/workflows/`, `.github/actions/` or `.github/scripts/` changed (always on `main`) | `lint ok` | none |
 | `deploy.yml` | push to `main`; by hand (deploys only on `main`) | the three above, then, if all passed and the commit is still the tip of `main`, `build-web`, `wrangler deploy` of both Workers and `scripts/smoke.ts` | none | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; `github.token` (tip check) |

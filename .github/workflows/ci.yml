@@ -69,12 +69,13 @@ jobs:
     if: needs.changes.outputs.code == 'true'   # always 'true' on a push to main
     strategy:
       fail-fast: false
+      # 3.12: floor (OpenDTA's own CI); 3.14: dev default and Pyodide 314's Python. macOS runners are scarce (legs starved
+      # for a runner), so macOS tests 3.14 only; a pull request tests 3.14 only on Ubuntu too; a push to main (deploy.yml
+      # calls this with its push event) and a manual run test Ubuntu on 3.12, 3.13 and 3.14 before a deploy.
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        # 3.12: floor (OpenDTA's own CI); 3.14: dev default and Pyodide 314's Python. A pull request tests 3.14 only (macOS
-        # runners are scarce: legs starved for a runner); a push to main (deploy.yml calls this with its push event) and a
-        # manual run test all three before a deploy.
-        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.14"]' || '["3.12", "3.13", "3.14"]') }}
+        include: ${{ fromJSON(github.event_name == 'pull_request'
+          && '[{"os":"ubuntu-latest","python":"3.14"},{"os":"macos-latest","python":"3.14"}]'
+          || '[{"os":"ubuntu-latest","python":"3.12"},{"os":"ubuntu-latest","python":"3.13"},{"os":"ubuntu-latest","python":"3.14"},{"os":"macos-latest","python":"3.14"}]') }}
     runs-on: ${{ matrix.os }}
     env:
       # poe runs tasks through a nested `uv run`, which would otherwise pick .python-version (3.14)
