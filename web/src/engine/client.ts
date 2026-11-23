@@ -43,6 +43,7 @@ type GraphicsPart = {
   fetch: PartFetch | null; // the fetch on its way: at most one
   fresh: boolean; // the worker found a copy damaged: fetched past the HTTP cache until a copy lands
   damagedCopy: number | null; // the copy the last `damaged` named (the region's then); never cleared: copies only grow
+  listening: boolean; // the part's one `online` listener is set
 };
 /** The graphics part's fetch on its way: whether the Cache missed and it downloads, and the bytes received so far. */
 type PartFetch = { downloading: boolean; received: number };
@@ -430,6 +431,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
         fetch: null,
         fresh: false,
         damagedCopy: null,
+        listening: false,
       };
     }
     return this.#graphics;
@@ -475,9 +477,9 @@ export class EngineClient implements Reader, Lifecycle, Builds {
   }
 
   // A part the worker could not unpack: dropped from the Cache (a reload would read it again) and fetched again. The
-  // copy fetched right after a damaged copy is damaged too: the part fails instead, and only a graph's `again` fetches
-  // it again (the worker's damage is tied to its copy, so without this a part that fails on every copy would be fetched
-  // and unpacked in a loop).
+  // copy fetched right after a damaged copy is damaged too: the part fails instead, and only a graph's `again` or the
+  // browser back online fetches it again (the worker's damage is tied to its copy, so without this a part that fails on
+  // every copy would be fetched and unpacked in a loop).
   #refetchDamaged(part: GraphicsPart): void {
     const region = this.#graphics === part ? part.region : null;
     const now = region && readOwnPart(region);
@@ -493,6 +495,7 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     void this.#uncache(part); // a reload would read it again
     console.warn(`[dofile] graphics part: ${why}`);
     this.#writePart(part, () => failPart(region, partReason(why)));
+    this.#listenOnline(part);
   }
 
   // Deletes the part's copy from the Cache; a Cache that cannot be opened has none to delete.
@@ -549,8 +552,21 @@ export class EngineClient implements Reader, Lifecycle, Builds {
     }
     console.warn(`[dofile] graphics part: ${why}`);
     this.#writePart(part, () => failPart(region, partReason(why)));
-    // back online: fetch it again
-    globalThis.addEventListener?.("online", () => this.#retryGraphics(part), { once: true });
+    this.#listenOnline(part);
+  }
+
+  // A failed part is fetched again when the browser is back online: one listener per part, however often it fails.
+  #listenOnline(part: GraphicsPart): void {
+    if (part.listening || !globalThis.addEventListener) return;
+    part.listening = true;
+    globalThis.addEventListener(
+      "online",
+      () => {
+        part.listening = false;
+        this.#retryGraphics(part);
+      },
+      { once: true },
+    );
   }
 
   async #downloadGraphics(part: GraphicsPart, fetch: PartFetch, fresh: boolean): Promise<Uint8Array<ArrayBuffer>> {

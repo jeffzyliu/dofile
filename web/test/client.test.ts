@@ -1330,8 +1330,8 @@ test("graphics part (decision B): a second damaged copy in a row starts no fetch
   assert.deepEqual(f.modes, ["no-cache", "reload", "reload"], "still past the HTTP cache");
 });
 
-test("graphics part: a failed fetch writes the reason with state failed; the worker's `again` fetches it once more, and so does the browser coming back online", async (t) => {
-  // Node has no window events: a stand-in for addEventListener("online", ..., { once: true })
+// Node has no window events: a stand-in for addEventListener("online", ..., { once: true }). @returns the listeners
+function fakeOnline(t: { after(f: () => void): void }) {
   const online: (() => void)[] = [];
   const had = Object.getOwnPropertyDescriptor(globalThis, "addEventListener");
   Object.defineProperty(globalThis, "addEventListener", {
@@ -1343,6 +1343,44 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
     if (had) Object.defineProperty(globalThis, "addEventListener", had);
     else delete (globalThis as { addEventListener?: unknown }).addEventListener;
   });
+  return online;
+}
+
+test("graphics part: one `online` listener per part: a failure sets it, and again once it has fired, not each failure; decision B's failure sets it too", async (t) => {
+  const online = fakeOnline(t);
+  const caches = fakeCaches();
+  const f = partFetch(["offline", "offline", 3, 4, 5]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  const ended = (state: string, n: number) =>
+    until(() => page.states.at(-1) === state && f.modes.length === n, `fetch ${n} ${state}`);
+
+  await f.release();
+  await ended("failed", 1);
+  page.say("again");
+  await f.release();
+  await ended("failed", 2);
+  assert.equal(online.length, 1, "the second failure adds no listener");
+
+  online.shift()!(); // back online
+  await f.release();
+  await ended("landed", 3);
+  page.say("damaged"); // copy 2
+  await f.release();
+  await ended("landed", 4);
+  page.say("damaged"); // copy 3, fetched right after a damaged copy: decision B
+  assert.equal(page.states.at(-1), "failed");
+  assert.equal(online.length, 1, "decision B's failure waits for the browser too");
+
+  online.shift()!();
+  await f.release();
+  await ended("landed", 5);
+  assert.deepEqual(page.header(), [PART_LANDED, PART.size, 4]);
+});
+
+test("graphics part: a failed fetch writes the reason with state failed; the worker's `again` fetches it once more, and so does the browser coming back online", async (t) => {
+  const online = fakeOnline(t);
   const caches = fakeCaches();
   const f = partFetch(["offline", "offline", 3]);
   const page = lazyPage(f.fetch, caches);
