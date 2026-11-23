@@ -65,15 +65,15 @@ export function focusNow(name: TargetName, key?: string): boolean {
   return hit.el.ownerDocument.activeElement === hit.el;
 }
 
-interface Request {
+interface FocusRequest {
   name: TargetName;
   key: string | undefined;
   from: From;
 }
 
-const waiting = signal<Request | null>(null);
+const waiting = signal<FocusRequest | null>(null);
 /** The one request that waits for its target's next render: a newer request replaces it, whatever its target. */
-export const focusRequest: ReadonlySignal<Request | null> = waiting;
+export const focusRequest: ReadonlySignal<FocusRequest | null> = waiting;
 
 /** Ask `name` to take the focus from its next render, when `from` allows it (useFocusTarget). */
 export function ask(name: TargetName, { key, from }: { key?: string; from: From }) {
