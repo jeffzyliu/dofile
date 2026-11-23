@@ -1,6 +1,5 @@
-// The run's state: the log, the last run, the engine's data (results, macros, data, rows, memory) and the graphs, with the
-// graph shown and the full-size view over it. The writer is app/run.ts, through `runWriter`; the graph pick and the
-// full-size view are written by this module's functions; everything else reads.
+// The run's state: the log, the last run, the engine's data and the graphs. App/run.ts writes through `runWriter`; the graph
+// pick and the full-size view are written by this module's functions.
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
@@ -22,7 +21,7 @@ export const runWriter = {
   graphs: signal<Graph[]>([]), // a run's graphs, and a .png opened from the files; "Clear log" empties
 };
 /** A rename moved the file or folder `from` to `to`: the last run and the log's run heads and ends follow it, so
- *  "Go to line" opens the renamed file, not the old name (which a new file may take). Lives here, not in run.ts, which
+ *  "Go to line" opens the renamed file, not the old name (which a new file may take). Lives here, not in app/run.ts, which
  *  files/ops.ts cannot import (app/run.ts imports app/files.ts). */
 export function runMoved(from: string, to: string) {
   const move = <T extends { path?: string }>(r: T): T =>

@@ -1,6 +1,4 @@
-// The page's layout: the width's choice of desktop or phone, the phone's tab, the Output pane's tab, Split and Wrap lines.
-// The signals are written by this module's functions (and `split`, `outputTab` and `wrap` still by views); the visitor's
-// choices of Split and Wrap are kept in localStorage. No DOM, so a Node test runs them.
+// The page's layout and the visitor's Split and Wrap choices (kept in localStorage). No DOM, so a Node test runs them.
 
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";

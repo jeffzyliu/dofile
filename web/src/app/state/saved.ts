@@ -1,5 +1,4 @@
-// The visitor's choices kept across visits, in localStorage. No signal: the owners (state/layout.ts, theme.ts, sample.ts)
-// read and write it.
+// The visitor's choices kept across visits, in localStorage. No signal.
 
 // localStorage, which a browser may refuse (some private modes) and Node does not have
 export const saved = {
