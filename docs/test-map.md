@@ -207,7 +207,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   without a current snapshot).
 - `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break (also one pressed while the run waits
   behind a describe: rc 1 before its first line; and one after its run ended), a matrix request ahead of, behind and
-  two runs behind other runs (refused when it names older results), a worker that fails to load.
+  two runs behind other runs (refused when it names older results), and after a run whose op failed once the engine ran
+  (a worker whose result will not parse), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).

@@ -287,8 +287,10 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   on the caret copy the whole matrix as tab-separated text; the toast says "Copied e(b)", and a copy that had to read the
   matrix leaves it closed; the icon does not toggle the row. A copy that had to read the matrix, or an open, whose read finds
   that a later run replaced the results (the engine refuses a request that names older results than its latest run's)
-  copies and opens nothing and says so in an error toast: "The results changed: copy again" ("The results changed: open it
-  again" for an open); the visitor presses again (decided by the maintainer, 2026-11-23). A click on a grid cell copies that cell's every digit ("Copied
+  copies and opens nothing and says so in an error toast: "The results changed: copy again" (the maintainer's words,
+  2026-11-23; the capital "T" is for the maintainer to confirm), "The results changed: open it again" for an open (for the
+  maintainer to confirm); the visitor presses again. The engine counts a run when it starts, so a run that fails after the
+  engine ran (its op rejected: the page keeps the old results) refuses the old row until the next run. A click on a grid cell copies that cell's every digit ("Copied
   e(b)[y1, age]": row name, column name); a text selection in the grid is not a click; cells are for mouse and touch, with
   no keyboard navigation (the copy icon covers it). Each cell shows the pointer and tints on hover (`hover: hover`).
 - **Empty** (`S 18`): "No results yet" / "e() and r() appear after an estimation or a command such as `summarize`, with the
@@ -803,7 +805,7 @@ interface FileInfo { path: string; dir: boolean; size: number; mtime: number }  
 
 type Value = number | string | null;             // null: missing "." (or infinity); ".a" to ".z": extended missing
 interface ResultSet { scalars: Record<string, Value>; macros: Record<string, string>; matrices: Record<string, string> }  // "3x3"
-interface Results { runId: number; e: ResultSet; r: ResultSet; e_changed: boolean; r_changed: boolean }  // as `results` in MCP-SCHEMA.md, and `runId`: the worker's count of the runs that gave results (set by the worker, not by Python)
+interface Results { runId: number; e: ResultSet; r: ResultSet; e_changed: boolean; r_changed: boolean }  // as `results` in MCP-SCHEMA.md, and `runId`: the worker's count of its runs, taken when a run starts (set by the worker, not by Python)
 interface RunOptions {
   fresh_locals?: boolean;                        // true: clear the top-level locals first. Default false.
   plot_theme?: "light" | "dark";                 // the style of the PNGs in `images` only; `graph export` files unchanged

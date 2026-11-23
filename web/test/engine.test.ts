@@ -315,6 +315,7 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     assert.equal(r.rc, 1, r.log);
     const after = await runOn(eng, "summarize x");
     assert.equal(after.rc, 0);
+    assert.ok(after.results!.runId > r.results!.runId, "a run stopped by Break has results of its own: it is counted");
     assert.equal(after.nobs, 100);
   });
 

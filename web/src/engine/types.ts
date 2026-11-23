@@ -149,7 +149,7 @@ export interface ResultSet {
   matrices: Record<string, string>;
 } // "3x3"
 export interface Results {
-  /** The worker's number of the run that made these results (it counts those that gave results); the `matrix` op names it. */
+  /** The worker's number of the run that made these results (it counts its runs, when each starts); the `matrix` op names it. */
   runId: number;
   e: ResultSet;
   r: ResultSet;
