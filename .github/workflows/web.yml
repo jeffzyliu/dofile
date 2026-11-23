@@ -186,5 +186,5 @@ jobs:
               | .[] | select((.name | startswith($p)) and (.name | test("(^| / )web ok$") | not)
                 and .conclusion != "success" and .conclusion != "skipped") | .name
         run: |
-          bad=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate --jq "$FILTER")
+          bad=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" --paginate --jq "$FILTER")
           [ -z "$bad" ] || { echo "not green: $bad"; exit 1; }
