@@ -213,6 +213,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     of 4 or less.
   - `?memcap=<MB>` wins both ways, 0 is none, a bad value is ignored and said.
   - The loader patch applies to `pyodide.asm.mjs` once and throws on other text.
+- `run-parts.test.ts`: what the log draws after a run's lines (`log/run-parts.ts`, no DOM): graph links, the unsaved-do
+  note in each layout's words, a phone's hint block and wide-table hint, Go to line, the end notes.
 - `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`).
   - The .log tokenizer, Download log's text, Find's matches, `runError`, a .csv's columns, the run-head words.
   - Where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture`
