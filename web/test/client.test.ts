@@ -9,7 +9,7 @@ import { EngineClient } from "../src/engine/client.ts";
 import { PART_FAILED, PART_HEADER, PART_LANDED } from "../src/engine/lazy-part.ts";
 import type { Answer } from "../src/engine/machine.ts";
 import type { FileStore } from "../src/engine/store.ts";
-import type { StartFiles } from "../src/engine/types.ts";
+import type { GraphicsProgress, StartFiles } from "../src/engine/types.ts";
 import type { FakePort, Message, Post } from "./harness.ts";
 import { fakeWorker, live, runOn, sleep, starts, startWorker } from "./harness.ts";
 
@@ -1229,10 +1229,14 @@ function lazyPage(fetch: Fetch, caches: ReturnType<typeof fakeCaches>) {
     },
   });
   const states: string[] = [];
-  eng.onGraphics((p) => states.push(p.state));
+  const seen: GraphicsProgress[] = [];
+  eng.onGraphics((p) => {
+    states.push(p.state);
+    seen.push(p);
+  });
   const header = () => [...new Int32Array(got.sab!, 0, 3)]; // [state, bytes, tries]
   const say = (graphics: string) => got.port!.onmessage!({ data: { graphics } });
-  return { eng, got, told, states, header, say };
+  return { eng, got, told, states, seen, header, say };
 }
 const partBytes = (sab: SharedArrayBuffer) => new Uint8Array(sab, PART_HEADER, PART.size).slice();
 
@@ -1254,6 +1258,7 @@ test("graphics part: the shared buffer is pending while the part is fetched, the
   assert.ok((await cached(caches)).includes(`snapshot/${PART.name}`), "kept beside the start files");
   await until(() => page.told.length > 0, "the op graphics");
   page.say("again"); // a part that landed is not fetched again
+  assert.deepEqual(page.header(), [1, PART.size, 0], "still the landed copy: no retry");
   await sleep(20);
   assert.equal(f.modes.length, 1);
 });
@@ -1266,7 +1271,6 @@ test("graphics part: the worker says it is damaged: dropped from the Cache, pend
   await startWorker(page.eng, done.build);
   await f.release();
   await until(() => page.states.at(-1) === "landed", "landed");
-  await sleep(5); // the fetch's own end (part.loading)
   page.say("damaged");
   assert.deepEqual(page.header(), [0, 0, 1], "pending at once, one more try");
   await until(() => f.modes.length === 2, "the second fetch");
@@ -1309,7 +1313,6 @@ test("graphics part (decision B): a second damaged copy in a row starts no fetch
   const landings = () => page.states.filter((s) => s === "landed").length;
   await f.release();
   await until(() => landings() === 1, "landed");
-  await sleep(5); // the fetch's own end (part.loading)
   page.say("damaged"); // copy 0
   await f.release();
   await until(() => landings() === 2, "copy 1 landed");
@@ -1355,7 +1358,6 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
   assert.match(reason(), /^the graphics files could not be downloaded \(fetch failed\)/);
   assert.equal(online.length, 1, "a retry waits for the browser to be back online");
   assert.ok(!(await cached(caches)).includes(`snapshot/${PART.name}`));
-  await sleep(5); // the fetch's own end (part.loading)
   page.say("again");
   assert.deepEqual(page.header(), [0, 0, 1], "pending at once, one more try");
   await f.release();
@@ -1370,6 +1372,66 @@ test("graphics part: a failed fetch writes the reason with state failed; the wor
   assert.deepEqual(page.header(), [1, PART.size, 2]);
   assert.deepEqual(partBytes(page.got.sab!), content(PART.size, 3));
   assert.deepEqual(f.modes, ["no-cache", "no-cache", "no-cache"], "a failed fetch is not a damaged copy");
+});
+
+// what the listeners saw, one line each: the state, the bytes received, and the reason's first words when failed
+const progressLines = (seen: GraphicsProgress[]) =>
+  seen.map((p) => `${p.state} ${p.received}/${p.total}${p.error ? `: ${p.error.split(" (")[0]}` : ""}`);
+
+test("graphics part: the progress the listeners see, for a miss with its bytes, a damage, a failed re-fetch, a retry, and a Cache hit on the next page", async () => {
+  const caches = fakeCaches();
+  const f = partFetch([1, "offline", 3]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed");
+  await sleep(5);
+  page.say("damaged");
+  await f.release();
+  await until(() => page.states.at(-1) === "failed", "the re-fetch failed");
+  await sleep(5);
+  page.say("again");
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "landed again");
+  const n = String(PART.size);
+  assert.deepEqual(progressLines(page.seen), [
+    `pending 0/${n}`, // download(): the dialog shows the part's size
+    `fetching 0/${n}`, // the Cache missed
+    `fetching ${n}/${n}`,
+    `landed ${n}/${n}`,
+    `pending 0/${n}`, // damaged: fetched again
+    `fetching 0/${n}`, // the damaged copy was dropped from the Cache
+    `failed 0/${n}: the graphics files could not be downloaded`,
+    `pending 0/${n}`, // the worker's again
+    `fetching 0/${n}`,
+    `fetching ${n}/${n}`,
+    `landed ${n}/${n}`,
+  ]);
+  // the next page finds copy 3 in the Cache: pending until it is read, then landed, never fetching
+  const next = lazyPage(f.fetch, caches);
+  await startWorker(next.eng, (await next.eng.download()).build);
+  await until(() => next.states.at(-1) === "landed", "landed from the Cache");
+  assert.deepEqual(progressLines(next.seen), [`pending 0/${n}`, `landed ${n}/${n}`]);
+  assert.equal(f.modes.length, 3, "no fetch for the Cache's copy");
+});
+
+test("graphics part: a new build's part takes over the listeners; the old build's download, still on its way, says nothing to them", async () => {
+  const caches = fakeCaches();
+  const f = partFetch([1, 2]);
+  const page = lazyPage(f.fetch, caches);
+  const done = await page.eng.download();
+  await startWorker(page.eng, done.build);
+  await until(() => f.modes.length === 1, "the old build's fetch");
+  page.eng.end(live(page.eng), { kind: "reset", reset: "user", reason: "session reset: reset by you." });
+  await startWorker(page.eng, { ...done.build!, built: 778 });
+  await until(() => f.modes.length === 2, "the new build's fetch");
+  const before = page.seen.length;
+  await f.release(); // the old build's copy arrives
+  await sleep(20);
+  assert.deepEqual(progressLines(page.seen.slice(before)), [], "nothing of the old part");
+  await f.release();
+  await until(() => page.states.at(-1) === "landed", "the new part landed");
 });
 
 test("graphics part without a shared buffer (no cross-origin isolation): download() fetches it with the start files into the Cache and counts it; cached() checks it", async (t) => {
