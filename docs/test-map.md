@@ -85,7 +85,8 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 - The `CHECK name=value` lines of the corpus files must match `data/ref.json` to 1e-6 relative. The values come from
   statsmodels and linearmodels, not from OpenDTA.
 - The probes (`probe/*.do`) must run with rc 0.
-- Known gaps are `xfail(strict=True)`: `reghdfe`, `esttab` and `outreg2` (GAP-1, community commands).
+- Known gaps are `xfail(strict=True)`: `reghdfe`, `esttab` and `outreg2` (GAP-1, community commands), and the probe
+  `p13_set_linesize_text` (ODT-35: `set linesize abc` is accepted, then every command is rc 9999).
 - `test_sandbox.py::test_corpus_and_probes_still_work_under_sandbox` runs the same corpus with the sandbox on.
 
 ### Vendored OpenDTA suite, by function
@@ -447,7 +448,7 @@ start; seeding the kind alone needs an app change); Firefox and desktop WebKit a
   comparisons cover far more, as does the vendored suite for basic regression.
 - Not every check is independent: the data-management, programming and error checks (counts, `wordcount`, `err_*_rc`)
   are regression tests with expected values set by hand.
-- The probes assert rc 0 only, so a wrong output passes. Two probes are expected failures (`esttab`, `outreg2`).
+- The probes assert rc 0 only, so a wrong output passes. Three probes are expected failures (`esttab`, `outreg2`, `p13_set_linesize_text`).
 - The one xfail among the value checks (`reghdfe`, GAP-1) is a missing community command, not a bug, so it will never
   flip by an upstream fix.
 - The tolerance is 1e-6 relative for every value; iterative estimators (nonlinear, multilevel) may need a looser one.

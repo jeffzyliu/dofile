@@ -50,6 +50,7 @@ in `tests/conformance/data/`; the Card data is Wooldridge's public `card.dta` (C
 | ODT-32 | a missing optional package (pyreadstat, pandas) gave rc 610 "file not Stata format" with `pip install` advice | found 2026-11-09 (the web demo ships without pandas); `tests/test_engine.py::test_odt32_*`, `web/e2e/engine.spec.ts` | patched |
 | ODT-33 | the unclosed-block hint names OpenDTA's Command window and Shift+Enter, which dofile does not have | `core/hints/programming.py` `_unclosed_block` (English and Portuguese); found 2026-11-11 (the web demo's command line), no test | left as is |
 | ODT-34 | a do-file starting with a UTF-8 BOM fails on its first line with r(198) (nested `do`, `dofile run`) | found 2026-11-11 (the web demo's Save, which now drops a do-file's BOM); `web/e2e/editor.spec.ts` (a nested `do` of a BOM do-file, r(198), in four browsers) | unverified |
+| ODT-35 | `set linesize abc` is accepted (rc 0); every later command is rc 9999 `ValueError` | found 2026-11-23 (re-vendor review); `tests/conformance/probe/p13_set_linesize_text.do` (strict xfail) | unverified |
 | GAP-1 | community commands `reghdfe`, `esttab`, `outreg2` don't exist (not bugs) | corpus `hdfe_b_x1`, probes `p06_esttab.do`, `p07_outreg2.do` (xfail) | known |
 | GAP-2 | `estat firststage` after `ivregress` is not implemented (rc 321) | found 2026-11-04 (Card 1995 replication), no test | known |
 | GAP-3 | `estat endogenous` and `estat overid` after `ivregress` are not implemented (rc 321), like GAP-2's `estat firststage` | found 2026-11-05, no test | known |
@@ -540,6 +541,17 @@ r(198) "invalid syntax". Windows editors (Notepad's "UTF-8 with BOM") and some e
 - Not patched. The web demo's editor never holds a BOM, and Save drops a `.do` or `.ado` file's BOM
   (`web/src/app/editor/ranover.ts` `dropsBom`); a data file keeps its BOM. An engine fix would read with `utf-8-sig` in
   `_run_file` (shared with `include`).
+
+### ODT-35: `set linesize abc` is accepted and every later command is rc 9999
+`set linesize` stores its argument without checking it; `Session` reads it back as `int(float(settings["linesize"]))`
+(`session.py`, the `output.linesize` lambda), so the next command's echo raises `ValueError` and ends as rc 9999
+"internal engine error" (the dispatcher's 198 conversion, PATCH-5, does not cover the echo). The setting stays bad, so
+every later command fails the same way until the session is reset.
+- Repro (branch vendor/opendta-10632aa and `main` at 856e5b4, CPython): `set linesize abc` is rc 0; `display 1` is rc 9999,
+  `ValueError: could not convert string to float: 'abc'`, from `core/output.py` `echo_command`.
+- Expected in Stata: the set is refused with an error and the setting stays (from the Stata manual; not checked in a
+  Stata 14 log).
+- Not patched. Probe: `tests/conformance/probe/p13_set_linesize_text.do` (strict xfail).
 
 ### GAP-3: other `estat` subcommands after `ivregress`
 `estat endogenous` and `estat overid` return rc 321 `subcommand ... is unrecognized`, as `estat firststage` does (GAP-2).
