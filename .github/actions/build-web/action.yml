@@ -1,6 +1,7 @@
 name: Build the web demo for Cloudflare
 description: >-
-  What the two Workers serve, for deploy.yml and preview.yml (so the two cannot drift apart): the dofile wheel, the memory
+  What the two Workers serve, for deploy.yml and preview.yml (so the two cannot drift apart): the dofile wheel (built once,
+  by `npm run stage`, which also stages the files the editor serves besides the snapshot), the memory
   snapshot at brotli quality 11, the editor into web/dist/app and the landing and commands pages into web/dist/site, then
   the size check. Needs the repository checked out first. Runs no wrangler and reads no secret.
 inputs:   # the addresses the two builds link each other by (web/scripts/urls.ts): `urls`, or both of the other two
@@ -25,16 +26,20 @@ runs:
         cache-dependency-path: web/package-lock.json
     - shell: bash
       working-directory: web
-      run: npm ci && npm run wheel   # uv builds the wheel with the repository's .python-version (3.14, Pyodide 314's)
+      run: npm ci && npm run stage   # uv builds the wheel with the repository's .python-version (3.14, Pyodide 314's), once; stage.ts copies it, the extra wheels and Pyodide's runtime into public/
 
-    # The snapshot's inputs, hashed: the wheel (engine source, dependencies), the Pyodide version (package-lock) and the
-    # scripts that build it, not the two addresses. A pull request's run can restore main's cache but saves its own only for
-    # that pull request (GitHub scopes caches by branch), so a preview never feeds a production deploy.
+    # The snapshot's inputs, hashed: the tracked files of web/scripts/snapshot-inputs.txt's build section (the wheel's engine
+    # source and dependencies, the Pyodide version, the scripts that build it), not the two addresses. A pull request's run
+    # can restore main's cache but saves its own only for that pull request (GitHub scopes caches by branch), so a preview
+    # never feeds a production deploy.
+    - id: inputs
+      shell: bash
+      run: echo "hash=$(sh web/scripts/snapshot-inputs.sh key)" >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache@v6
       with:
         path: web/public/snapshot
-        key: snapshot-${{ hashFiles('src/dofile/**', 'pyproject.toml', 'uv.lock', 'README.md', 'LICENSE', 'web/package-lock.json', 'web/scripts/make-snapshot.ts', 'web/scripts/install-engine.ts', 'web/scripts/build-id.ts', 'web/scripts/lib/*.ts', 'web/wheels/*.whl', 'web/src/engine/snapshot.ts') }}
+        key: snapshot-${{ steps.inputs.outputs.hash }}
     # A restored snapshot is used only if it is of the wheels and the Pyodide version just built (the build's own staleness
     # check, scripts/build-id.ts) and of quality 11, the shipped one; else it is built again at 11 (micropip fetches openpyxl from PyPI).
     - shell: bash
@@ -42,7 +47,7 @@ runs:
       env:
         SNAPSHOT_QUALITY: 11
         HIT: ${{ steps.cache.outputs.cache-hit }}
-      run: if [ "$HIT" = true ] && node scripts/build-id.ts; then echo "the cached snapshot is current"; else npm run snapshot; fi
+      run: if [ "$HIT" = true ] && node scripts/build-id.ts; then echo "the cached snapshot is current"; else npm run snapshot:make; fi
 
     # Both builds; they fail unless the caller gave `urls` or both URLs (an empty one is unset).
     - shell: bash
@@ -51,4 +56,4 @@ runs:
         DOFILE_URLS: ${{ inputs.urls }}
         DOFILE_SITE_URL: ${{ inputs.site-url }}
         DOFILE_EDITOR_URL: ${{ inputs.editor-url }}
-      run: npm run build && node scripts/check-sizes.ts   # Workers static assets refuse a file over 25 MiB
+      run: npm run build:vite && node scripts/check-sizes.ts   # Workers static assets refuse a file over 25 MiB
