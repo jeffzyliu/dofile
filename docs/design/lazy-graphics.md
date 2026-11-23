@@ -203,11 +203,17 @@ the worker to look at the header, nothing more.
   and cleared by a landing.
 - **The damaged copy's number is kept too** (decision B, Decisions). `fresh` is cleared by the landing, so it cannot
   tell that the copy now landed is the one fetched right after a damaged copy. The page keeps the copy number the last
-  `damaged` it acted on named, `damagedCopy` (new), and never clears it (the region's copy only grows). A `damaged`
-  for copy c when `damagedCopy` is c - 1 writes `failPart` instead of `retryPart`: the copy fetched right after a
-  damaged copy is damaged too, so the page stops there, and the failed part's own rules (a graph's `again`, `online`)
-  bound the re-fetches, one per graph that asks. Without it, damage tied to its copy (race 11's fix, section 2) would
-  fetch, unpack and find damage again in a loop, with no run and no click (race 11).
+  `damaged` it acted on named, `damagedCopy` (new), and never clears it (the region's copy only grows). It is none when
+  the part is made (`null`, not -1: -1 is c - 1 for copy 0, so the first `damaged` would fail the part with no
+  re-fetch), and a new build's part starts with none. A `damaged` for copy c when `damagedCopy` is c - 1 writes
+  `failPart` instead of `retryPart`: the copy fetched right after a damaged copy is damaged too, so the page stops
+  there, and the failed part's own rules (a graph's `again`, `online`) bound the re-fetches, one per graph that asks.
+  Without it, damage tied to its copy (race 11's fix, section 2) would fetch, unpack and find damage again in a loop,
+  with no run and no click (race 11). Its cost, as decided: a copy written healthy in one worker and found damaged by
+  the next (a reset worker unpacks it again and throws; a phone that cannot allocate the 33 MB is a guess) counts as the
+  second in a row, since the page hears no "written": the part fails, the next graph says the damage and a later graph's
+  `again` fetches, where race 11's fix alone would fetch at once. That is B, not a bug: clearing `damagedCopy` to avoid
+  it reopens the loop.
 
 Page-local, then: the fetch in flight (`{copy, downloading, received}` or none), `fresh`, `damagedCopy`, and whether
 the part's one `online` listener is set. `progress`, `loading` and `damaged` go.
@@ -236,7 +242,7 @@ listeners. No other code writes progress, and nothing stores it.
 
 | Region state | Page-local | Event | Guard | Effect | Next |
 |---|---|---|---|---|---|
-| | | part made (`#graphicsOf`, in `download()` or `start()`) | a buffer (else no lazy part: section 5) | buffer zero-filled (pending, copy 0, counter 0) | pending, no fetch |
+| | | part made (`#graphicsOf`, in `download()` or `start()`) | a buffer (else no lazy part: section 5) | buffer zero-filled (pending, copy 0, counter 0); `damagedCopy` none (`null`, not -1) | pending, no fetch |
 | pending | no fetch | want (`download()`'s start files in; `start()`'s `started`) | | local fetch for the region's copy; fetch (the Cache, else a download; skips the HTTP cache if `fresh`) | pending, fetch on its way |
 | pending | fetch on its way | the Cache missed, the download begins | | local: downloading, received 0 | same (shown as fetching) |
 | pending | downloading | bytes arrive | | local: received | same |
@@ -246,7 +252,7 @@ listeners. No other code writes progress, and nothing stores it.
 | failed | | `online` | | retry, as above | pending, fetch on its way |
 | landed | `damagedCopy` is not c - 1 | worker posts `damaged` (c) | c is the region's copy | `fresh` set; `damagedCopy = c`; retry, as above (the Cache entry deleted first) | pending, fetch on its way |
 | landed | `damagedCopy` is c - 1 (c was fetched right after a damaged copy) | worker posts `damaged` (c) | c is the region's copy | decision B: `fresh` set; `damagedCopy = c`; the Cache entry deleted; `#writePart`: `failPart` with a `PartReason` (its words R1's); the part's `online` listener if not yet set; no fetch | failed |
-| any | | `again` or `damaged` naming another copy, or from a worker that is not `live`; `online` when not failed | | none (dropped) | same |
+| any | | `again` or `damaged` naming another copy, or from a worker that is not `live`; `damaged` when the region is not landed; `online` when not failed | | none (dropped) | same |
 | any | | a new worker (`start()`, a restart) | | none: the new worker gets the same buffer at `boot` and reads the region at `startup`; want follows `started` | same |
 | | | a new build | | a new part (first row); every event of the old part dropped (one check at the entry: the part is `#graphics`) | the new part's |
 
@@ -291,9 +297,10 @@ from a worker that is not `live` dropped. In `types.ts` (`FromWorker`) and SPEC 
   the page drops the good copy); an `again` or `damaged` from an ended worker is dropped (race 10's check, kept for the
   two messages that remain; whether a browser still delivers it is a guess, so the test sends it through the client
   directly); an old build's download does not reach the listeners (if it passes today, the guess above was wrong, and it
-  stays as a pin); a second damaged copy in a row starts no fetch without a graph (decision B: `damaged` for copy 0,
-  copy 1 lands, `damaged` for copy 1: no fetch, the region failed at copy 1; then `again` for copy 1: one fetch, with
-  reload; today the page fetches at the second `damaged`), written in R1b (section 8) and kept here as a pin.
+  stays as a pin); a second damaged copy in a row starts no fetch without a graph (decision B: `damaged` for copy 0
+  starts one fetch, copy 1 lands, `damaged` for copy 1: no fetch, the region failed at copy 1; then `again` for copy 1:
+  one fetch, with reload; today the page fetches at the second `damaged`), written in R1b (section 8) and kept here as a
+  pin.
 - Then the pure table: each row above, including the dropped events.
 
 ## 2. The worker's machine (R1b)
@@ -332,7 +339,7 @@ that `table`'s `boot` entry defines; `since` went there too), and the dispatch i
 
 | Group | Today | Proposed field (names R1's to choose) |
 |---|---|---|
-| given at start | `share`, `snapshotBase`, `brotliWasm`, `started` | `part` (`{file, region}`: the `SeqRegion` of section 3, no views and no buffer), `brotliWasm` (not `wasm`, which `client.ts` uses for WebAssembly itself), `started` (`snapshotBase` served only the worker's own fetch: section 5) |
+| given at start | `share`, `snapshotBase`, `brotliWasm`, `started` | `part` (`{file, region}`: the `SeqRegion` of section 3, no views and no buffer), `brotliWasm` (not `wasm`, which `client.ts` uses for WebAssembly itself), `started`, `snapshotBase` (now for `boot`'s fetch of the part: section 5) and `built` (new: mount's `built`, for that fetch's Cache) |
 | idle clock | `runs`, `idleSince`, `idleTimer` | `runsInFlight` (new; the glossary: a count says what it counts), `idleSince`, `timer` |
 | unpack | `decode`, `native`, `decoded`, `graphicsWritten`, `warmAt`, `tWarm`, `warmLongest` | one `unpack` state with its copy and data (below) |
 | copies and damage | `copies`, `nativeFailedOn`, `fresh`, `graphicsError` | `nativeFailedOn`, `damage` (`{copy, why, said}`) (`copies` and `fresh` serve only the path without a buffer: section 5) |
@@ -884,15 +891,20 @@ shared (`say-fetching`, `fetch`, and its `shared` flag), the `{graphics}` messag
 `failed` and the meaning of `damaged` without a buffer, `#workerSaysGraphics`'s switch, and `start()`'s reset of the
 progress for a new worker (`client.ts`); the console lines `fetched by the worker`, `fetched by the worker in a run`,
 `the worker's own fetch was still on its way` and `the worker's fetch failed` (R1b says so where e2e reads them). What
-comes: in `boot` (`startEngine`, `worker-boot.ts`), once Pyodide is up and before `boot` answers, one more fetch
-through `fetchBytes` (the snapshot's Cache, else the network), then the part's unpack and write. Not in `mount`'s
-fetches beside the heap and the bundle (`loadFromSnapshot`): whether there is a buffer is `boot`'s `graphics` argument
-(a `sab` or null, as today), and the page sends `boot` only after `mount` is answered, so `mount` cannot know without
-a wire change to `MountArgs`; nor can the worker test `typeof SharedArrayBuffer` itself, since test c removes it from
-the test's thread only. The cost: on this path the part's download no longer overlaps the heap's. Decided (Decisions):
-it is then still warmed in idle steps, and a damaged part fails the start the way a damaged heap does: a throw of the
-unpack or the write deletes the file from the snapshot's Cache (`snapshotCache`, as `loadFromSnapshot` does for the
-heap) and fails `boot`; the next start fetches it again.
+comes: in `boot` (`startEngine`, `worker-boot.ts`), once Pyodide is up and before `boot` answers, one more fetch through
+`fetchBytes` (the snapshot's Cache, else the network), then the part's unpack and write. That fetch needs what only
+`mount` is given, so `worker.ts` keeps it from `mount` and passes it to `startEngine` with the hooks (no wire change):
+the base, mount's `snapshot` (`snapshotBase`, kept for this fetch now that `fetchPartNow` goes); `built`, which names
+the Cache (`snapshotCache(built, refused)`, with a `refused` of its own: a storage refusal means no Cache, as in
+`loadFromSnapshot`) and which `worker.ts` does not keep today (new); and, for the unpack, `brotliWasm` and `brotliMode`
+(kept today). As in `loadFromSnapshot`, a `file:` base (Node, the tests: `isFile`) has no Cache and the fetch reads the
+file. Not in `mount`'s fetches beside the heap and the bundle (`loadFromSnapshot`): whether there is a buffer is
+`boot`'s `graphics` argument (a `sab` or null, as today), and the page sends `boot` only after `mount` is answered, so
+`mount` cannot know without a wire change to `MountArgs`; nor can the worker test `typeof SharedArrayBuffer` itself,
+since test c removes it from the test's thread only. The cost: on this path the part's download no longer overlaps the
+heap's. Decided (Decisions): it is then still warmed in idle steps, and a damaged part fails the start the way a damaged
+heap does: a throw of the unpack or the write deletes the file from the snapshot's Cache (`snapshotCache`, as
+`loadFromSnapshot` does for the heap) and fails `boot`; the next start fetches it again.
 
 What it costs: without isolation, the start downloads the part too (about 7.7 MB more) and unpacks and writes it before
 "ready". What the start screen shows then, from the code: over plain http to a LAN address the page is not a secure
@@ -903,8 +915,10 @@ origin without isolation (https or localhost without COOP and COEP, a misconfigu
 (`list.files`); the worker never writes the Cache. Left so, the worker would download the part at every start,
 uncounted, and a return visit offline would fail at the start although the heap is cached. So R1b makes it a start file
 there: without a buffer, `download()` fetches the part with the start files into the Cache and counts it (no
-subtraction), and the worker reads it from the Cache as it reads the heap, with a case in `test/client.test.ts`. That
-keeps decision A (an eager part) and follows `web/CLAUDE.md`'s rule that only the page writes the start files' Cache.
+subtraction), `cached()` checks it with them (else, once a boot whose unpack threw has deleted it from the Cache,
+`cached()` still says true, and the start downloads it uncounted or fails offline), and the worker reads it from the
+Cache as it reads the heap, with a case in `test/client.test.ts`. That keeps decision A (an eager part) and follows
+`web/CLAUDE.md`'s rule that only the page writes the start files' Cache.
 
 What it fixes by construction: races 9, 10 (for the download messages) and 14, and the dead `share.error` branch
 (section 2). Without isolation there is still no Break, so a stuck run still resets the worker; it only no longer holds
@@ -1070,10 +1084,12 @@ already is; add none.
      `readPart` and `waitSeq`. Closes races 1, 2 and 3. It leaves the path without a buffer as it is (its branch does
      not read the region).
    - Second: the path without a buffer goes and the part is loaded in `boot` (section 5), test c written first;
-     `download()` fetches and counts the part as a start file when there is no buffer, with its case first;
-     `prefetch`, `fetchPartNow` and the four download messages removed on both sides at once (a wire change: the worker,
-     `#workerSaysGraphics` and `start()` in `client.ts`, `FromWorker` in `types.ts` and SPEC section 6), the e2e tests
-     without isolation rewritten. It removes five of the 22 variables before the record is built.
+     `download()` fetches and counts the part as a start file when there is no buffer, and `cached()` checks it then,
+     with their cases first; `prefetch`, `fetchPartNow` and the four download messages removed on both sides at once (a
+     wire change: the worker, `#workerSaysGraphics` and `start()` in `client.ts`, `FromWorker` in `types.ts` and SPEC
+     section 6), the e2e tests without isolation rewritten. It removes four of the 22 variables (`prefetching`,
+     `fetchSaid`, `fresh`, `copies`) and keeps one more from `mount`, `built` (new, section 5), before the record is
+     built.
    - Then the record (section 2) in a module `worker.ts` imports statically, with the unpack as one state tied to its
      copy; the idle step and the native gate as pure functions next to `waitStep`; the renames; `table`'s hooks call it;
      wire and words unchanged (section 2). Its behaviour fixes, each with its failing test (tests e): race 13 (the
@@ -1131,8 +1147,9 @@ another thread" idea in lazy-matplotlib.md.
 - "the graph that found it says so (rc 199), the next one waits for the fresh fetch": when an idle step found the
   damage, the next graph says it even if the fresh copy is already there (race 11, fixed in R1b).
 - Its path without a shared buffer (the worker's own fetch after the start, a graph's download, the `?fresh=` retry) is
-  gone after R1b: without cross-origin isolation the part is loaded with the start files and written at `boot` (section
-  5); its sizes then say the start without isolation downloads the whole 41.6 MB.
+  gone after R1b: without cross-origin isolation the part is fetched and written in `boot` (section 5; on a secure
+  origin `download()` caches it with the start files); its sizes then say the start without isolation downloads the
+  whole 41.6 MB.
 - Its title and heading still say "experiment" and "E1c", as do `src/dofile/browser.py`'s section comment ("experiment
   E1c") and `docs/test-map.md`'s `graphics.spec.ts` entry.
 - Checked and holding: 256 KB unpack steps, `IDLE_MS` 0.25 s, `waitGraphics(100)` slices, the warm order (three modules
