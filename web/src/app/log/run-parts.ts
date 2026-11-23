@@ -74,8 +74,9 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
     const at = g.line != null ? echoes.get(g.line) : undefined;
     addAfter(at === undefined ? lastLine : commandEnd(lines, at), { t: "graph", key: `g${g.n}`, graph: g });
   }
+
   // one note per `do` line of the code, after its echo: a loop's body is echoed once however many passes run the file
-  if (item.unsaved?.length)
+  if (item.unsaved?.length) {
     for (const at of echoes.values()) {
       const command = echoed(lines[at]); // the echo in any of its forms: `. do x`, a loop's or program's `  2. do x`
       const target = command === null ? null : nestedTarget(command);
@@ -89,16 +90,19 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
         text: `Note: ${name} has unsaved edits in the editor; do runs the saved file. Save it (${saveWords}) to run your edits.`,
       });
     }
+  }
 
   const end = item.end;
   const jumpTo = end ? jumpLine(end) : null;
   let rcAt = -1; // the r(N); the jump goes beside
-  if (end && end.rc !== 1 && jumpTo !== null)
-    for (let i = lines.length - 1; i >= 0; i--)
+  if (end && end.rc !== 1 && jumpTo !== null) {
+    for (let i = lines.length - 1; i >= 0; i--) {
       if (lines[i].kind === "err" && /^r\(\d+\);$/.test(lines[i].text)) {
         rcAt = i;
         break;
       }
+    }
+  }
 
   const out: RunPart[] = [];
   let explain: ExplainPiece[] | null = null; // a phone's hint block in progress
@@ -106,6 +110,7 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
   lines.forEach((l, i) => {
     const isLast = i === lines.length - 1;
     if (isLast && l.text === "" && !after.has(i)) return; // the text's own last line break
+
     if (phone && l.kind === "hint") {
       explain ??= [];
       const text = l.text.replace(/^\s*(→ )?/, "");
@@ -117,6 +122,7 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
       }
       return;
     }
+
     if (l.kind === "out") widest = Math.max(widest, l.text.length);
     out.push({ t: "line", key: i, kind: l.kind, text: l.text });
     if (i === rcAt) out.push({ t: "space", text: "  " }, { t: "jump", key: "jump", line: jumpTo!, path: end!.path });
@@ -124,7 +130,10 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
     if (phone && widest > PHONE_COLUMNS && lines[i + 1]?.kind !== "out") {
       out.push({ t: "wide", key: `w${i}` });
       widest = 0;
-    } else if (lines[i + 1]?.kind !== "out") widest = 0;
+    } else if (lines[i + 1]?.kind !== "out") {
+      widest = 0;
+    }
+
     const extra = after.get(i);
     if (extra) {
       if (isLast) out.push({ t: "space", text: "\n" });
@@ -132,7 +141,7 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
     }
   });
 
-  if (end?.rc === 1)
+  if (end?.rc === 1) {
     out.push({
       t: "stopped",
       key: "break",
@@ -142,11 +151,14 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
           : "Stopped by Break. The data is as the last complete command left it.",
       jump: jumpTo !== null ? { line: jumpTo, path: end.path } : null,
     });
-  else if (jumpTo !== null && rcAt < 0)
+  } else if (jumpTo !== null && rcAt < 0) {
     out.push({ t: "jump", key: "jump", line: jumpTo, path: end!.path }, { t: "space", text: "\n" });
+  }
+
   // the note under the error the run ended with (runError: not one an earlier `capture noisily` caught)
   const note = end && end.rc > 1 ? noteFor(end.rc, runError(lines)) : null;
   if (note) out.push({ t: "endnote", key: "note", text: note });
+
   if (end?.skipped?.length) {
     const folder = end.skipped.length === 1 ? "Its" : "Their";
     out.push({
@@ -155,11 +167,13 @@ export function runParts(item: TextItem, input: RunPartsInput): RunPart[] {
       text: `Not kept: ${end.skipped.join(", ")}. ${folder} folder was renamed or deleted during the run.`,
     });
   }
-  if (end?.store_error)
+
+  if (end?.store_error) {
     out.push({
       t: "endnote",
       key: "store",
       text: `The files this run wrote couldn't be kept in this browser: ${end.store_error}`,
     });
+  }
   return out;
 }
