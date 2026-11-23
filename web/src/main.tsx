@@ -14,6 +14,7 @@ import { connectFiles } from "./app/files.ts";
 import { handlers, runCode } from "./app/run.ts";
 import * as Engine from "./app/state/engine.ts";
 import * as Files from "./app/state/files.ts";
+import * as Layout from "./app/state/layout.ts";
 import * as Run from "./app/state/run.ts";
 import * as Saved from "./app/state/saved.ts";
 import * as S from "./app/state.ts";
@@ -46,15 +47,15 @@ console.info(capLine(memcap));
 applyTheme();
 const narrow = matchMedia("(max-width: 699.98px)");
 const fit = () => {
-  S.layout.value = narrow.matches ? "phone" : "desktop";
+  Layout.setLayout(narrow.matches ? "phone" : "desktop");
 };
 fit();
 narrow.addEventListener("change", fit);
 // Without ?kblog the overlay's module is not loaded.
-const viewport = watchViewport({ enabled: () => S.isPhone.value });
+const viewport = watchViewport({ enabled: () => Layout.isPhone.value });
 if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
 effect(() => {
-  S.isPhone.value;
+  Layout.isPhone.value;
   viewport.update();
 });
 watchWakeLock();
@@ -78,7 +79,7 @@ const testHook = {
   start,
   persisted: () => Files.persisted.value,
   engineBytes: Engine.engineBytes,
-  state: { ...S, ...Saved, ...Run, ...Files, ...Engine, tabs, activeTab }, // one object: the signals, and the tabs from their owner
+  state: { ...S, ...Saved, ...Layout, ...Run, ...Files, ...Engine, tabs, activeTab }, // one object: the signals, and the tabs from their owner
   documents: documentSeeds,
   run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
   breakRun,

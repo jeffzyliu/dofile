@@ -38,7 +38,7 @@ async function reset(files: Record<string, string | Uint8Array> = {}) {
   await refresh();
   for (const t of D.tabs.value) D.close(t.path);
   S.closeDialog();
-  S.layout.value = "desktop";
+  S.setLayout("desktop");
   S.showPhone("files");
   S.outputTab.value = "data";
   S.closeFullSize();
@@ -175,7 +175,7 @@ test("openFile: a text file gets a tab with its document, made active; opened ag
 test("openFile on a phone shows the Editor view for a text or .dta tab; a .png goes to the graphs (desktop: the Graph tab; phone: full size)", async () => {
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 250]);
   await reset({ "a.do": "x", "data/w.dta": Uint8Array.from([0x72, 0xff]), "out/g.png": png });
-  S.layout.value = "phone";
+  S.setLayout("phone");
   await openFile("a.do");
   assert.equal(S.phoneTab.value, "editor");
   S.showPhone("files");
@@ -190,7 +190,7 @@ test("openFile on a phone shows the Editor view for a text or .dta tab; a .png g
   assert.equal(S.phoneTab.value, "files", "a graph is no tab");
   const g = S.graphs.value.at(-1)!;
   assert.deepEqual([g.from, g.path, g.png], ["file", "out/g.png", Buffer.from(png).toString("base64")]);
-  S.layout.value = "desktop";
+  S.setLayout("desktop");
   S.closeFullSize();
   await openFile("out/g.png");
   assert.equal(S.outputTab.value, "graph");
@@ -1058,7 +1058,7 @@ test("rename: a .dta tab renamed to .csv opens again as text in its place; an un
 test("rename: a .dta tab renamed to .png closes, and the Graph tab and the full-size view are left alone (a phone too)", async () => {
   for (const layout of ["desktop", "phone"] as const) {
     await reset({ "a.do": "1", "w.dta": "x" });
-    S.layout.value = layout;
+    S.setLayout(layout);
     for (const p of ["a.do", "w.dta"]) await openFile(p);
     const graphs = S.graphs.value.length;
     await Ops.renameEntry("w.dta", "w.png");

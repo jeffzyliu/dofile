@@ -12,6 +12,7 @@ import { tabs } from "./editor/documents.ts";
 import * as engine from "./engine.ts";
 import { afterRun } from "./files.ts";
 import { clearGraphs, keepGraphs, nextGraphNumber } from "./graphs.ts";
+import { layout, showPhone } from "./state/layout.ts";
 import { runWriter as W } from "./state/run.ts";
 import * as S from "./state.ts";
 import type { Graph, LastRun, LogItem, RunHead } from "./types.ts";
@@ -68,7 +69,7 @@ export function runCommand(text: string): Requested {
 /** A run started: its items go into the log. `theme` is what the run is sent as plot_theme. */
 function began(head: RunHead, theme: "light" | "dark") {
   const id = ++runs;
-  if (head.kind !== "command" && S.layout.value === "phone") S.showPhone("log"); // Run opens the Log tab
+  if (head.kind !== "command" && layout.value === "phone") showPhone("log"); // Run opens the Log tab
   const add: LogItem[] = head.kind === "command" ? [] : [{ t: "runhead", run: head, first: W.engineRuns.value === 0 }];
   // now, not after the run: a reset that cuts it starts the count again, and the next run is first
   W.engineRuns.value++;

@@ -11,7 +11,8 @@
 import * as eng from "../engine.ts";
 import { startEngine, startOffer } from "../start.ts";
 import { engine, isolated } from "../state/engine.ts";
-import { showPhone, showToast } from "../state.ts";
+import { showPhone } from "../state/layout.ts";
+import { showToast } from "../state.ts";
 import { engineStarting, otherTab, runOn, takesRun } from "../states/predicates.ts";
 import { Icon, Key, Labels, modShortcut } from "../ui/Icon";
 import { ignoreHeldEnter } from "../ui/keys.ts";

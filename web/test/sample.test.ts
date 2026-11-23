@@ -54,7 +54,7 @@ async function empty() {
   memory.clear();
   for (const t of D.tabs.value) D.close(t.path);
   S.closeDialog();
-  S.layout.value = "desktop";
+  S.setLayout("desktop");
   for (const b of S.banners.value) S.dismiss(b);
 }
 beforeEach(async () => {

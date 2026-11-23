@@ -5,20 +5,7 @@
 import type { ReadonlySignal } from "@preact/signals-core";
 import { computed, signal } from "@preact/signals-core";
 import { saved } from "./state/saved.ts";
-import type { Banner, Dialog, DialogName, Layout, OutputTab, PhoneTab, Theme } from "./types.ts";
-
-// ---- layout ----
-export const split = signal(saved.get("dofile.split") !== "0"); // kept in localStorage
-export const outputTab = signal<OutputTab>(split.value ? "graph" : "log"); // "log" only unsplit
-const shownPhoneTab = signal<PhoneTab>("editor");
-export const phoneTab: ReadonlySignal<PhoneTab> = shownPhoneTab; // through showPhone()
-/** Show the phone's `tab` view. */
-export function showPhone(tab: PhoneTab) {
-  shownPhoneTab.value = tab;
-}
-export const layout = signal<Layout>("desktop"); // from the width: phone under 700 px (SPEC section 2)
-/** The phone layout: read this rather than passing a `phone` prop down. */
-export const isPhone = computed(() => layout.value === "phone");
+import type { Banner, Dialog, DialogName, Theme } from "./types.ts";
 
 // ---- theme ----
 const asTheme = (v: string | null): Theme => (v === "light" || v === "dark" ? v : "system");
@@ -35,9 +22,6 @@ export const resolvedTheme = computed(() =>
 
 // ---- the Data tab ----
 export const pickedVar = signal<string | null>(null); // the Data tab
-
-// ---- wrap lines ----
-export const wrap = signal(saved.get("dofile.wrap") === "1"); // kept in localStorage
 
 // ---- dialogs, banners, toast, the live region ----
 const toastText = signal<string | null>(null);

@@ -312,6 +312,7 @@ export function resetState() {
   wire(); // not opened: nothing of the last test's can act, and the drop record is empty
   handlers.engineGone(); // the controllers' own state: the count of the session's runs, what the old engine left
   for (const [name, signal] of writables) signal.value = structuredClone(initial.get(name));
+  S.setLayout("desktop"); // read-only for the views: set through its function
   S.holdToast(true); // no toast timer left over
   for (const t of D.tabs.value) D.close(t.path);
   clearLog();
