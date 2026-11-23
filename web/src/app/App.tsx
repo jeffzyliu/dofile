@@ -13,7 +13,6 @@ import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
 import { FilesBody, FilesHead, fileMenuItems, NewFileButton } from "./files/FilesPane";
 import { filesOpen, foldFiles, holdFilesToggle, onFilesKey } from "./files/fold.ts";
-import { focusTree } from "./files/tree-state.ts";
 import { downloadAll } from "./files.ts";
 import { CommandLine } from "./log/CommandLine";
 import { LogActions, logMenuItems } from "./log/LogActions";
@@ -130,7 +129,7 @@ function FilesToggle() {
       ref={holdFilesToggle}
       aria-expanded={filesOpen.value}
       aria-controls="files-pane"
-      onClick={() => foldFiles(!filesOpen.value, focusTree)}
+      onClick={() => foldFiles(!filesOpen.value)}
     >
       <Icon name="file" />
       Files{n > 0 && <span class="count">{n}</span>}
@@ -292,14 +291,7 @@ export function App() {
         data-files={phone ? undefined : filesOpen.value ? "open" : "folded"}
         data-split={split.value ? "split" : "unsplit"}
       >
-        <Pane
-          view="files"
-          class="files-pane"
-          label="Files"
-          id="files-pane"
-          tabIndex={-1}
-          onKeyDown={(e) => onFilesKey(e, focusTree)}
-        >
+        <Pane view="files" class="files-pane" label="Files" id="files-pane" tabIndex={-1} onKeyDown={onFilesKey}>
           <div class="pane-head">
             <span class="pane-title">Files</span>
             <span class="spacer" />
