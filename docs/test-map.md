@@ -199,7 +199,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`); the start's facts
   (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
-    dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
+    dropped from the Cache, a copy counted, fetched again with `cache: "reload"`; failed: the reason written, then the
     worker's `again` and the browser's `online` fetch it again.
 - `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
   counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
