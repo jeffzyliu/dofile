@@ -1,4 +1,4 @@
-// The engine in real browsers, through the page's test hook (main.tsx). Files go in with store.write, code runs through
+// The engine in real browsers, through the page's test hook (app/test-hook.ts). Files go in with store.write, code runs through
 // the run controller (window.__dofile.run), Break and Reset through the engine controller (breakRun, reset).
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";

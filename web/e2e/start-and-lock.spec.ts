@@ -1,10 +1,10 @@
 // What Node cannot check (docs/design/SPEC.md, section 7, tests 9 and 10): the tab lock between two pages; the counted
 // download into the Cache, and a start that then uses those bytes; no request to another origin; the store's zip. The
-// tests reach the client, the store and the state through the page's test hook (main.tsx; with ?test=manual the page
+// tests reach the client, the store and the state through the page's test hook (app/test-hook.ts; with ?test=manual the page
 // starts no engine until start() is called), and click the shell's own dialogs (the download prompt, the take-over).
 import type { BrowserContext, Page } from "@playwright/test";
 import { LOCAL_SITE_URL } from "../scripts/urls.ts";
-import { expect, retryFirstGoto, SAMPLE, startEngine, test, toolbarOf } from "./fixtures"; // storage kept by default (fixtures.ts)
+import { expect, isPhone, retryFirstGoto, SAMPLE, startEngine, statusBar, test, toolbarOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 
 type StartFiles = {
   built: number;
@@ -126,14 +126,35 @@ test.describe(() => {
   });
 });
 
-test("the page has no test hook unless the URL asks for it", async ({ page }) => {
+test("without ?test the page has no hook, no tab seeds and no data-engine, and never loads the test module", async ({
+  page,
+}) => {
+  const scripts: Promise<string>[] = [];
+  const loaded: string[] = [];
+  page.on("response", (r) => {
+    if (new URL(r.url()).pathname.endsWith(".js")) {
+      loaded.push(new URL(r.url()).pathname);
+      scripts.push(r.text().catch(() => ""));
+    }
+  });
   await page.goto("./");
-  await page
-    .getByRole("dialog", { name: "Download the engine?" })
-    .getByRole("button", { name: /^Download/ })
-    .click();
-  await ready(page);
+  const prompt = page.getByRole("dialog", { name: "Download the engine?" });
+  await prompt.getByRole("button", { name: /^Download/ }).click();
+  // the engine starts without the hook: the prompt goes away, and the desktop's status bar says Ready (a phone has none)
+  await expect(prompt).toHaveCount(0, { timeout: 300_000 });
+  if (!isPhone(page)) await expect(statusBar(page)).toContainText("Ready", { timeout: 300_000 });
   expect(await page.evaluate(() => typeof window.__dofile)).toBe("undefined");
+  expect(await page.evaluate(() => "engine" in document.documentElement.dataset)).toBe(false);
+  expect(loaded.length).toBeGreaterThan(0);
+  expect(loaded.filter((p) => p.includes("test-hook"))).toEqual([]);
+  for (const text of await Promise.all(scripts)) expect(text).not.toContain("__dofile");
+
+  // with the flag the same page loads the module and sets all three
+  await page.goto("?test=manual");
+  await expect.poll(() => page.evaluate(() => typeof window.__dofile)).toBe("object");
+  expect(await page.evaluate(() => typeof window.__dofile.documents.showTabs)).toBe("function");
+  expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("none");
+  expect(loaded.filter((p) => p.includes("test-hook")).length).toBe(1);
 });
 
 test("download: the counts reach the total, abort keeps the finished files, and the start then uses the cached bytes, with no manifest.json", async ({
