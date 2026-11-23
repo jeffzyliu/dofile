@@ -231,6 +231,7 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `fold.test.ts`: the folded file list's moves (`files/fold.ts`, a stand-in for the Files button; the list's focus move is read from
   `focusWanted`): opening focuses the list from anywhere, folding focuses the button, Esc folds only an open list whose button
   is drawn and only when no handler used the key.
+- `run-gate.test.ts`: the Run gate (`src/app/editor/runnable.ts`): `runBlock` per path kind, `fileBlock` following the active tab, `canRunFile` combining the engine's `takesRun`.
 - `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`).
   - The .log tokenizer, Download log's text, Find's matches, `runError`, a .csv's columns, the run-head words.
   - Where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture`

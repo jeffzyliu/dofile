@@ -7,6 +7,7 @@ import { megabytes } from "../bytes.ts";
 import { breakPending, resetsIn, since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { tabs } from "../editor/documents.ts";
+import { canRunFile } from "../editor/runnable.ts";
 import { ticking } from "../editor/words.ts";
 import * as eng from "../engine.ts";
 import { LANDING_URL } from "../env";
@@ -17,7 +18,6 @@ import { DismissibleBanner } from "../ui/DismissibleBanner";
 import { useFocusOnMount } from "../ui/focus-hooks.ts";
 import { Banner } from "../ui/Live";
 import { focusStable, useFocusOnLeave } from "./focus.ts";
-import { takesRun } from "./predicates.ts";
 import {
   FAILED_HEAD,
   FILES_SAFE,
@@ -224,7 +224,7 @@ export function LogStateBanners() {
 export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
   const w = resetWords(banner.kind, banner.cause, banner.reason, isolated.value);
   const path = rerunPath(banner.kind, banner.run);
-  const canRun = takesRun(engine.value) && tabs.value.some((t) => t.path === path && t.kind === "text");
+  const canRun = canRunFile(engine.value, path) && tabs.value.some((t) => t.path === path && t.kind === "text");
   return (
     <DismissibleBanner
       banner={banner}

@@ -1440,6 +1440,39 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
   if (!phone) await expect(statusBar(page)).toContainText("Last run: line 7 · ");
 });
 
+test("Run is for .do and .ado tabs only: on a .txt or .csv tab the Run buttons are greyed with the reason, a press and Ctrl/Cmd+Enter say it in a toast and run nothing; a .do tab runs", async ({
+  page,
+}) => {
+  const REASON = "Only .do and .ado files can run";
+  await setUp(page, { "a.do": "display 1", "n.txt": "display 2", "d.csv": "a,b\n1,2" }, "?test");
+  await startEngine(page);
+  await ready(page);
+  const lastKind = () => page.evaluate(() => window.__dofile.state.lastRun.value?.kind ?? null);
+  const run = page.getByRole("button", { name: /^Run( is not available.*)?$/ }).first();
+  for (const name of ["n.txt", "d.csv"]) {
+    await open(page, name);
+    await expect(run).toHaveAttribute("aria-disabled", "true");
+    await expect(run).toHaveAttribute("title", REASON);
+    await expect(run).toHaveAccessibleName(`Run is not available: ${REASON}`);
+    if (!isPhone(page)) await expect(page.getByRole("button", { name: "Run selection" })).toBeDisabled();
+    await run.click({ force: true }); // aria-disabled: Playwright waits for "enabled" otherwise
+    await expect(toastOf(page)).toHaveText(REASON);
+    await clearToast(page);
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(toastOf(page)).toHaveText(REASON);
+    await clearToast(page);
+  }
+  await settle(page);
+  expect(await lastKind()).toBeNull();
+
+  await open(page, "a.do");
+  await expect(page.getByRole("button", { name: "Run", exact: true })).not.toHaveAttribute("aria-disabled", "true");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect.poll(lastKind).toBe("file");
+  await ready(page);
+});
+
 test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open and not in another text field; held, it runs once", async ({
   page,
 }) => {

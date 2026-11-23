@@ -15,6 +15,7 @@ import { wholeLines } from "./cm.ts";
 import { codeOf, editorAsked, editorCommands } from "./commands.ts";
 import { activeTab, attachView, edited, save, selection, stateOf, tabs } from "./documents.ts";
 import { isRunKey, isSaveKey } from "./keys.ts";
+import { fileBlock } from "./runnable.ts";
 import { refusedRunWords } from "./words.ts";
 
 let view: EditorView | null = null;
@@ -85,13 +86,18 @@ function runSelection(keyed = false) {
 }
 
 /** Ctrl/Cmd+Enter: with no engine, what the "Start engine" button does (where it can do nothing, a toast says why);
- *  else Run selection with a selection, else Run. It runs nothing when it starts the engine, even once the engine is
+ *  else Run selection with a selection, else Run; on a tab that is not a .do or .ado file, a toast says why it runs
+ *  nothing. It runs nothing when it starts the engine, even once the engine is
  *  ready. */
 function runEither() {
   const offer = startEngine();
   if (offer !== null) {
     const words = offer === "off" ? refusedRunWords(engine.value.s) : null;
     if (words) showToast(words, "error");
+    return;
+  }
+  if (fileBlock.value) {
+    showToast(fileBlock.value, "error"); // a tab that is not a .do or .ado file
     return;
   }
   if (selection.value) runSelection(true);
