@@ -80,11 +80,13 @@ The other scripts (the screenshot run, `preview`, the `check-*` runs inside Pyod
   fails `npm run check`, `npm run lint:strict` or `npm test`: fix the code, not the rule, unless the rule has changed.
   A type a view needs lives in `src/app/types.ts`, not in a registry (type imports count as cycles). Tests that read
   source text must not depend on how a line is wrapped.
-- **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
-  `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is
-  blocked until the tab lock answers: a test waits for `!store.blocked` before it writes. `<html data-engine>` always holds
-  the state name (for tests; no CSS reads it). Its type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its
-  own. What a test sets up in the page's state goes through the helpers in `e2e/seed.ts` (`showEngine`, `addBanner`,
+- **Test-only code is one module, loaded only with the flag.** `src/app/test-hook.ts` holds the hook `window.__dofile`
+  (its keys: the object there), the tab seeds (`editor/seeds.ts`) and `<html data-engine>`; `main.tsx` imports it
+  dynamically only under `?test` (as it does `kblog.ts` under `?kblog`, which stays its own). `?test=manual` starts no
+  engine until the test calls `start()`. Without the flag none of it is loaded or runs: **a spec that needs the hook or
+  `data-engine` opens with `?test`**, and test code outside the module never writes either. The store is blocked until the tab
+  lock answers: a test waits for `!store.blocked` before it writes. `data-engine` holds the state name (no CSS reads it).
+  The hook's type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its own. What a test sets up in the page's state goes through the helpers in `e2e/seed.ts` (`showEngine`, `addBanner`,
   `seedLog`, ...), not a signal written in the spec.
 - **e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not `@playwright/test`. Its fixture answers
   `persisted()` true (`test.use({ persisted: false })` for the browser's own) and retries a stalled first `goto`; a context

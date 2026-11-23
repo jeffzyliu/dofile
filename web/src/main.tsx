@@ -5,16 +5,11 @@ import "./styles/app.css";
 import { effect } from "@preact/signals";
 import { render } from "preact";
 import { App } from "./app/App";
-import { selection, tabs } from "./app/editor/documents.ts";
-import { documentSeeds } from "./app/editor/seeds.ts";
-import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
+import { tabs } from "./app/editor/documents.ts";
+import { connectEngine, connectRun, lost, open } from "./app/engine.ts";
 import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
-import { focusWanted } from "./app/files/tree-state.ts";
 import { connectFiles } from "./app/files.ts";
-import { hookState } from "./app/hook-state.ts";
-import { handlers, runCode } from "./app/run.ts";
-import * as Engine from "./app/state/engine.ts";
-import * as Files from "./app/state/files.ts";
+import { handlers } from "./app/run.ts";
 import * as Layout from "./app/state/layout.ts";
 import { store } from "./app/store.ts";
 import { applyTheme } from "./app/theme.ts";
@@ -49,18 +44,16 @@ const fit = () => {
 };
 fit();
 narrow.addEventListener("change", fit);
-// Without ?kblog the overlay's module is not loaded.
+
 const viewport = watchViewport({ enabled: () => Layout.isPhone.value });
-if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
 effect(() => {
   Layout.isPhone.value;
   viewport.update();
 });
+// Without ?kblog the overlay's module is not loaded.
+if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
+
 watchWakeLock();
-// the engine's state on <html>, for the tests
-effect(() => {
-  document.documentElement.dataset.engine = Engine.engine.value.s;
-});
 addEventListener("beforeunload", (e) => {
   if (tabs.value.some((t) => t.dirty)) e.preventDefault();
 });
@@ -69,26 +62,9 @@ connectFiles(store);
 connectRun(handlers);
 connectEngine({ client, lock: tabLock({ onLost: lost }), snapshot: snapshotStart, manual: testMode === "manual" });
 
-// The test hook, only with ?test in the URL. With ?test=manual the page starts no engine until the test calls start().
-// The store is blocked until the tab lock answers: wait for `!store.blocked` before writing.
-const testHook = {
-  engine: client,
-  store,
-  start,
-  persisted: () => Files.persisted.value,
-  engineBytes: Engine.engineBytes,
-  state: hookState(),
-  documents: documentSeeds,
-  run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
-  breakRun,
-  reset,
-  selection,
-  drops,
-  focusWanted,
-};
-/** The type of `window.__dofile`, for e2e/hook.ts. */
-export type DofileHook = typeof testHook;
-if (testMode !== null) Object.assign(window, { __dofile: testHook });
+// The test hook and what only it needs (the tab seeds, <html data-engine>): a module loaded only with ?test in the URL.
+// With ?test=manual the page starts no engine until the test calls start().
+if (testMode !== null) (await import("./app/test-hook.ts")).installTestHook(client);
 
 render(<App />, document.getElementById("app")!);
 open();

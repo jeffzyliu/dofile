@@ -327,7 +327,8 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
 - `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
   the failure); a cycle finder on a small graph.
-- `hook-state.test.ts`: `hookState()` (`src/app/hook-state.ts`, which `main.tsx` gives the e2e hook and `state-all.ts` gives the tests as `S`) has every name the specs read as `state.<name>`.
+- `test-hook.test.ts`: only `main.tsx`'s flagged dynamic import reaches `app/test-hook.ts` (the seeds and `hook-state.ts` are imported by it alone), and nothing else writes `data-engine` or `window.__dofile`. The built page is checked in `start-and-lock.spec.ts`.
+- `hook-state.test.ts`: `hookState()` (`src/app/hook-state.ts`, which `app/test-hook.ts` gives the e2e hook and `state-all.ts` gives the tests as `S`) has every name the specs read as `state.<name>`.
 - `signals.types.ts` (not run: `npm run check` compiles it): the writable signals the state modules export (`state/*.ts`, `theme.ts`, `pickedVar` in `output/view.ts`) are the views' own.
 - `seqlock.types.ts` (not run: `npm run check` compiles it): `writeSeq` refuses an asynchronous write and one that
   returns a value; `readSeq` refuses an asynchronous or thenable result; `failPart` refuses a plain string as its
@@ -420,9 +421,9 @@ Specs:
   - Restore the sample as an upload: toast, "already here", the clash dialog (Keep mine, Replace with the sample).
   - The sample runs in the real engine at the editor's base to a table and a graph.
   - Where the browser keeps no storage, the sample's write brings no banner and the visitor's own change does.
-- `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
+- `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook, seeds, `data-engine` or test module without the
   URL flag.
-- `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
+- `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/app/test-hook.ts`) and the named helpers that
   put the page's state in a shape (an engine state, a banner, log items, ...); the tabs' helpers (`markDirty`, `showTabs`,
   `seedEditorBox`) call the page's `src/app/editor/seeds.ts` through the hook's `documents`, so a seeded tab has a document; `fixtures.ts` holds the helpers shared by
   several specs (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`, `toolbarOf`).
