@@ -1,5 +1,5 @@
 // The inline rename and the draft rows: the field's record, how it starts and how it ends (Enter, Esc, leaving the
-// field). Plain TypeScript (no JSX), so the Node tests run it; FilesPane.tsx draws the field.
+// field). Plain TypeScript (no JSX), so the Node tests run it; TreeRow.tsx's RenameField draws the field.
 import { signal } from "@preact/signals-core";
 import { isConflict } from "../../engine/store.ts";
 import { refresh } from "../files.ts";
