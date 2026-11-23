@@ -165,7 +165,7 @@ dialog replaces any dialog (the host keys each view on the whole `dialog` value)
 sequenceDiagram
   participant V as Visitor
   participant C1 as clash 1 view
-  participant U as files/actions.ts uploadNow
+  participant U as files/upload.ts uploadNow
   participant D as ui/Dialog.tsx
   participant C2 as clash 2 view
   V->>C1: Keep mine
@@ -243,7 +243,7 @@ sequenceDiagram
   participant V as Visitor
   participant CT as CloseTabDialog
   participant Ed as editor/Editor.tsx
-  participant A as files/actions.ts
+  participant A as editor/documents.ts
   participant ET as files/EditorTabs.tsx
   participant D as ui/Dialog.tsx
   alt Save
@@ -627,7 +627,7 @@ applies no answer) when the record was closed or holds another document by then 
 SPEC 4b). A Save writes in its turn (`files/turns.ts` `fileTurn`): a rename or a delete keeps the turn until the tabs have followed
 it, so a Save pressed meanwhile writes under the new name, or nothing when its tab was closed; a Save's turn ends once
 its write is issued, and the store applies changes in the order they are called, so a rename after it moves the bytes it
-wrote. The file code (`files/open.ts`, `files/actions.ts`, `files.ts`) calls the owner's functions; the view attaches to
+wrote. The file code (`files/open.ts`, `files/ops.ts`, `files/upload.ts`, `files.ts`) calls the owner's functions; the view attaches to
 it when the Editor mounts (`attachView`).
 
 ### The three text forms

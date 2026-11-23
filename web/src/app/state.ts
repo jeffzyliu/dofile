@@ -101,7 +101,7 @@ export const runWriter = {
 };
 /** A rename moved the file or folder `from` to `to`: the last run and the log's run heads and ends follow it, so
  *  "Go to line" opens the renamed file, not the old name (which a new file may take). Lives here, not in run.ts, which
- *  files/actions.ts cannot import (run.ts imports files.ts). */
+ *  files/ops.ts cannot import (run.ts imports files.ts). */
 export function runMoved(from: string, to: string) {
   const move = <T extends { path?: string }>(r: T): T =>
     r.path !== undefined && within(r.path, from) ? { ...r, path: movedPath(r.path, from, to) } : r;

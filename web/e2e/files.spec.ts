@@ -1366,6 +1366,40 @@ test("a drop anywhere on the page: the Files pane is marked while a drag is over
   await expect(row(page, /^later\.do/)).toHaveCount(0);
 });
 
+test("two quick drops of one path apply in drop order, whichever read ends first: the second is asked about, and Replace leaves its bytes", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  await setUp(page, {});
+  // the first drop's read (6 bytes) is held until the second one's has ended, so the reads end in the other order
+  await page.evaluate(() => {
+    const read = File.prototype.arrayBuffer;
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    File.prototype.arrayBuffer = function (this: File) {
+      const bytes = read.call(this);
+      return this.size === 6 ? held.then(() => bytes) : bytes.finally(release);
+    };
+  });
+  const drop = (text: string) =>
+    page.evaluate((text) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([text], "a.do", { type: "text/plain" }));
+      document
+        .querySelector(".editor-pane")!
+        .dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, text);
+  await drop("first\n");
+  await drop("second drop\n");
+  const clash = page.getByRole("alertdialog");
+  await expect(clash).toContainText("a.do is already here");
+  await expect(clash).toContainText("uploaded: 12 B");
+  await clash.getByRole("button", { name: "Replace with uploaded" }).click();
+  await expect.poll(() => storedText(page, "a.do")).toBe("second drop\n");
+});
+
 test("a drag that began in the page (a graph image, which Chromium and WebKit list as Files) uploads nothing; after its end a drop of files does", async ({
   page,
 }) => {

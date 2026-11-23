@@ -293,7 +293,8 @@ Specs:
   drag guard.
 - `files.spec.ts`: files, tabs and the file panel.
   - The tree by keyboard; tabs with and without unsaved edits; Save; inline rename; row and head menus; delete.
-  - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page.
+  - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page, two quick drops
+    of one path (applied in drop order).
   - New .do file and New folder; drafts in a folder; the current folder (selecting, folding, rename and delete).
   - The phone's strip, file dropdown (44 px targets) and "Files ⋯"; the desktop's tablist.
 - `states.spec.ts` (step 4d): engine states and their banners.

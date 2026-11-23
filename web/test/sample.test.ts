@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
 import { moduleText } from "../scripts/make-sample.ts";
-import type { ClashAnswer } from "../src/app/files/actions.ts";
+import type { ClashAnswer } from "../src/app/files/upload.ts";
 
 // localStorage and a page's location, which Node lacks: state.ts reads the first at load, sample.ts the second when
 // called
@@ -29,8 +29,8 @@ const { store } = await import("../src/app/store.ts");
 const { afterRun, connectFiles, keep, own, refresh } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");
 const { openFile } = await import("../src/app/files/open.ts");
-const A = await import("../src/app/files/actions.ts");
-const { answerClash, clashNow } = A;
+const Up = await import("../src/app/files/upload.ts");
+const { answerClash, clashNow } = Up;
 const sample = await import("../src/app/sample.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -144,17 +144,17 @@ test("Restore the sample asks about a file that differs, in the clash dialog wit
   await store.write("helpers.do", enc("* mine"));
   await openFile("helpers.do"); // made active
   const mine = D.stateOf("helpers.do");
-  const keep = answering([{ replace: false, same: false }]);
+  const keep = answering([{ replace: false, isForRest: false }]);
   await sample.restoreSample();
   keep.stop();
   assert.deepEqual(keep.seen, [
-    { dialog: { d: "clash", path: "helpers.do", index: 1, total: 1 }, words: A.WORDS.sample },
+    { dialog: { d: "clash", path: "helpers.do", index: 1, total: 1 }, words: Up.WORDS.sample },
   ]);
   assert.equal(dec(await store.read("helpers.do")), "* mine", "kept");
   assert.equal(D.stateOf("helpers.do"), mine, "not reloaded");
   assert.equal(D.activeTab.value, "analysis.do", "the tab of analysis.do, which the visitor never changed");
   D.activate("helpers.do");
-  const replace = answering([{ replace: true, same: false }]);
+  const replace = answering([{ replace: true, isForRest: false }]);
   await sample.restoreSample();
   replace.stop();
   assert.equal(dec(await store.read("helpers.do")), dec(sample.sampleFiles()[1].bytes));
@@ -202,7 +202,7 @@ test("Restore the sample asks about a sample file open with unsaved edits, even 
   await sample.seedSample();
   await openFile("analysis.do");
   D.update("analysis.do", { changes: { from: 0, insert: "* edited\n" } });
-  const { seen, stop } = answering([{ replace: true, same: false }]);
+  const { seen, stop } = answering([{ replace: true, isForRest: false }]);
   await sample.restoreSample();
   stop();
   assert.deepEqual(
@@ -221,7 +221,7 @@ test("Restore the sample over an open tab whose file has \\r\\n and a BOM: the e
   await sample.seedSample();
   await store.write("helpers.do", enc("\uFEFF* mine\r\n"));
   await openFile("helpers.do");
-  const { stop } = answering([{ replace: true, same: false }]);
+  const { stop } = answering([{ replace: true, isForRest: false }]);
   await sample.restoreSample();
   stop();
   assert.equal(D.stateOf("helpers.do")!.doc.toString(), dec(sample.sampleFiles()[1].bytes));

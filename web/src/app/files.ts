@@ -5,10 +5,10 @@
 import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
 import { ranOver, tabs } from "./editor/documents.ts";
-import { reloadTab } from "./files/actions.ts";
 import { decodeText } from "./files/open.ts";
 import { saveAs } from "./files/save.ts";
 import { fileTurn, turnsOn } from "./files/turns.ts";
+import { reloadTab } from "./files/upload.ts";
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
 import * as S from "./state.ts";
 import { filesWriter as W } from "./state.ts";
