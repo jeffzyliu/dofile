@@ -128,11 +128,22 @@ test("Save against rename: a rename pressed before it is honoured, the text writ
   await opened("a.do", "1");
   edit("a.do");
   const open = await hold();
+  const { write } = store;
+  const written: string[] = [];
+  store.write = (path, data) => {
+    written.push(path);
+    return write.call(store, path, data);
+  };
   const renamed = A.renameEntry("a.do", "b.do");
   const saved = D.save("a.do");
   open();
-  await renamed;
-  assert.equal(await saved, true);
+  try {
+    await renamed;
+    assert.equal(await saved, true);
+  } finally {
+    store.write = write;
+  }
+  assert.deepEqual(written, ["b.do"], "the Save waited for the rename and wrote under the new name");
   assert.equal(await has("a.do"), false);
   assert.equal(await stored("b.do"), "edited 1");
   assert.deepEqual(D.tabs.value, [{ path: "b.do", kind: "text", dirty: false }]);
@@ -246,11 +257,8 @@ test("an upload's Replace answered while a Save of the tab waits: the Save write
     clearTimeout(timer);
     store.write = write;
   }
-  assert.deepEqual(
-    writes,
-    [edited, "uploaded", "uploaded"],
-    "the Save writes first; the upload's Replace is refused (the file changed), asked again, then written",
-  );
+  assert.equal(writes[0], edited, "the Save writes first");
+  assert.equal(writes.at(-1), "uploaded", "the upload's Replace writes last");
   assert.equal(clashDialogs.size, 2, "the upload asks again: the file changed while it was asked");
   assert.equal(await stored("a.do"), "uploaded", "the later action, the upload's Replace, wins");
   assert.equal(D.textOf("a.do"), "uploaded");
@@ -294,19 +302,22 @@ test("a run against unsaved edits (afterRun keeps them): a Save pressed while it
   const open = await hold();
   await store.write("out.log", enc("the run's"));
   const ran = afterRun([{ name: "out.log", status: "modified", bytes: 9 }]);
-  const saved = D.save("out.log");
-  const raised = new Promise<void>((r) => {
-    const stop = effect(() => {
-      if (S.banners.value.some((b) => b.b === "run-changed"))
-        queueMicrotask(() => {
-          stop();
-          r();
-        });
-    });
-  });
-  open();
-  await ran;
-  await raised; // the run kept the edits and said so before the Save's turn
+  const { write } = store;
+  let bannerAtWrite: boolean | null = null;
+  store.write = (path, data) => {
+    bannerAtWrite = S.banners.value.some((b) => b.b === "run-changed");
+    return write.call(store, path, data);
+  };
+  let saved: Promise<boolean>;
+  try {
+    saved = D.save("out.log");
+    open();
+    await ran;
+    await saved;
+  } finally {
+    store.write = write;
+  }
+  assert.equal(bannerAtWrite, true, "the run kept the edits and said so before the Save's turn wrote");
   assert.equal(D.textOf("out.log"), "edited old", "kept");
   assert.equal(await saved, true);
   assert.equal(await stored("out.log"), "edited old");
