@@ -125,6 +125,10 @@ def install(workdir: str | os.PathLike, read_dirs: tuple[str, ...] = ()) -> None
     py_roots |= {os.path.realpath(p) for p in code_dirs if os.path.isdir(p)}
     writable = (work,)
     readable = (work, *sorted({os.path.realpath(d) for d in read_dirs} | py_roots), "/dev/null")
+    if sys.platform == "darwin":
+        # c() builds its OS values on every reference: platform.mac_ver() reads this one file (it holds only the macOS
+        # version). Allowed as a file, not its folder; on Linux platform.release() calls uname, with no file read.
+        readable += ("/System/Library/CoreServices/SystemVersion.plist",)
 
     def hook(event: str, args: tuple) -> None:
         if event.startswith(_BLOCKED_EVENTS):

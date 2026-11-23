@@ -125,6 +125,12 @@ def test_a_refusal_is_told_apart_from_a_missing_folder_inside_capture(work):
     assert not log[j + 1].startswith("dofile sandbox") and "dofile sandbox" not in "\n".join(log[j:])
 
 
+def test_c_values_work_under_the_sandbox(work):
+    """c() reads the OS version on every reference: on macOS platform.mac_ver() opens one system file."""
+    for r in sandboxed(work, "display c(N)", 'display "`c(current_date)\'"', "creturn list"):
+        assert r["rc"] == 0, r["log"]
+
+
 def test_reads_outside_allowed_dirs_are_blocked(work, tmp_path):
     secret = tmp_path / "secret.csv"
     secret.write_text("token\nTOP-SECRET-VALUE\n")
