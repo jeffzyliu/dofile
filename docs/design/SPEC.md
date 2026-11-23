@@ -1015,7 +1015,7 @@ export const graphs: ReadonlySignal<Graph[]>;            // run controller: a ru
 export const graphIndex: Signal<number>;         // the Graph tab, the full-size view and the log's graph links (by `n`)
 export const graphFull: Signal<boolean>;         // the full-size view is open: 4c's Open full size and Close, 4b's inline tap
 export const theme: Signal<"system" | "light" | "dark">;   // the theme button
-export const wrap: Signal<boolean>;              // "Wrap lines" in the ⋯ menus (App.tsx toggleWrap); views read it; kept in localStorage
+export const wrap: Signal<boolean>;              // "Wrap lines" in the ⋯ menus (state/layout.ts toggleWrap); views read it; kept in localStorage
 export const toast: ReadonlySignal<string | null>;       // anyone, through showToast(text, kind?); it clears itself (toastMs: 4 to 10 s)
 export const toastError: ReadonlySignal<boolean>;        // the toast reports an error (warning icon), not a confirmation
 export const dialog: Signal<Dialog>;             // whoever opens one; the dialog closes itself

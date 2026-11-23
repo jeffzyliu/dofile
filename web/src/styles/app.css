@@ -1183,7 +1183,7 @@ input.filter::placeholder {
   font: var(--text-xs) / 1.6 var(--font-ui);
   color: var(--muted);
 }
-/* "Wrap lines" (App.tsx toggleWrap; LogView.tsx gives the log the class wrap): the log's long lines wrap; the banner art keeps its shape */
+/* "Wrap lines" (state/layout.ts toggleWrap; LogView.tsx gives the log the class wrap): the log's long lines wrap; the banner art keeps its shape */
 .log.wrap {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

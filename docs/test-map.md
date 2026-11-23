@@ -218,6 +218,12 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   - The loader patch applies to `pyodide.asm.mjs` once and throws on other text.
 - `run-parts.test.ts`: what the log draws after a run's lines (`log/run-parts.ts`, no DOM): graph links, the unsaved-do
   note in each layout's words, a phone's hint block and wide-table hint, Go to line, the end notes.
+- `layout.test.ts`: the layout's actions (`state/layout.ts`, no DOM): Wrap lines flips the signal and keeps "1" in localStorage
+  only while on; Split and Unsplit keep the choice and leave the Output tab the pane can show (Unsplit: the Log; Split:
+  Graph instead of the Log tab, Data and Results as they were).
+- `fold.test.ts`: the folded file list's moves (`files/fold.ts`, a stand-in for the Files button and for the list's focus
+  move): opening focuses the list from anywhere, folding focuses the button, Esc folds only an open list whose button
+  is drawn and only when no handler used the key.
 - `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`).
   - The .log tokenizer, Download log's text, Find's matches, `runError`, a .csv's columns, the run-head words.
   - Where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture`
