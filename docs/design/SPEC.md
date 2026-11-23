@@ -1245,8 +1245,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
     by Break. The data is as the last complete command left it.", no line); the notes at a run's end (Break's with its
     "Go to line", OQ-10's, the files not kept) wrap in the Log pane at every width; on a phone, a tap on the Break pill also shows
-    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; for the
-    the maintainer, 2026-11-23, B 2 of the plan's list); a phone's
+    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; the maintainer,
+    2026-11-23, B 2 of the plan's list); a phone's
     inline graph is on the card of its run's theme; Run with no text tab open runs nothing and
     says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
     line out; the page load's status words are "Loading"; a selection's last run is "Last run: lines 6–7 · …" and a
