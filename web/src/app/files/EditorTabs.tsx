@@ -1,43 +1,24 @@
 // The editor's tabs (docs/design/SPEC.md, section 3.2) in the Editor pane's head, and the phone's file switcher
 // (FileSwitcher). Ctrl/Cmd+W is the browser's: not bound. The tabs are editor/documents.ts's.
 import { signal } from "@preact/signals";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useRef } from "preact/hooks";
 import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
 import { phoneTab } from "../state.ts";
 import type { OpenTab } from "../types.ts";
 import { useFocusRequest, useFocusTarget } from "../ui/focus-hooks.ts";
-import { focusNow, fromNothing } from "../ui/focus-targets.ts";
+import { fromNothing } from "../ui/focus-targets.ts";
 import { Icon } from "../ui/Icon";
 import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
+import { focusAfterClose } from "./close-focus.ts";
 import { baseName, tabLabels } from "./tree.ts";
-import { focusTree, treeShown } from "./tree-state.ts";
 
 const tabId = (i: number) => `file-tab-${i}`;
 const Unsaved = () => <span class="dot" role="img" aria-label="unsaved changes" />;
 
 // the tab a key moved to, or the tab selected after a close: it takes the focus when it is drawn (FileTab)
 const tabAsked = signal<string | null>(null);
-// a tab closed from the keyboard or the close-tab dialog: EditorTabs places the focus from its next render
-const closeAsked = signal(false);
-
-/** After a tab closed (its element, which may have had the focus, is gone): the selected tab takes the focus, else the
- *  file tree's row in the tab order when the list is shown, else the editor; never the page itself. */
-export function focusAfterClose() {
-  closeAsked.value = true;
-}
-
 export function EditorTabs() {
   const strip = useRef<HTMLDivElement>(null);
-  const asked = closeAsked.value;
-  // from the render that drew the tabs left (docs/web-page-flows.md, section 1)
-  useLayoutEffect(() => {
-    if (!asked) return;
-    closeAsked.value = false;
-    const shown = (strip.current?.getClientRects().length ?? 0) > 0;
-    if (shown && activeTab.value !== null) tabAsked.value = activeTab.value;
-    else if (treeShown()) focusTree();
-    else focusNow("editor");
-  }, [asked]);
   const list = tabs.value;
   if (!list.length) return null;
   const labels = tabLabels(list.map((t) => t.path));

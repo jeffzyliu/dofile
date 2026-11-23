@@ -53,6 +53,9 @@ afterEach(() => {
   cancel("editor");
   cancel("more-actions");
   cancel("open-file-tab");
+  cancel("tree");
+  cancel("find-field");
+  cancel("files-toggle");
   doc.activeElement = doc.body;
 });
 

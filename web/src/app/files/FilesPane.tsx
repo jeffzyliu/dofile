@@ -5,8 +5,7 @@ import { activeTab } from "../editor/documents.ts";
 import { downloadAll } from "../files.ts";
 import { restoreSample } from "../sample.ts";
 import { dialog, files, hasFiles } from "../state.ts";
-import { useFocusRequest } from "../ui/focus-hooks.ts";
-import { fromAnywhere, fromNothing } from "../ui/focus-targets.ts";
+import { useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { MenuButton, type MenuItem } from "../ui/Menu";
 import { send, useDrop } from "./drop.ts";
@@ -14,7 +13,7 @@ import { fromFileList } from "./intake.ts";
 import { renaming, startDraft } from "./rename.ts";
 import { TreeRow } from "./TreeRow.tsx";
 import { treeRows } from "./tree.ts";
-import { currentDir, focusWanted, folded, newFileDir, rovingPath, setTree } from "./tree-state.ts";
+import { currentDir, folded, newFileDir, rovingPath } from "./tree-state.ts";
 
 let pickFiles: HTMLInputElement | null = null; // the hidden file inputs
 let pickFolder: HTMLInputElement | null = null;
@@ -51,16 +50,8 @@ export const fileMenuItems = (): MenuItem[] => [
 
 export function FilesHead() {
   const button = useRef<HTMLButtonElement>(null);
-  const w = focusWanted.value;
   // with no rows a request for the row in the tab order comes here, File actions
-  useFocusRequest(
-    w?.path === null && !files.value.length,
-    button,
-    () => {
-      focusWanted.value = null;
-    },
-    w?.anywhere ? fromAnywhere : fromNothing,
-  );
+  useFocusTarget("tree", () => (files.value.length ? null : button.current));
   return (
     <>
       <NewFileButton class="head-link icon" />
@@ -112,7 +103,7 @@ export function FilesBody() {
     >
       {rows.length > 0 && (
         // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the tree's rows are a list's items, as ui.css draws them (.files li)
-        <ul class="files" role="tree" aria-label="Files" ref={setTree}>
+        <ul class="files" role="tree" aria-label="Files">
           {rows.map((row) => (
             <TreeRow
               key={row.path}

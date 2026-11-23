@@ -4,15 +4,14 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import { formatSize } from "../bytes.ts";
 import { activeTab, tabs } from "../editor/documents.ts";
 import { dialog, fresh } from "../state.ts";
-import { useFocusOnMount, useFocusRequest } from "../ui/focus-hooks.ts";
-import { fromAnywhere, fromNothing } from "../ui/focus-targets.ts";
+import { useFocusOnMount, useFocusTarget } from "../ui/focus-hooks.ts";
 import { Icon } from "../ui/Icon";
 import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
 import { openFile } from "./open.ts";
 import { downloadEntry } from "./ops.ts";
 import { clearProblem, endRename, leaveField, type Renaming, renaming, startDraft, startRename } from "./rename.ts";
 import { parentOf, type Row } from "./tree.ts";
-import { currentDir, focusRow, focusWanted, rove, toggle } from "./tree-state.ts";
+import { currentDir, focusRow, rove, toggle } from "./tree-state.ts";
 
 const askDelete = (path: string) => {
   dialog.value = { d: "delete", paths: [path] };
@@ -94,20 +93,6 @@ function RenameField({ field, row }: { field: Renaming; row: Row }) {
   );
 }
 
-/** A row asked for (by its path, or as the row in the tab order) takes the focus once it is drawn, if the focus is free
- *  (on the page body, where the removed rename field leaves it, or in the tree) or the request says `anywhere`. */
-function useRovingFocus(path: string, li: { current: HTMLElement | null }, isRenaming: boolean, tabbable: boolean) {
-  const w = focusWanted.value;
-  useFocusRequest(
-    !!w && (w.path === null ? tabbable : w.path === path) && !isRenaming, // a row being renamed waits for the field to go
-    li,
-    () => {
-      focusWanted.value = null;
-    },
-    w?.anywhere ? fromAnywhere : (at) => fromNothing(at) || !!li.current?.closest('[role="tree"]')?.contains(at),
-  );
-}
-
 export function TreeRow({
   row,
   tabbable,
@@ -123,7 +108,10 @@ export function TreeRow({
   const open = !row.dir && activeTab.value === row.path;
   const field = renaming.value?.path === row.path ? renaming.value : null;
   const li = useRef<HTMLLIElement>(null);
-  useRovingFocus(row.path, li, field !== null, tabbable);
+  // a row asked for by its path, and the row in the tab order asked for with none (tree-state.ts): a row with its rename
+  // field open is not a target, since the field has the focus
+  useFocusTarget("tree", () => (field ? null : li.current), { key: row.path });
+  useFocusTarget("tree", () => (tabbable && !field ? li.current : null));
   const showMenu = (el: HTMLElement, at?: { x: number; y: number }, anchor: HTMLElement | null = at ? null : el) =>
     openMenu({ label: menuLabel(row), items: () => rowItems(row), anchor, at, restore: el });
   // a folder is made current and unfolded, never folded (its caret and Left fold it); a file opens, and its folder is
