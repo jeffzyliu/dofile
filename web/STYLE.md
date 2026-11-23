@@ -29,6 +29,28 @@ before writing or reviewing code in `web/`. A rule that a check enforces names t
   (`handle: async (args) => ...`), unless it needs the enclosing `this`. No rule checks it; convert an older file's
   arrow properties when you change the file.
 
+## UI helpers (`app/ui/`)
+
+The shared pieces (components, hooks) are a small library: a consumer learns one contract.
+
+- **A component that draws its own element owns it.** It takes no ref and no element (`Dialog`, `Tablist`,
+  `DismissibleBanner`). One that exposes its root takes the standard `ref` prop (`MenuButton`, `Banner`).
+- **A hook that acts on an element takes it as `get`**, an optional field of its options object:
+  `(own) => HTMLElement | null` (`Get<T>`, `ui/element.ts`), where `own` is the hook's own element, null before mount. It is
+  read where the element is used (a layout effect, an event handler), never while rendering. Without `get` the hook acts
+  on its own element. A hook never takes a ref or an element.
+- **A hook returns the ref to attach.** The consumer writes `const ref = useX<HTMLButtonElement>()` and `ref={ref}`, and
+  imports `useRef` only for a ref it uses itself. When a second helper needs the same element it gets
+  `get: () => ref.current`. A hook given a `get` returns a ref that nothing attaches: ignore it.
+- **A function called at event time with the element in hand takes the element** (`openMenu({ anchor })`): `get` is for
+  what must be found later.
+- **Options are one object after what is acted on** (`useFocusTarget(name, { get, key, focus })`, `register(name, { get,
+  key, focus })`, `closeMenu({ restoreFocus })`), never a list of positional flags or a boolean positional parameter.
+- **Imports:** a consumer reaches the focus hooks through `ui/focus-hooks.ts` and the plain focus functions
+  (`focusStable`, `ask`, `focusNow`) through `ui/focus-targets.ts`. `ui/` imports nothing from `states/` or `files/`
+  (`test/imports.test.ts`). A file that a Node test imports (`focus-targets.ts`) holds no hook.
+- Focus rules: `docs/web-page-flows.md`, section 1, and `docs/design/focus-targets.md`.
+
 ## Naming
 
 - **A name states nothing false.** Text is not a path, `next` is not the last, `At` is a time or a position, `MB`

@@ -44,7 +44,8 @@ The other scripts (the screenshot run, `preview`, the `check-*` runs inside Pyod
   types; one `tsconfig.json` covers them all); Node strips the types, so imports spell the `.ts` extension and only erasable syntax is allowed (no `enum`,
   `namespace` or constructor parameter properties; `npm run check` enforces it). The engine's types are
   `src/engine/types.ts`; keep them and SPEC section 6 in step.
-- **Code style: `web/STYLE.md`** (comments, functions). Read it before writing or reviewing code here.
+- **Code style: `web/STYLE.md`** (comments, functions, the contract of the shared UI helpers in `src/app/ui/`). Read it before
+  writing or reviewing code here.
 - **State.** One module of signals per owner, in `src/app/state/` (`engine.ts`, `files.ts`, `run.ts`, `layout.ts`,
   `notices.ts`, `saved.ts`; `theme` is in `theme.ts`, the Data tab's `pickedVar` in `output/view.ts`), except the open tabs:
   `src/app/editor/documents.ts` keeps one record per tab, its `tabs`, `activeTab` and `selection` are computeds over them,

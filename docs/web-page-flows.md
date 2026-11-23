@@ -31,7 +31,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 
 1. **A hand-off moves only a focus left on nothing** (`document.activeElement` is `<body>` or null). The dialog's
    hand-back and `useFocusOnLeave` check this first, so whoever places the focus first wins and the focus moves once.
-2. **The fallback is `states/focus.ts` `focusStable()`:** first the registry's `editor` target (`focusNow`,
+2. **The fallback is `ui/focus-targets.ts` `focusStable()`:** first the registry's `editor` target (`focusNow`,
    `ui/focus-targets.ts`), then, if that moved the focus nowhere, the first shown `more-actions` target (the "More actions"
    button). It is never `<body>`.
 3. **The `editor` target** (`editor/Editor.tsx` `focusTarget`; `focusNow("editor")` focuses at once) focuses without
@@ -111,7 +111,7 @@ Written from the code. Paths are relative to `web/src/app/` unless they start wi
 |---|---|---|---|
 | `ui/modal-trap.ts` `useModalTrap`, opening (`ui/Dialog.tsx`, `output/FullSize.tsx`) | it mounts | layout effect | A dialog: it blurs the opener, then calls `showModal()`; then `[data-autofocus]`, else the first enabled button, link or input. The full-size view: the view itself (so a Space that opened it cannot press Close). The view also keeps Tab and Shift+Tab inside its buttons, takes Esc and the arrow keys, and leaves every key to a `dialog[open]` over it. |
 | `useModalTrap`, closing | it unmounts | cleanup (blur inside, a dialog's `close()`), then a microtask, after the render's other layout effects; only a focus on nothing | the opener if it is still in the page, else `focusStable()` |
-| `states/focus.ts` `useFocusOnLeave` | a banner unmounts with the focus inside | layout cleanup, then a microtask; only a focus on nothing | `focusStable()` |
+| `ui/focus-hooks.ts` `useFocusOnLeave` | a banner unmounts with the focus inside | layout cleanup, then a microtask; only a focus on nothing | `focusStable()` |
 | `KeepWaitingButton` (in `StoppingBanner`), `WaitingBanner` (`states/banners.tsx`) | the button appears (1 s after the Break press), the waiting banner mounts | layout effect (`useFocusOnMount`) | "Don't reset: wait for it"; the waiting banner's box (`tabindex=-1`) |
 | `DeclinedBanner` (`states/banners.tsx`) | "Start engine" | synchronous, before `eng.ask()` | `focusStable()`, so the prompt takes the editor as its opener |
 | `engine.ts`, effect `close-dialog` with `focusEditor` | `started` closes the download dialog, if it is still open (no other cell sets `focusEditor`) | `ask("editor")` in the step; the Editor takes it in a layout effect of the render that removes the dialog (`useFocusTarget`) | the `editor` target |
@@ -198,7 +198,7 @@ sequenceDiagram
   participant E as engine.ts and the machine
   participant SB as stopping banner
   participant D as other-tab dialog
-  participant F as states/focus.ts
+  participant F as ui/focus-targets.ts
   Note over SB: the focus is on Don't reset, taken in its layout effect
   O->>E: lock-lost
   E->>E: one step, engine = other-tab-idle, effects cancel-break-timer, end-worker, block-store, engine-gone, show-dialog, end-run
@@ -224,7 +224,7 @@ sequenceDiagram
   participant E as engine.ts
   participant SB as stopping banner
   participant WB as waiting banner
-  participant F as states/focus.ts
+  participant F as ui/focus-hooks.ts
   V->>E: Don't reset, wait for it (keepWaiting)
   E->>E: engine = waiting
   Note over SB,WB: microtask, LogStateBanners draws WaitingBanner in place of the stopping one
