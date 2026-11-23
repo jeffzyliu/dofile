@@ -30,6 +30,15 @@ or {
     $filename <: r".*/src/engine/machine\.ts$",
     register_diagnostic(span=$m, message="machine.ts imports types only")
   },
+  // focus-targets.ts holds no hook, as a value or a type import: the Node tests import it.
+  or {
+    value_import($source),
+    `import type { $_ } from $source`
+  } as $m where {
+    $filename <: r".*/src/app/ui/focus-targets\.ts$",
+    $source <: r".*preact/hooks.*",
+    register_diagnostic(span=$m, message="focus-targets.ts imports nothing from preact/hooks: a Node test imports it (the hook is in focus-hooks.ts)")
+  },
   `Math.random` as $m where {
     $filename <: r".*/src/engine/machine\.ts$",
     register_diagnostic(span=$m, message="machine.ts is pure: no random number")

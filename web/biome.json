@@ -150,6 +150,55 @@
       }
     },
     {
+      "includes": ["src/app/ui/**/*.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/*.tsx", "**/site/**", "**/states/**", "**/files/**"],
+                    "message": "ui/ imports nothing from states/ or files/: they import ui/. A .ts file never imports a .tsx; the editor imports nothing of src/site/"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/app/ui/**/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/engine/client*",
+                      "**/engine/worker*",
+                      "**/engine/machine*",
+                      "**/main",
+                      "**/main.tsx",
+                      "**/site/**",
+                      "**/states/**",
+                      "**/files/**"
+                    ],
+                    "message": "ui/ imports nothing from states/ or files/: they import ui/. A view never reaches the transport, the machine or main.tsx, nor src/site/"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["src/engine/**"],
       "linter": {
         "rules": {
