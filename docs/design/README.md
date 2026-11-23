@@ -17,6 +17,7 @@ The build spec for the pages is [`SPEC.md`](SPEC.md). This README is the history
 | `specimen/` | the font specimen; the chosen IBM Plex files and their license are in `web/src/styles/fonts/` |
 | `axe.mjs`, `tabwalk.mjs`, `contrast.mjs`, `fonts.mjs` | the checks (`cd web && npm run axe`, `tabwalk`, `contrast`, `fonts`) |
 | [`staging.md`](staging.md) | the R5 note (web audit): who stages `public/`, who reads it, and the design that replaces the config's module-load copies |
+| [`focus-targets.md`](focus-targets.md) | the S6 note (web audit): the focus-target registry that replaces the views' focus handles, the modal trap and the roving-key hook. Proposed 2026-11-23 |
 | `shot.mjs` | screenshots any page with Playwright from `web/node_modules` |
 | `workspace.md` | design note S0 of the web audit (`../web-audit-plan.md`, section 6): who owns the file list, the tabs and the open documents, the order of writes, the target modules. Proposed 2026-11-16; S1 to S6 and R7r are built from it once approved |
 
