@@ -88,6 +88,50 @@ test("Copy image twice in the full-size view: the first 'Copied' timer does not 
   await expect(viewer.locator(".vsaid")).toHaveText("");
 });
 
+const PIXEL =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+test("the full-size view: its first focus is the view, not Close; Tab and Shift+Tab wrap inside it; Esc hands the focus back to Open full size", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  const stops = () =>
+    viewer.evaluate((root) =>
+      [...root.querySelectorAll<HTMLElement>("button:not([disabled])")]
+        .filter((el) => el.getClientRects().length > 0)
+        .map((el) => el.textContent?.trim()),
+    );
+  const focusedText = () => page.evaluate(() => document.activeElement?.textContent?.trim());
+  if (isPhone(page)) {
+    await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }], { full: true });
+  } else {
+    await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }]);
+    await showTab(page, "graph");
+    const open = page.getByRole("button", { name: "Open full size" });
+    await open.focus();
+    await page.keyboard.press("Space"); // a Space that opened the view must not press Close, the first button
+    await expect(viewer).toBeVisible();
+  }
+  await expect(viewer).toBeFocused();
+  await page.waitForTimeout(200); // a Close pressed by the opening Space would close the view about now
+  await expect(viewer).toBeVisible();
+  const all = await stops();
+  expect(all.length).toBeGreaterThan(1);
+  await page.keyboard.press("Shift+Tab"); // from the view itself: the last stop
+  expect(await focusedText()).toBe(all[all.length - 1]);
+  await page.keyboard.press("Tab"); // from the last: the first
+  expect(await focusedText()).toBe(all[0]);
+  await page.keyboard.press("Shift+Tab"); // from the first: the last
+  expect(await focusedText()).toBe(all[all.length - 1]);
+  if (!isPhone(page)) {
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open full size" })).toBeFocused();
+  }
+});
+
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
   await page.goto("?test=manual");
   await expect.poll(() => page.evaluate(() => window.__dofile.store.blocked)).toBe(false);
