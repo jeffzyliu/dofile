@@ -229,6 +229,15 @@ test("after the last tab closed the tree's row in the tab order is asked when th
   assert.equal(doc.activeElement, editor);
 });
 
+test("with no tab left selected, the closed tab's element still in the page is not asked", () => {
+  reg("open-file-tab", () => fake());
+  reg("tree", () => fake({ inside: [TREE] }));
+
+  focusAfterClose();
+
+  assert.deepEqual(TS.focusWanted.value, { path: null, anywhere: false });
+});
+
 test("with the tab strip not drawn (a phone) the focus goes to the tree or the editor, not a tab", () => {
   open("a.do");
   D.activate("a.do");
