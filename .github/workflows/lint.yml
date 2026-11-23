@@ -69,11 +69,15 @@ jobs:
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
-      # A matrix leg GitHub never ran reads as success in needs, so the run's own job list is checked too (the gates are
-      # excluded by name, "ci / ci ok" when called from deploy.yml, where the sibling gates run beside this one).
+      # A matrix leg GitHub never ran reads as success in needs, so the run's own job list is checked too. Called from
+      # deploy.yml, every job of the run is listed, named "<caller job> / <name>": only this workflow's jobs are judged
+      # (the prefix is this gate's own name minus "lint ok"), as the others may still be running.
       - env:
           GH_TOKEN: ${{ github.token }}
+          FILTER: |
+            [.jobs[]] | (map(select(.name | test("(^| / )lint ok$"))) | first | .name | sub("lint ok$"; "")) as $p
+              | .[] | select((.name | startswith($p)) and (.name | test("(^| / )lint ok$") | not)
+                and .conclusion != "success" and .conclusion != "skipped") | .name
         run: |
-          bad=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate \
-            --jq '.jobs[] | select((.name | test("(^| / )(ci|web|lint) ok$") | not) and .conclusion != "success" and .conclusion != "skipped") | .name')
+          bad=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate --jq "$FILTER")
           [ -z "$bad" ] || { echo "not green: $bad"; exit 1; }
