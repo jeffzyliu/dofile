@@ -27,6 +27,12 @@ def _inside(path: str, folder: str) -> bool:
     return path == folder or path.startswith(folder.rstrip("/") + "/")
 
 
+def _key(path: str, mod=os.path) -> str:
+    """`path` as the platform compares it: case-folded, with "/" for the separator (`_inside` splits on "/")."""
+    path = mod.normcase(path)
+    return path.replace("\\", "/") if mod.sep != "/" else path
+
+
 def _candidates(text: str, root: str) -> tuple[str, list[str]]:
     """The path as a normalized absolute path, and the tails of it under root, longest first."""
     t = _DRIVE.sub("", text.replace("\\", "/"), count=1)
@@ -40,8 +46,8 @@ def _candidates(text: str, root: str) -> tuple[str, list[str]]:
 def resolve(text: str, root: str) -> tuple[str, bool]:
     """Where a file the user named is in the working folder, and whether that is a mapping worth a note."""
     root = os.path.realpath(root)
-    tmp = os.path.realpath(tempfile.gettempdir())
-    if os.path.exists(text) or (os.path.isabs(text) and _inside(os.path.realpath(text), tmp)):  # tempfiles
+    tmp = _key(os.path.realpath(tempfile.gettempdir()))
+    if os.path.exists(text) or (os.path.isabs(text) and _inside(_key(os.path.realpath(text)), tmp)):  # tempfiles
         return text, False
     full, tails = _candidates(text, root)
     if _inside(full, root):

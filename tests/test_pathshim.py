@@ -3,6 +3,7 @@ working folder. Each file command runs with a Windows and a POSIX foreign prefix
 fails here; a per-file count of `expanduser` (EXPANDUSER) catches a path site a re-vendor adds."""
 
 import os
+import posixpath
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,18 @@ def test_the_engine_has_no_new_path_sites():
         for f in sorted(vendor.rglob("*.py"))
     }
     assert {k: n for k, n in found.items() if n} == EXPANDUSER
+
+
+def test_a_windows_tempfile_path_is_inside_the_temp_folder_whatever_its_case_and_separators():
+    """The engine's tempfile is C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\opendta-<pid>\\S__000000.dta and Windows realpath gives
+    backslashes: the folder test compares "/"-separated, case-folded keys."""
+    import ntpath
+
+    tmp = pathshim._key(r"C:\Users\runneradmin\AppData\Local\Temp", ntpath)
+    tempfile_path = pathshim._key(r"c:\users\RunnerAdmin\AppData\Local\Temp\opendta-5080\S__000000.dta", ntpath)
+    elsewhere = pathshim._key(r"C:\Users\runneradmin\AppData\Local\Temporary\x.dta", ntpath)
+    assert pathshim._inside(tempfile_path, tmp) and not pathshim._inside(elsewhere, tmp)
+    assert pathshim._key("/tmp/A\\b", posixpath) == "/tmp/A\\b"  # POSIX: a backslash is a name character, nothing is folded
 
 
 def test_the_note_is_in_every_run_that_maps_a_path(shim):
