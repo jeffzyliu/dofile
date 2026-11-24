@@ -38,8 +38,8 @@ tests (the "deselected" part is the slow Stata comparison; `-o addopts=` counts 
 **3. Interrupt and Break** (`test_break.py`; also the timeout and cancel tests in `test_worker.py`)
 - A Break stops between commands and keeps the data; loops stop between passes.
 - A command with no safe point is ended with rc 9998.
-- Windows' interrupt (an Event a thread in the child turns into SIGINT) runs on every platform: it takes the Break,
-  and one set between calls stops nothing.
+- Windows' interrupt (a shared flag a thread in the child turns into SIGINT) runs on every platform: it takes the
+  Break, one set between calls stops nothing, and setting it never waits for a child that holds its GIL or is dead.
 
 **4. Log cutting** (`test_log_cut.py`): the biggest blocks go first, short results survive, and the cut is fast.
 
