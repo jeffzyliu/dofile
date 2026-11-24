@@ -227,20 +227,27 @@ def test_full_pool_evicts_only_idle_sessions_and_refuses_when_all_are_busy():
         a, b = pool.get("a"), pool.get("b")  # a is the least recently used
         assert a.run("display 1").rc == 0 and b.run("display 1").rc == 0
         pool.get("b")
-        busy_a = threading.Thread(target=a.run, args=("sleep 2000",))
+        # the busy calls last until the test interrupts them: a fixed sleep can end while a new session starts (slow on
+        # Windows, which spawns), and an idle session would then be evicted instead of refused
+        call_a, call_c = threading.Event(), threading.Event()
+        busy_a = threading.Thread(target=a.run, args=("sleep 600000",), kwargs={"call": call_a})
         busy_a.start()
         time.sleep(0.5)
         pool.get("c")  # full: evicts idle b, not a (least recently used, but running code)
         assert pool.find("a") is a and pool.find("b") is None
         assert pool.get("c").run("display 1").rc == 0
-        busy_c = threading.Thread(target=pool.find("c").run, args=("sleep 2000",))
+        c = pool.find("c")
+        busy_c = threading.Thread(target=c.run, args=("sleep 600000",), kwargs={"call": call_c})
         busy_c.start()
         time.sleep(0.5)
         with pytest.raises(PoolFull):  # every session is running code: refuse, evict nothing
             pool.get("d")
-        assert pool.find("a") is a and pool.find("c") is not None
-        busy_a.join()
-        busy_c.join()
+        assert pool.find("a") is a and pool.find("c") is c
+        a.interrupt(call_a)
+        c.interrupt(call_c)
+        busy_a.join(30)
+        busy_c.join(30)
+        assert not busy_a.is_alive() and not busy_c.is_alive()
         pool.get("d")  # idle again: one is evicted
         assert len(pool) == 2
     finally:
