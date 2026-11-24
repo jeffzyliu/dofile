@@ -192,9 +192,8 @@ def test_hook_blocks_network_and_subprocess(work):
 
 
 def test_capture_catches_a_sandbox_refusal_like_any_file_error(work, tmp_path):
-    outside = (
-        tmp_path / "outside.txt"
-    )  # exists, beside the workdir and not in a read dir: only the sandbox can refuse it
+    # exists, beside the workdir and not in a read dir: only the sandbox can refuse it
+    outside = tmp_path / "outside.txt"
     outside.write_text("secret\n")
     path = outside.as_posix()
     r = sandboxed(
