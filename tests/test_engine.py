@@ -586,7 +586,9 @@ def test_odt28_a_missing_folder_or_a_directory_is_rc_603_not_an_internal_error(e
         assert r.rc == 603, (cmd, r.rc, r.error)
         assert "could not be opened" in r.error and "internal engine error" not in r.log, (cmd, r.error)
     shown = os.path.join("nodir", "a.smcl")  # the message names the file with the OS separator
-    assert eng.run("log using nodir/a, replace").error == f"file {shown} could not be opened (No such file or directory)"
+    assert (
+        eng.run("log using nodir/a, replace").error == f"file {shown} could not be opened (No such file or directory)"
+    )
 
 
 def test_odt28_capture_catches_it_and_sets_rc(eng):

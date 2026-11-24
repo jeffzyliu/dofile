@@ -176,7 +176,10 @@ EXPANDUSER = {
 
 def test_the_engine_has_no_new_path_sites():
     vendor = Path(__file__).parent.parent / "src" / "dofile" / "_vendor" / "opendta"
-    found = {f.relative_to(vendor).as_posix(): f.read_text(encoding="utf-8").count("expanduser") for f in sorted(vendor.rglob("*.py"))}
+    found = {
+        f.relative_to(vendor).as_posix(): f.read_text(encoding="utf-8").count("expanduser")
+        for f in sorted(vendor.rglob("*.py"))
+    }
     assert {k: n for k, n in found.items() if n} == EXPANDUSER
 
 
