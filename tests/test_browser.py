@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 PRELUDE = """
-import json, os, sys, threading
+import json, os, signal, sys, threading
 from dofile import browser
 print(browser.start(sys.argv[1]))
 """
@@ -152,7 +152,7 @@ def test_break_stops_at_a_safe_point_and_keeps_the_data(tmp_path):
         tmp_path,
         """
 print(browser.run('clear\\nset obs 100\\ngen x = 0'))
-threading.Timer(1.0, os.kill, (os.getpid(), 2)).start()   # the Break button: SIGINT, as Pyodide's interrupt buffer
+threading.Timer(1.0, signal.raise_signal, (signal.SIGINT,)).start()   # the Break button: SIGINT, as Pyodide's interrupt buffer
 print(browser.run('while 1 {\\n quietly replace x = x + 1\\n}'))
 print(browser.run('summarize x'))
 threading.Event().wait(0.1)
@@ -168,7 +168,7 @@ def test_a_break_between_runs_does_not_stop_the_next_one(tmp_path):
     _, r = browser(
         tmp_path,
         """
-os.kill(os.getpid(), 2)   # handled at once, while no run is going on
+signal.raise_signal(signal.SIGINT)   # handled at once, while no run is going on
 print(browser.run('display 1'))
 """,
     )
@@ -182,11 +182,11 @@ def test_a_break_before_the_run_is_busy_is_put_back_and_the_run_takes_it(tmp_pat
 put_back = []
 def again():  # Pyodide's buffer: SIGINT is there again, and Python reads it a little later
     put_back.append(1)
-    threading.Timer(0.3, os.kill, (os.getpid(), 2)).start()
+    threading.Timer(0.3, signal.raise_signal, (signal.SIGINT,)).start()
 browser.keep_breaks(again)
 hold = browser._hold_ballast
 def prologue():  # SIGINT read at the top of run(), before it is busy
-    os.kill(os.getpid(), 2)
+    signal.raise_signal(signal.SIGINT)
     hold()
 browser._hold_ballast = prologue
 r = browser.run('while 1 {\\n}')
@@ -204,10 +204,10 @@ def test_a_break_outside_a_run_is_put_back_and_stops_nothing_by_itself(tmp_path)
         """
 put_back = []
 browser.keep_breaks(lambda: put_back.append(1))
-os.kill(os.getpid(), 2)   # between runs (a describe, say)
+signal.raise_signal(signal.SIGINT)   # between runs (a describe, say)
 sizes = browser.matrix_sizes
 def epilogue(results):  # after the run is no longer busy
-    os.kill(os.getpid(), 2)
+    signal.raise_signal(signal.SIGINT)
     return sizes(results)
 browser.matrix_sizes = epilogue
 ended = browser.run('display 1')
