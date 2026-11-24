@@ -22,6 +22,7 @@ def browser(root, script: str) -> list:
         check=False,
     )
     assert p.returncode == 0, p.stderr
+    browser.last = p  # for an assertion message that shows the subprocess's output
     return [json.loads(line) for line in p.stdout.splitlines()]
 
 
@@ -124,9 +125,9 @@ print(browser.run('use `t\', clear'))
 print(browser.run('forvalues i = 1/30000 {\n  display _dup(100) "x"\n}'))
 """,
     )
-    assert (
-        r["rc"] == 601 and "run_do" not in r["log"] and "MCP" not in r["log"] and "tempfile lasts one run" in r["log"]
-    )
+    shown = f"{r}\nstdout: {browser.last.stdout}\nstderr: {browser.last.stderr}"
+    assert r["rc"] == 601 and "run_do" not in r["log"] and "MCP" not in r["log"], shown
+    assert "tempfile lasts one run" in r["log"], shown
     assert "characters of output omitted" in big["log"] and len(big["log"]) < 2 * LOG_KEEP + 200
 
 

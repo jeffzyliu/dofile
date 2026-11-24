@@ -38,9 +38,12 @@ def test_run_error_exits_1_and_sandbox_blocks_shell(tmp_path):
 def test_error_message_inside_nested_do_files(tmp_path):
     (tmp_path / "main.do").write_text(f'do "{tmp_path / "inner.do"}"\n')
     (tmp_path / "inner.do").write_text("use nosuch, clear\n")
-    dofile("run", "main.do", "--json", "out.json", cwd=tmp_path)
-    out = json.loads((tmp_path / "out.json").read_text())
-    assert out["rc"] == 601 and "nosuch" in out["error"] and out["error_command"] == "use nosuch, clear"
+    p = dofile("run", "main.do", "--json", "out.json", cwd=tmp_path)
+    out_json = tmp_path / "out.json"
+    shown = f"rc={p.returncode}\nstdout: {p.stdout}\nstderr: {p.stderr}\nout.json exists={out_json.exists()} size={out_json.stat().st_size if out_json.exists() else None}"
+    out = json.loads(out_json.read_text()) if out_json.exists() and out_json.stat().st_size else {}
+    assert out, shown
+    assert out["rc"] == 601 and "nosuch" in out["error"] and out["error_command"] == "use nosuch, clear", shown
 
 
 def test_unsafe_allows_shell(tmp_path):
