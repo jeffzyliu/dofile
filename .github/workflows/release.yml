@@ -25,9 +25,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python: ["3.12", "3.13", "3.14"]
-        # include:
-        #   - os: windows-latest   # enable once windows.yml passes
-        #     python: "3.14"
+        include:
+          - os: windows-latest   # Windows runs 3.14 only, as windows.yml does
+            python: "3.14"
     runs-on: ${{ matrix.os }}
     env:
       UV_PYTHON: ${{ matrix.python }}

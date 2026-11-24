@@ -17,6 +17,7 @@ permissions:
 jobs:
   test:
     runs-on: windows-latest
+    timeout-minutes: 30   # the suite takes a few minutes; GitHub's default limit is 6 hours
     env:
       # poe runs tasks through a nested `uv run`, which would otherwise pick .python-version
       UV_PYTHON: "3.14"
