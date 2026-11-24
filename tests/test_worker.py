@@ -86,22 +86,36 @@ def test_a_shared_flag_interrupts_where_there_is_no_sigint_for_the_child(worker,
     assert worker.run("count").results["r"]["scalars"]["N"] == 1000
 
 
-def test_the_flag_interrupt_never_waits_for_a_stuck_or_dead_child(worker, monkeypatch):
+def test_the_flag_interrupt_never_waits_for_a_stuck_or_dead_child(tmp_path, monkeypatch):
     # GRACE and the kill rely on it, and a cancel interrupts from the MCP event loop: a child that holds its GIL in
-    # one long C call, or is dead, must not hold up the parent
+    # one long C call, or is dead, must not hold up the parent. A regression hangs, so each call that could gets a
+    # thread and a time limit, and the worker is not closed while a call holds its lock.
     monkeypatch.setattr("dofile.worker._BY_FLAG", True)
     monkeypatch.setattr("dofile.worker.GRACE", 0.5)
-    worker.run("display 1")
-    t = time.monotonic()
-    r = worker.run(f'display regexm("{"a" * 32}!", "^(a+)+$")', timeout=1)  # one re.search for hours, GIL held
-    assert r.rc == RC_RESET and "did not stop when interrupted" in r.error and time.monotonic() - t < 1 + 0.5 + 3
-    worker.run("display 1")
-    worker._proc.kill()
-    worker._proc.join(5)
-    signalled = threading.Thread(target=worker._signal, daemon=True)
-    signalled.start()
-    signalled.join(0.5)
-    assert not signalled.is_alive()
+    w = Worker(tmp_path, timeout=30)
+
+    def within(seconds, fn):
+        out = {}
+        t = threading.Thread(target=lambda: out.update(value=fn()), daemon=True)
+        t.start()
+        t.join(seconds)
+        assert not t.is_alive(), f"the parent waited more than {seconds} s on a child that cannot answer"
+        return out["value"]
+
+    try:
+        w.run("display 1")
+        t = time.monotonic()
+        r = within(1 + 0.5 + 3, lambda: w.run(f'display regexm("{"a" * 32}!", "^(a+)+$")', timeout=1))  # GIL held
+        assert r.rc == RC_RESET and "did not stop when interrupted" in r.error and time.monotonic() - t < 1 + 0.5 + 3
+        w.run("display 1")
+        w._proc.kill()
+        w._proc.join(5)
+        within(0.5, w._signal)
+    finally:
+        if w.busy:  # a hung call holds the lock close() takes: end the child only
+            w._proc.kill()
+        else:
+            w.close()
 
 
 def test_a_closed_worker_never_starts_a_new_process(tmp_path):
