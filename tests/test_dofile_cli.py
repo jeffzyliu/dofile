@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -44,6 +45,21 @@ def test_error_message_inside_nested_do_files(tmp_path):
     out = json.loads(out_json.read_text()) if out_json.exists() and out_json.stat().st_size else {}
     assert out, shown
     assert out["rc"] == 601 and "nosuch" in out["error"] and out["error_command"] == "use nosuch, clear", shown
+
+
+def test_the_log_is_written_as_utf8_on_a_cp1252_stdout(tmp_path):
+    arrow = "\N{RIGHTWARDS ARROW}"
+    (tmp_path / "arrow.do").write_text(f'display "a {arrow} b"\n', encoding="utf-8")
+    p = subprocess.run(
+        [sys.executable, "-m", "dofile.cli", "run", "arrow.do"],
+        cwd=tmp_path,
+        capture_output=True,
+        timeout=300,
+        check=False,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert p.returncode == 0, p.stderr
+    assert f"a {arrow} b".encode() in p.stdout
 
 
 def test_unsafe_allows_shell(tmp_path):

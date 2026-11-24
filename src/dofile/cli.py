@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--read-dir", action="append", default=[], help="extra read-only data directory (repeatable)")
     run.add_argument("--unsafe", action="store_true", help="disable the sandbox (trusted code only)")
     a = ap.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):  # a piped Windows stdout is cp1252: the log can hold any character
+        stream.reconfigure(encoding="utf-8", errors="replace")
 
     dofile = a.dofile.resolve()
     if not dofile.is_file():

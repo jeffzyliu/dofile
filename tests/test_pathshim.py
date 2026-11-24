@@ -193,7 +193,9 @@ def test_a_windows_tempfile_path_is_inside_the_temp_folder_whatever_its_case_and
     tempfile_path = pathshim._key(r"c:\users\RunnerAdmin\AppData\Local\Temp\opendta-5080\S__000000.dta", ntpath)
     elsewhere = pathshim._key(r"C:\Users\runneradmin\AppData\Local\Temporary\x.dta", ntpath)
     assert pathshim._inside(tempfile_path, tmp) and not pathshim._inside(elsewhere, tmp)
-    assert pathshim._key("/tmp/A\\b", posixpath) == "/tmp/A\\b"  # POSIX: a backslash is a name character, nothing is folded
+    assert (
+        pathshim._key("/tmp/A\\b", posixpath) == "/tmp/A\\b"
+    )  # POSIX: a backslash is a name character, nothing is folded
 
 
 def test_the_note_is_in_every_run_that_maps_a_path(shim):
