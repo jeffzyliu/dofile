@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -584,10 +585,8 @@ def test_odt28_a_missing_folder_or_a_directory_is_rc_603_not_an_internal_error(e
         eng.run("capture file close _all\ncapture log close _all\ncapture cmdlog close")
         assert r.rc == 603, (cmd, r.rc, r.error)
         assert "could not be opened" in r.error and "internal engine error" not in r.log, (cmd, r.error)
-    assert (
-        eng.run("log using nodir/a, replace").error
-        == "file nodir/a.smcl could not be opened (No such file or directory)"
-    )
+    shown = os.path.join("nodir", "a.smcl")  # the message names the file with the OS separator
+    assert eng.run("log using nodir/a, replace").error == f"file {shown} could not be opened (No such file or directory)"
 
 
 def test_odt28_capture_catches_it_and_sets_rc(eng):
