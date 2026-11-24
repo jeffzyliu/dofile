@@ -4,12 +4,14 @@ Worker: talks to one child over a pipe. On timeout or cancel the child is interr
 key, at the next safe point (between commands, or in a long computation that leaves the data alone): the call
 ends with rc 1 and the data is as the last complete command left it. If the child does not reach a safe point
 within GRACE seconds (one long command), or it died, it is killed and the call returns rc 9998 ("session
-reset"); the next call starts a fresh one.
+reset"); the next call starts a fresh one. The interrupt is SIGINT on Linux and macOS; Windows cannot send a child
+SIGINT, so there the parent sets an Event that a thread in the child turns into SIGINT for its main thread.
 WorkerPool: one Worker per session key (a start_session token), with idle reaping and a size cap.
 """
 
 from __future__ import annotations
 
+import _thread
 import itertools
 import multiprocessing as mp
 import os
@@ -21,6 +23,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +33,7 @@ RC_RESET = 9998
 GRACE = 5.0  # seconds an interrupted call gets to reach a safe point before the child is killed
 SNAPSHOT_MAX = 5000  # entries in the working folder above which run results leave `files` empty
 _POLL = 0.1  # seconds between checks for a cancel while waiting for the child
+_BY_EVENT = sys.platform == "win32"  # no SIGINT for a child process: interrupt through an Event (_watch)
 
 
 def _context():
@@ -57,8 +61,23 @@ def warm_up() -> None:
         threading.Thread(target=forkserver.ensure_running, daemon=True).start()
 
 
-def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> None:
-    """Child process: optionally confine itself, then answer requests until the pipe closes."""
+def _watch(wake, guard, busy: Callable[[], bool]) -> None:
+    """Child thread (Windows): turn each set of the parent's `wake` Event into SIGINT for the main thread, whose
+    on_interrupt takes it as os.kill's SIGINT is taken elsewhere. One that comes while no run is busy is dropped, as
+    on_interrupt drops it. Under `guard`, with which the main thread clears `wake` as a run starts: a set left from
+    a call that ended never Breaks the next one, even when this thread woke for it before that run started."""
+    while True:
+        wake.wait()
+        with guard:
+            if wake.is_set():
+                wake.clear()
+                if busy():
+                    _thread.interrupt_main(signal.SIGINT)
+
+
+def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool, wake=None) -> None:
+    """Child process: optionally confine itself, then answer requests until the pipe closes. `wake`: the
+    multiprocessing Event through which the parent interrupts it where it cannot send SIGINT (Windows)."""
     if sandboxed:
         from . import sandbox
 
@@ -73,16 +92,23 @@ def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool) -> N
             request_break()
 
     signal.signal(signal.SIGINT, on_interrupt)
+    guard = nullcontext() if wake is None else threading.Lock()
+    if wake is not None:
+        threading.Thread(target=_watch, args=(wake, guard, lambda: busy), daemon=True).start()
     while True:
         try:
             op, args = conn.recv()
         except EOFError:
             return
         if op == "run":
-            clear_break()  # an interrupt that came after the previous call ended must not stop this one
-            busy = True
+            with guard:
+                if wake is not None:
+                    wake.clear()
+                clear_break()  # an interrupt that came after the previous call ended must not stop this one
+                busy = True
             result = eng.run(*args)
-            busy = False
+            with guard:
+                busy = False
             conn.send(result)
         elif op == "data":
             conn.send(eng.data_summary(*args))
@@ -108,13 +134,16 @@ class Worker:
         self.last_used = time.monotonic()
         self._proc = None
         self._conn = None
+        self._wake = None  # the child's interrupt Event where there is no SIGINT for it (_BY_EVENT)
         self._lock = threading.Lock()  # one call at a time per session
         self._active = None  # the call running now (its threading.Event)
         self.closed = False  # close() was called: no new child may start (its workdir may be gone)
 
     def _start(self) -> None:
+        wake = _ctx.Event() if _BY_EVENT else None
         parent, child = _ctx.Pipe()
-        proc = _ctx.Process(target=_serve, args=(child, self.workdir, self.read_dirs, self.sandbox), daemon=True)
+        args = (child, self.workdir, self.read_dirs, self.sandbox, wake)
+        proc = _ctx.Process(target=_serve, args=args, daemon=True)
         try:
             proc.start()
         except BaseException:
@@ -122,14 +151,14 @@ class Worker:
             raise
         finally:
             child.close()
-        self._proc, self._conn = proc, parent  # only once started: _kill() needs a started process
+        self._proc, self._conn, self._wake = proc, parent, wake  # only once started: _kill() needs a started process
 
     def _kill(self) -> None:
         if self._proc is not None:
             self._proc.kill()
             self._proc.join(5)
             self._conn.close()
-        self._proc = self._conn = None
+        self._proc = self._conn = self._wake = None
 
     def interrupt(self, call: threading.Event) -> None:
         """Stop `call` (from any thread): interrupt it if it is running, skip it if it has not started.
@@ -139,12 +168,16 @@ class Worker:
             self._signal()
 
     def _signal(self) -> None:
-        if self._proc is not None and self._proc.pid and sys.platform != "win32":
-            try:
-                os.kill(self._proc.pid, signal.SIGINT)
-            except ProcessLookupError:
-                pass
-        # shortcut: Windows has no SIGINT for a child process, so an interrupt there waits for GRACE and kills
+        if self._proc is None or not self._proc.pid:
+            return
+        wake = self._wake
+        if wake is not None:
+            wake.set()
+            return
+        try:
+            os.kill(self._proc.pid, signal.SIGINT)
+        except ProcessLookupError:
+            pass
 
     def _call(self, op: str, *args: Any, timeout: float | None = None, call: threading.Event | None = None) -> Any:
         with self._lock:

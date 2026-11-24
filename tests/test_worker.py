@@ -72,6 +72,20 @@ def test_cancel_interrupts_the_running_call_and_skips_waiting_ones(worker):
     assert worker.run("count").results["r"]["scalars"]["N"] == 1000
 
 
+def test_an_event_interrupts_where_there_is_no_sigint_for_the_child(worker, monkeypatch):
+    # Windows' path, run on every platform: the parent sets an Event that a thread in the child turns into SIGINT
+    monkeypatch.setattr("dofile.worker._BY_EVENT", True)
+    worker.run("use panel, clear")
+    assert worker._wake is not None  # so _signal() sets the Event and sends no SIGINT
+    worker._wake.set()  # between calls: dropped, as a SIGINT is there
+    time.sleep(0.5)
+    assert worker.run("sleep 300").rc == 0 and not worker._wake.is_set()
+    t = time.monotonic()
+    r = worker.run("while 1 {\n}", timeout=1)
+    assert r.rc == 1 and "keeps its data" in r.error and time.monotonic() - t < 1 + GRACE
+    assert worker.run("count").results["r"]["scalars"]["N"] == 1000
+
+
 def test_a_closed_worker_never_starts_a_new_process(tmp_path):
     w = Worker(tmp_path, timeout=30)
     assert w.run("display 1").rc == 0
