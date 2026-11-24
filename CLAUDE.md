@@ -49,9 +49,10 @@ Layers, bottom up (`src/dofile/`):
   the workdir, `--read-dir` folders and code folders. Audit hooks can't be removed, so sandbox tests run each case in a
   subprocess.
 - `worker.py`: one child process per session (forked from a preloaded forkserver, `_forkserver.py`, on Linux and macOS;
-  spawn on Windows); the sandbox is installed in the child. A timeout or cancel sends SIGINT: the engine takes the Break
-  between commands (PATCH-2), rc 1, data kept; a child that doesn't stop within 5 s is killed (rc 9998, "session
-  reset"). `WorkerPool` evicts the least recently used idle session, never one running code.
+  spawn on Windows); the sandbox is installed in the child. A timeout or cancel sends SIGINT (on Windows, which
+  cannot send it to a child, the parent sets an Event that a thread in the child turns into SIGINT): the engine takes
+  the Break between commands (PATCH-2), rc 1, data kept; a child that doesn't stop within 5 s is killed (rc 9998,
+  "session reset"). `WorkerPool` evicts the least recently used idle session, never one running code.
 - `mcp_server.py`: over stdio, one session in the launch folder; over HTTP, sessions are explicit tokens from the
   `start_session` tool, each with its own temp workdir. Errors meant for the agent must be raised as `ToolError` (the
   SDK hides others). Calls to one session queue on an async lock (`Sessions.call`), not in threads. Tool outputs are
