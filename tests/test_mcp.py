@@ -587,7 +587,7 @@ def test_versions_are_reported(stdio_sessions):
 
 
 def test_get_file_pages_text_and_a_busy_session_answers_at_once(stdio_sessions, tmp_path):
-    (tmp_path / "big.txt").write_text("".join(f"{i:07d}\n" for i in range(10000)))  # 80,000 characters
+    (tmp_path / "big.txt").write_bytes("".join(f"{i:07d}\n" for i in range(10000)).encode())  # 80,000 characters
 
     async def steps(c):
         first = (await tool(c, "get_file", name="big.txt")).content[0].text
