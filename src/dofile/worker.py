@@ -5,7 +5,7 @@ key, at the next safe point (between commands, or in a long computation that lea
 ends with rc 1 and the data is as the last complete command left it. If the child does not reach a safe point
 within GRACE seconds (one long command), or it died, it is killed and the call returns rc 9998 ("session
 reset"); the next call starts a fresh one. The interrupt is SIGINT on Linux and macOS; Windows cannot send a child
-SIGINT, so there the parent sets an Event that a thread in the child turns into SIGINT for its main thread.
+SIGINT, so there the parent sets a shared flag that a thread in the child turns into SIGINT for its main thread.
 WorkerPool: one Worker per session key (a start_session token), with idle reaping and a size cap.
 """
 
@@ -33,7 +33,7 @@ RC_RESET = 9998
 GRACE = 5.0  # seconds an interrupted call gets to reach a safe point before the child is killed
 SNAPSHOT_MAX = 5000  # entries in the working folder above which run results leave `files` empty
 _POLL = 0.1  # seconds between checks for a cancel while waiting for the child
-_BY_EVENT = sys.platform == "win32"  # no SIGINT for a child process: interrupt through an Event (_watch)
+_BY_FLAG = sys.platform == "win32"  # no SIGINT for a child process: interrupt through a _Wake (_watch)
 
 
 def _context():
@@ -61,8 +61,31 @@ def warm_up() -> None:
         threading.Thread(target=forkserver.ensure_running, daemon=True).start()
 
 
-def _watch(wake, guard, busy: Callable[[], bool]) -> None:
-    """Child thread (Windows): turn each set of the parent's `wake` Event into SIGINT for the main thread, whose
+class _Wake:
+    """Windows' interrupt: a shared flag, and a semaphore that wakes the child's _watch thread to read it. set() never
+    waits, even for a child that is dead or holds its GIL in one long C call, so GRACE and the kill still apply. A
+    multiprocessing Event would not do: its set() waits until each thread in wait() has woken."""
+
+    def __init__(self, ctx) -> None:
+        self._flag = ctx.RawValue("b", 0)
+        self._sem = ctx.Semaphore(0)
+
+    def set(self) -> None:  # parent
+        self._flag.value = 1
+        self._sem.release()
+
+    def wait(self) -> None:  # child: until the next set(); one return per set()
+        self._sem.acquire()
+
+    def is_set(self) -> bool:
+        return self._flag.value == 1
+
+    def clear(self) -> None:
+        self._flag.value = 0
+
+
+def _watch(wake: _Wake, guard, busy: Callable[[], bool]) -> None:
+    """Child thread (Windows): turn each set of the parent's `wake` into SIGINT for the main thread, whose
     on_interrupt takes it as os.kill's SIGINT is taken elsewhere. One that comes while no run is busy is dropped, as
     on_interrupt drops it. Under `guard`, with which the main thread clears `wake` as a run starts: a set left from
     a call that ended never Breaks the next one, even when this thread woke for it before that run started."""
@@ -75,9 +98,9 @@ def _watch(wake, guard, busy: Callable[[], bool]) -> None:
                     _thread.interrupt_main(signal.SIGINT)
 
 
-def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool, wake=None) -> None:
-    """Child process: optionally confine itself, then answer requests until the pipe closes. `wake`: the
-    multiprocessing Event through which the parent interrupts it where it cannot send SIGINT (Windows)."""
+def _serve(conn, workdir: str, read_dirs: tuple[str, ...], sandboxed: bool, wake: _Wake | None = None) -> None:
+    """Child process: optionally confine itself, then answer requests until the pipe closes. `wake`: how the parent
+    interrupts it where it cannot send SIGINT (Windows)."""
     if sandboxed:
         from . import sandbox
 
@@ -134,13 +157,13 @@ class Worker:
         self.last_used = time.monotonic()
         self._proc = None
         self._conn = None
-        self._wake = None  # the child's interrupt Event where there is no SIGINT for it (_BY_EVENT)
+        self._wake = None  # the child's interrupt where there is no SIGINT for it (_BY_FLAG)
         self._lock = threading.Lock()  # one call at a time per session
         self._active = None  # the call running now (its threading.Event)
         self.closed = False  # close() was called: no new child may start (its workdir may be gone)
 
     def _start(self) -> None:
-        wake = _ctx.Event() if _BY_EVENT else None
+        wake = _Wake(_ctx) if _BY_FLAG else None
         parent, child = _ctx.Pipe()
         args = (child, self.workdir, self.read_dirs, self.sandbox, wake)
         proc = _ctx.Process(target=_serve, args=args, daemon=True)

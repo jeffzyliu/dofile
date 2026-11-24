@@ -72,11 +72,11 @@ def test_cancel_interrupts_the_running_call_and_skips_waiting_ones(worker):
     assert worker.run("count").results["r"]["scalars"]["N"] == 1000
 
 
-def test_an_event_interrupts_where_there_is_no_sigint_for_the_child(worker, monkeypatch):
-    # Windows' path, run on every platform: the parent sets an Event that a thread in the child turns into SIGINT
-    monkeypatch.setattr("dofile.worker._BY_EVENT", True)
+def test_a_shared_flag_interrupts_where_there_is_no_sigint_for_the_child(worker, monkeypatch):
+    # Windows' path, run on every platform: the parent sets a flag that a thread in the child turns into SIGINT
+    monkeypatch.setattr("dofile.worker._BY_FLAG", True)
     worker.run("use panel, clear")
-    assert worker._wake is not None  # so _signal() sets the Event and sends no SIGINT
+    assert worker._wake is not None  # so _signal() sets the flag and sends no SIGINT
     worker._wake.set()  # between calls: dropped, as a SIGINT is there
     time.sleep(0.5)
     assert worker.run("sleep 300").rc == 0 and not worker._wake.is_set()
@@ -84,6 +84,24 @@ def test_an_event_interrupts_where_there_is_no_sigint_for_the_child(worker, monk
     r = worker.run("while 1 {\n}", timeout=1)
     assert r.rc == 1 and "keeps its data" in r.error and time.monotonic() - t < 1 + GRACE
     assert worker.run("count").results["r"]["scalars"]["N"] == 1000
+
+
+def test_the_flag_interrupt_never_waits_for_a_stuck_or_dead_child(worker, monkeypatch):
+    # GRACE and the kill rely on it, and a cancel interrupts from the MCP event loop: a child that holds its GIL in
+    # one long C call, or is dead, must not hold up the parent
+    monkeypatch.setattr("dofile.worker._BY_FLAG", True)
+    monkeypatch.setattr("dofile.worker.GRACE", 0.5)
+    worker.run("display 1")
+    t = time.monotonic()
+    r = worker.run(f'display regexm("{"a" * 32}!", "^(a+)+$")', timeout=1)  # one re.search for hours, GIL held
+    assert r.rc == RC_RESET and "did not stop when interrupted" in r.error and time.monotonic() - t < 1 + 0.5 + 3
+    worker.run("display 1")
+    worker._proc.kill()
+    worker._proc.join(5)
+    signalled = threading.Thread(target=worker._signal, daemon=True)
+    signalled.start()
+    signalled.join(0.5)
+    assert not signalled.is_alive()
 
 
 def test_a_closed_worker_never_starts_a_new_process(tmp_path):
