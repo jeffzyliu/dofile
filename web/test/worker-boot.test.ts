@@ -8,9 +8,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { pathToFileURL } from "node:url";
+
+import type { MountArgs, Stage, Startup } from "../src/engine/types.ts";
+
 import type { SnapshotPy } from "../src/engine/snapshot.ts";
 import { isStorageRefusal } from "../src/engine/snapshot.ts";
-import type { MountArgs, Stage, Startup } from "../src/engine/types.ts";
 import { ROOT } from "../src/engine/work-mirror.ts";
 import type { Browser } from "../src/engine/worker-boot.ts";
 import { fetchBytes, snapshotCache, startEngine, startPython, watchFetch } from "../src/engine/worker-boot.ts";
@@ -212,7 +214,8 @@ test("startEngine: the normal boot installs the wheels, then starts the engine i
   const stages: Stage[] = [];
   const startup: Partial<Startup> = {};
   const buffer = new Int32Array(new SharedArrayBuffer(4));
-  const part = { file: { name: "graphics.tar.br", raw: 1, size: 1 }, sab: null };
+  const part = { file: { name: "graphics.tar.br", raw: 1, size: 1 }, sab: new SharedArrayBuffer(16) };
+  const source = { snapshotURL: "", built: 0, brotliWasm: null, brotliMode: undefined };
   const lazy: unknown[] = [];
   const out = await startEngine(
     py,
@@ -226,6 +229,8 @@ test("startEngine: the normal boot installs the wheels, then starts the engine i
       fromSnapshot: false,
       stage: (s) => stages.push(s),
       startup,
+      part: source,
+      partWritten: () => assert.fail("a shared buffer: the part is lazy"),
       lazyGraphics: (b, g) => {
         calls.push("lazyGraphics");
         lazy.push(b, g);
@@ -259,6 +264,8 @@ test("startEngine: the normal boot installs the wheels, then starts the engine i
       fromSnapshot: true,
       stage: (s) => snapStages.push(s),
       startup: snapStartup,
+      part: source,
+      partWritten: () => assert.fail("no part"),
       lazyGraphics: () => assert.fail("no part"),
     },
   );

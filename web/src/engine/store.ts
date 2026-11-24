@@ -8,6 +8,7 @@
 // finds its row first, and the order in which syncs arrive does not matter.
 
 import type { FileChange, FileInfo, PendingRow } from "./types.ts";
+
 import { zipParts } from "./zip.ts";
 
 /** What a run did to one path in /work, for applyRun. `data`: a file's bytes, unless removed. */

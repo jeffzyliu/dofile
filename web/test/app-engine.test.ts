@@ -3,10 +3,16 @@
 
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import { FAILED, FAILED_TWICE, UPDATED } from "../src/app/states/words.ts";
+
 import type { EngineStateName, RunHead } from "../src/app/types.ts";
-import { EngineClient } from "../src/engine/client.ts";
 import type { FileInfo, Results, RunResult } from "../src/engine/types.ts";
+
+import { EngineClient } from "../src/engine/client.ts";
+
+import { focusRequest } from "../src/app/ui/focus-targets.ts";
+
+import { FAILED, FAILED_TWICE, UPDATED } from "../src/app/states/words.ts";
+
 import { fakeWorker, sleep, starts } from "./harness.ts";
 import {
   BUILD,
@@ -78,7 +84,24 @@ test("with nothing cached the page asks; Download counts bytes, the stages come 
   client.worker.reply({ type: "started" });
   assert.deepEqual(S.engine.value, { s: "ready" });
   assert.equal(S.dialog.value, null, "the dialog closed by itself");
+  assert.equal(focusRequest.value?.name, "editor", "and asked the editor for the focus");
   assert.deepEqual(client.calls.at(-1), ["memory", undefined]);
+});
+
+test("the machine's close-dialog closes its own dialog only: a dialog that replaced it stays, and the editor is not asked for the focus", async () => {
+  setUp({});
+  engine.open();
+  await tick();
+  engine.start();
+  state("downloading");
+  client.dl.done.ok(DONE);
+  await tick();
+  S.openDialog({ d: "other-tab" }); // took the place of the download dialog
+  const before = focusRequest.value;
+  client.worker.reply({ type: "started" }); // the machine closes the download dialog and asks for the editor's focus
+  assert.deepEqual(S.engine.value, { s: "ready" });
+  assert.deepEqual(S.dialog.value, { d: "other-tab" });
+  assert.equal(focusRequest.value, before);
 });
 
 test("start files all cached: the page starts with no dialog; ?snapshot=0 has no list and starts at Python", async () => {
@@ -402,7 +425,7 @@ test("an empty or partial cache asks; the lock lost while the cache check is pen
   assert.deepEqual(S.engine.value, { s: "asking" });
   assert.equal(client.downloads.length, 0, "nothing downloads before the visitor says so");
 
-  S.dialog.value = null;
+  S.closeDialog();
   const answer = later<boolean>();
   await load({ cached: answer });
   assert.deepEqual(S.engine.value, { s: "checking-cache" });
@@ -1000,7 +1023,7 @@ test("an older download still talking: its progress and its end are dropped as s
 test("call(): a read op with no worker is rejected (no-engine); one that waits behind a run is cut by a reset (kind reset), or answered after the run", async () => {
   await load();
   engine.decline();
-  await assert.rejects(engine.call("matrix", { name: "e(b)" }), { kind: "no-engine" });
+  await assert.rejects(engine.call("matrix", { name: "e(b)", runId: 1 }), { kind: "no-engine" });
   assert.deepEqual(S.engine.value, { s: "declined" });
   assert.deepEqual(engine.drops(), []);
 

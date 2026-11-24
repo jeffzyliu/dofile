@@ -26,7 +26,7 @@ Each item was checked against the code on 2026-11-11 and is stated as the code b
 prototype, by the maintainer's decision of 2026-11-11; they belong with the plan's step 6 (accessibility on the real pages).
 
 To weigh first in the post-merge review:
-- **The row menu is out of reach without a keyboard or a pointer.** The file tree row's ⋯ (`files/FilesPane.tsx` `TreeRow`)
+- **The row menu is out of reach without a keyboard or a pointer.** The file tree row's ⋯ (`files/TreeRow.tsx` `TreeRow`)
   is `aria-hidden` and opens only on a click, so the row menu needs Shift+F10, the menu key or a right click. A touch
   screen-reader user may have no way to it. Left because a control inside a `treeitem` would be nested. 2026-11-11.
 
@@ -87,7 +87,7 @@ estimated splits) are the study's, not checked again here.
   has no automatic fallback from the snapshot to the normal boot (by grep, not a full read). The words a failed start shows
   are the maintainer's. 2026-11-12.
 - **Split `check-snapshot` in CI.** The `memory snapshot` job takes about 8 to 11 minutes, `check-snapshot` being most of
-  it. It now runs on a pull request only when the snapshot's inputs change (`web.yml`, `ENGINE`); when it runs, `web ok`
+  it. It now runs on a pull request only when the snapshot's inputs change (`web.yml`, from `web/scripts/snapshot-inputs.txt`); when it runs, `web ok`
   still waits for it. Not tried: split it into shards with its `--cases` and `--only` options. 2026-11-12, 2026-11-13.
 - **More Playwright workers.** The config sets no worker count, so a browsers job runs the default 2 workers; they are busy
   about 97% of the time. The CI speed investigation replayed past runs: 3 workers saves 0 to 3 minutes and 4 workers about 4
@@ -239,7 +239,7 @@ estimated splits) are the study's, not checked again here.
   `makeSnapshot`, the `zero*` pair, `bundle`, `packGraphics` and `isDeadWeight` share a module with the runtime codec and
   the page's Cache helpers, and some size checks are written twice. The build-only helpers are imported only by
   `scripts/make-snapshot.ts` and `test/snapshot.test.ts`. Left because it is not graphics state, so R1 does not need it,
-  and the runtime half (`hasNativeBrotli`, `inflateNative`, `unpackSteps`, `writeGraphics`) is imported by `worker.ts`'s
+  and the runtime half (`hasNativeBrotli`, `unpackNative`, `unpackSteps`, `writeGraphics`) is imported by `worker.ts`'s
   graphics section, which R1 owns: a split must not run while that section changes. Taken by W1 (the sweep of
   `src/engine/`) after R1. 2026-11-22.
 
@@ -257,3 +257,20 @@ Paths in this section are from the repository root.
   (`docs/archive/lazy-graphics-experiments.md`). Untried: the eager import in steps of one task each, as the shipped
   idle import runs, in place of one long call. The maintainer: "idle-wait work is done for now--remaining experiments
   are iceboxed for far after the audit".
+
+## Web audit phase 2, session 4 (added 2026-11-23)
+
+- **The open file's highlight paints over iOS Safari's scroll bar in the Files tree.** On a real iPhone, the highlighted
+  row of the open file covers the overlay scroll bar instead of passing under it; seen on `main` before #118 too. No
+  cause found; the candidate is `.files li`'s `position: relative` (for the tree's guide lines). The maintainer, during
+  #118: "leave the work for later". 2026-11-23.
+- **CloseTabDialog closes the tab by the path it had when the dialog opened (survey finding A3).** `files/dialogs.tsx`
+  `CloseTabDialog`: Save awaits `saveTab(d.path)`, then calls `closeTab(d.path)`; a rename or move during the await
+  would close by the old path. The dialog is modal, so no way to rename meanwhile was found (read, not tried); not
+  checked: a run already going that moves the file (`runMoved`, #118). A fix (close by the tab's identity) has no
+  failing test without a way to reach it, so it waits for one. 2026-11-23.
+- **The Results tab could show a symmetric matrix as `matrix list` does.** OpenDTA's `matrix list` prints
+  "symmetric" and only the lower triangle when a matrix is square and equal to its transpose
+  (`src/dofile/_vendor/opendta/commands/matrix.py`, `list_matrix`). The worker sends `rows`, `cols` and `data` only
+  (`web/src/engine/types.ts`, `Matrix`), and the Results tab draws the full grid. The page can test it itself from the
+  grid; Copy would still copy the whole matrix. The MCP tool's `get_matrix` stays as it is (decided the same day). 2026-11-23.

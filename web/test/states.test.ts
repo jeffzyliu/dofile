@@ -2,6 +2,9 @@
 // running banner words, the stopping countdown, the action each failed reason gets, the times, and the drafted notes.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
+import type { EngineState, FailReason, RunHead } from "../src/app/types.ts";
+
 import { noteFor } from "../src/app/log/notes.ts";
 import {
   breakAsked,
@@ -25,7 +28,6 @@ import {
   secs,
   twiceWords,
 } from "../src/app/states/words.ts";
-import type { EngineState, FailReason, RunHead } from "../src/app/types.ts";
 
 test("Reset resets at once only when the engine is ready and nothing has run on it; anything else asks", () => {
   assert.equal(resetAsks("ready", 0), false, "a new engine, or one just reset");

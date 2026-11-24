@@ -6,10 +6,13 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { loadPyodide } from "pyodide";
+
+import { repo } from "./lib/paths.ts";
+
 import { installEngine } from "./install-engine.ts";
 import { arg, hasFlag } from "./lib/args.ts";
-import { repo } from "./lib/paths.ts";
 import { runChild, runShards } from "./lib/shards.ts";
 
 const out = resolve(arg("--out", `${repo}/.dofile/numeric-wasm`));

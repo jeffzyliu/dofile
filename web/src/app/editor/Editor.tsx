@@ -1,20 +1,31 @@
 // The editor's view (docs/design/SPEC.md, sections 3.3 and 4): one CodeMirror 6 view, mounted once, which shows the
 // active text tab of editor/documents.ts (attachView). mount() fills editorCommands.
 
-import { EditorState, Prec, type StateEffect } from "@codemirror/state";
+import type { StateEffect } from "@codemirror/state";
+import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { signal } from "@preact/signals-core";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
-import { openFile } from "../files/open.ts";
+
+import type { RunHead } from "../types.ts";
+
+import { engine } from "../state/engine.ts";
+import { dialog, showToast } from "../state/notices.ts";
+
 import { requestRun } from "../run.ts";
 import { startEngine } from "../start.ts";
-import { dialog, engine, showToast } from "../state.ts";
-import type { RunHead } from "../types.ts";
+
+import { useFocusTarget } from "../ui/focus-hooks.ts";
+import { shownElement } from "../ui/focus-targets.ts";
 import { openMenuState } from "../ui/Menu.tsx";
+
+import { openFile } from "../files/open.ts";
+
 import { wholeLines } from "./cm.ts";
 import { codeOf, editorAsked, editorCommands } from "./commands.ts";
 import { activeTab, attachView, edited, save, selection, stateOf, tabs } from "./documents.ts";
 import { isRunKey, isSaveKey } from "./keys.ts";
+import { activeRunRefusal } from "./runnable.ts";
 import { refusedRunWords } from "./words.ts";
 
 let view: EditorView | null = null;
@@ -85,13 +96,18 @@ function runSelection(keyed = false) {
 }
 
 /** Ctrl/Cmd+Enter: with no engine, what the "Start engine" button does (where it can do nothing, a toast says why);
- *  else Run selection with a selection, else Run. It runs nothing when it starts the engine, even once the engine is
+ *  else Run selection with a selection, else Run; on a tab that is not a .do or .ado file, a toast says why it runs
+ *  nothing. It runs nothing when it starts the engine, even once the engine is
  *  ready. */
 function runEither() {
   const offer = startEngine();
   if (offer !== null) {
     const words = offer === "off" ? refusedRunWords(engine.value.s) : null;
     if (words) showToast(words, "error");
+    return;
+  }
+  if (activeRunRefusal.value) {
+    showToast(activeRunRefusal.value, "error"); // a tab that is not a .do or .ado file
     return;
   }
   if (selection.value) runSelection(true);
@@ -104,10 +120,9 @@ async function goToLine(line: number, path: string | undefined = activeTab.value
   editorAsked.value = { path, line }; // taken once the page has drawn it
 }
 
-/** Take a request in `editorAsked`, from Editor's render: Go to line in the file shown, or the editor's focus. */
-function takeAsk(ask: { path?: string; line?: number }) {
+/** Take a request in `editorAsked`, from Editor's render: Go to line in the file shown. */
+function takeAsk(ask: { path: string; line: number }) {
   editorAsked.value = null;
-  if (ask.line === undefined) return focus();
   if (!view || !showing.value || activeTab.value !== ask.path) return;
   const n = Math.min(Math.max(1, ask.line), view.state.doc.lines);
   const at = view.state.doc.line(n).from;
@@ -115,29 +130,21 @@ function takeAsk(ask: { path?: string; line?: number }) {
   view.focus();
 }
 
-/** Put the focus in the editor, at once, without changing the active tab or the phone's view. `[data-editor]` marks the
- *  element that takes it:
+/** The registry's target `editor` (ui/focus-targets.ts): the element that takes the focus, without changing the active tab or
+ *  the phone's view. `[data-editor]` marks it for a text tab and for no tab:
  *  - a text tab shown: CodeMirror's content;
  *  - no tab open: the empty view;
- *  - a .dta tab active: its tab in "Open files" when that is shown, else the first enabled button of its view (Load);
- *    neither is `[data-editor]`, and when neither is shown the focus does not move;
- *  - the Editor pane hidden (a phone on another view): the focus does not move, as the browser focuses nothing under
- *    `display: none`. */
-function focus() {
-  if (view && showing.value) {
-    view.focus();
-    return;
-  }
+ *  - a .dta tab active: its tab in "Open files", else the first enabled button of its view (Load); neither is
+ *    `[data-editor]`;
+ *  - the Editor pane hidden (a phone on another view): the element is not shown, so the focus does not move. */
+function focusTarget(): HTMLElement | null {
+  if (view && showing.value) return view.contentDOM;
   const active = tabs.value.find((t) => t.path === activeTab.value);
-  if (!active || active.kind === "text") {
-    empty?.focus();
-    return;
-  }
-  const seen = (el: Element | null): el is HTMLElement => el instanceof HTMLElement && el.getClientRects().length > 0;
-  const tab = document.querySelector('[role="tablist"][aria-label="Open files"] [role="tab"][aria-selected="true"]');
-  const button = document.querySelector(".editor-pane .dta-view button:not([disabled])");
-  [tab, button].find(seen)?.focus();
+  if (!active || active.kind === "text") return empty;
+  return shownElement("open-file-tab") ?? shownElement("dta-load");
 }
+
+const focusIn = (el: HTMLElement) => (view && el === view.contentDOM ? view.focus() : el.focus());
 
 /** Ctrl/Cmd+S anywhere on the page, the editor too, saves the active tab, once while the key is held. With a dialog
  *  open it saves nothing, so no Save begins behind a dialog that is about to decide what happens to the file. Not
@@ -180,7 +187,6 @@ function mount(host: HTMLElement, emptyView: HTMLElement) {
   view = v;
   editorCommands.runFile = (path) => runFile(false, path);
   editorCommands.runSelection = () => runSelection();
-  editorCommands.focus = focus;
   editorCommands.goToLine = (line, path) => {
     goToLine(line, path);
   };
@@ -223,6 +229,7 @@ export function Editor() {
   const host = useRef<HTMLDivElement>(null);
   const emptyRef = useRef<HTMLDivElement>(null);
   useEffect(() => mount(host.current!, emptyRef.current!), []);
+  useFocusTarget("editor", { get: focusTarget, focus: focusIn });
   const ask = editorAsked.value;
   useLayoutEffect(() => {
     if (ask) takeAsk(ask);

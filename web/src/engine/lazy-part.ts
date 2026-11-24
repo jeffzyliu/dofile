@@ -1,105 +1,282 @@
-// A lazy snapshot's graphics part: the shared buffer's layout and its page writers and worker readers, and the
-// worker's decisions about the part, without their side effects (worker.ts acts on them).
+// A lazy snapshot's graphics part: the shared region's layout, its page writers and its reader (on seqlock.ts), and the
+// page's and the worker's decisions about the part, without their side effects (client.ts and worker.ts act on them).
 
-// The shared buffer the page hands the part over in (BootArgs.graphics.sab): an Int32 header [state, length, tries, 0]
-// of PART_HEADER bytes, then the compressed part (landed) or the reason it failed, as UTF-8 (failed). The page writes
-// it (client.ts), the worker reads it (worker.ts); `length` is the byte count after the header.
+import type { SeqRead, SeqReader, SeqRegion } from "./seqlock.ts";
+import { readSeq, seqRegion, writeSeq } from "./seqlock.ts";
+
+// The shared buffer the page hands the part over in (BootArgs.graphics.sab): an Int32 header [state, length, copy,
+// counter] of PART_HEADER bytes, then the compressed part (landed) or the reason it failed, as UTF-8 (failed). The page
+// writes it (client.ts), the worker reads it (worker.ts), each through the SeqRegion it wraps the buffer in.
 
 /** The part's state in the header. */
 export const PART_PENDING = 0,
   PART_LANDED = 1,
   PART_FAILED = 2;
 
-/** The header's Int32 indexes: the state, the byte count after the header, and `tries`: the page's fetches of the
- *  part, which a retry counts, so that a graph that asked takes the next failure as final. */
+/** The header's Int32 indexes: the state, the byte count after the header, `copy`: the page's fetches of the part after
+ *  the first, which a retry counts, so that a graph that asked takes the next failure as final; then the seqlock's
+ *  counter. */
 export const HDR_STATE = 0,
   HDR_LENGTH = 1,
-  HDR_TRIES = 2;
+  HDR_COPY = 2,
+  HDR_SEQ = 3;
 
 /** Where the part (or the reason) starts in the buffer; the header's size in bytes. */
 export const PART_HEADER = 16;
 
-export const partHeader = (sab: SharedArrayBuffer) => new Int32Array(sab, 0, PART_HEADER / 4);
+/** Each thread wraps the buffer it holds once, and reads and writes the part only through the region. */
+export const partRegion = (sab: SharedArrayBuffer) => seqRegion(sab, HDR_SEQ + 1);
+
+declare const partReasonTag: unique symbol;
+/** Why a fetch failed: never "", which is waitGraphics's answer for "written". Only partReason makes one. */
+export type PartReason = string & { readonly [partReasonTag]: true };
+
+export function partReason(text: string): PartReason {
+  return (text || "the graphics files could not be downloaded (no reason was given)") as PartReason;
+}
+
+/** One whole snapshot of the part. `bytes`: a copy (up to 33 MB), null unless asked for. */
+export type PartRead =
+  | { state: "pending"; copy: number }
+  | { state: "landed"; copy: number; bytes: Uint8Array<ArrayBuffer> | null }
+  | { state: "failed"; copy: number; reason: PartReason };
 
 /** Page: the part has arrived. */
-export function landPart(sab: SharedArrayBuffer, bytes: Uint8Array): void {
-  new Uint8Array(sab, PART_HEADER).set(bytes);
-  const hdr = partHeader(sab);
-  Atomics.store(hdr, HDR_LENGTH, bytes.length);
-  Atomics.store(hdr, HDR_STATE, PART_LANDED);
-  Atomics.notify(hdr, HDR_STATE);
+export function landPart(part: SeqRegion, bytes: Uint8Array): void {
+  writeSeq(part, (writer) => {
+    writer.setBytes(bytes);
+    writer.setWord(HDR_LENGTH, bytes.length);
+    writer.setWord(HDR_STATE, PART_LANDED);
+  });
 }
 
 /** Page: the fetch failed; the reason is cut to the room there is. */
-export function failPart(sab: SharedArrayBuffer, why: string): void {
-  const text = new TextEncoder().encode(why).subarray(0, sab.byteLength - PART_HEADER);
-  const hdr = partHeader(sab);
-  new Uint8Array(sab, PART_HEADER).set(text);
-  Atomics.store(hdr, HDR_LENGTH, text.length);
-  Atomics.store(hdr, HDR_STATE, PART_FAILED);
-  Atomics.notify(hdr, HDR_STATE);
+export function failPart(part: SeqRegion, reason: PartReason): void {
+  writeSeq(part, (writer) => {
+    const text = new TextEncoder().encode(reason).subarray(0, writer.roomBytes);
+    writer.setBytes(text);
+    writer.setWord(HDR_LENGTH, text.length);
+    writer.setWord(HDR_STATE, PART_FAILED);
+  });
 }
 
-/** Page: a fetch starts again. */
-export function retryPart(sab: SharedArrayBuffer): void {
-  const hdr = partHeader(sab);
-  Atomics.store(hdr, HDR_LENGTH, 0);
-  Atomics.add(hdr, HDR_TRIES, 1);
-  Atomics.store(hdr, HDR_STATE, PART_PENDING);
-  Atomics.notify(hdr, HDR_STATE);
+/** Page: a fetch starts again, of one more copy. */
+export function retryPart(part: SeqRegion): void {
+  const { copy } = readOwnPart(part);
+  writeSeq(part, (writer) => {
+    writer.setWord(HDR_LENGTH, 0);
+    writer.setWord(HDR_COPY, copy + 1);
+    writer.setWord(HDR_STATE, PART_PENDING);
+  });
 }
 
-/** Worker: the page's fetches of the part so far. Read before the state: a retry between the two loads then shows as
- *  new tries, not as a failure already the new try's. */
-export const partTries = (hdr: Int32Array) => Atomics.load(hdr, HDR_TRIES);
+/** readPart's callback: the copy number, the state and the bytes or the reason, from one reader. */
+export function partSnapshot(reader: SeqReader, { withBytes = false } = {}): PartRead {
+  const copy = reader.readWord(HDR_COPY);
+  const length = reader.readWord(HDR_LENGTH);
+  switch (reader.readWord(HDR_STATE)) {
+    case PART_LANDED:
+      return { state: "landed", copy, bytes: withBytes ? reader.readBytes(length) : null };
+    case PART_FAILED:
+      return { state: "failed", copy, reason: partReason(new TextDecoder().decode(reader.readBytes(length))) };
+    default:
+      return { state: "pending", copy };
+  }
+}
 
-export const partState = (hdr: Int32Array) => Atomics.load(hdr, HDR_STATE);
+/**
+ * The part as one snapshot: busy when the page's writes left none within `waitMs` (0: no wait).
+ * @param options - `withBytes`: copy a landed part's bytes
+ */
+export function readPart(part: SeqRegion, waitMs: number, options: { withBytes?: boolean } = {}): SeqRead<PartRead> {
+  return readSeq(part, (reader) => partSnapshot(reader, options), waitMs);
+}
 
-/** Worker: a copy of the bytes (landed) or the reason (failed); TextDecoder and Blob refuse a shared view. */
-export const partData = (sab: SharedArrayBuffer, hdr: Int32Array) =>
-  new Uint8Array(sab, PART_HEADER, hdr[HDR_LENGTH]).slice();
+/** Page: the part now. The page is the region's one writer and writes it synchronously, so its read never meets a
+ *  write of its own. */
+export function readOwnPart(part: SeqRegion): PartRead {
+  const now = readPart(part, 0);
+  if (!("value" in now)) throw new Error("the graphics part's region is being written by another thread");
+  return now.value;
+}
 
-/** Worker: block up to `ms` while the state is still `state`. */
-export const waitPartChange = (hdr: Int32Array, state: number, ms: number) => Atomics.wait(hdr, HDR_STATE, state, ms);
+/** Page: the fetch on its way: the copy it is for, whether the Cache missed and it downloads, the bytes received. */
+export type PartFetch = { copy: number; downloading: boolean; received: number };
 
-/** The part as a waiting graph reads it. `tries`: the page's fetches of it, read before `state`. */
-export type PartRead = { state: number; tries: number; shared: boolean };
+/** Page: its own facts about the part; the worker needs none. `fetch`: at most one. `fresh`: fetched past the HTTP cache
+ *  until a copy lands, since the worker found a copy damaged. `damagedCopy`: the copy the last `damaged` acted on named,
+ *  never cleared (copies only grow; null, not -1, which is c - 1 for copy 0). `listening`: its one `online` listener is
+ *  set. */
+export type PartFacts = { fetch: PartFetch | null; fresh: boolean; damagedCopy: number | null; listening: boolean };
 
-/** What a waiting graph does next. The part is read through `read()`, only when needed (a copy of up to 33 MB).
- *  "wait-failed" and "wait-pending": wait on the header for a change from that state, then answer "pending". */
+/** Page: what happens to the part. want: the start files are in, or the worker `started`; fetched, fetch-failed: the fetch
+ *  for `copy` ended; again, damaged: the live worker's, about `copy`; online: the part's listener heard it. */
+export type PartEvent =
+  | { type: "want" | "online" }
+  | { type: "fetched"; copy: number; bytes: Uint8Array }
+  | { type: "fetch-failed"; copy: number; why: string }
+  | { type: "again" | "damaged"; copy: number };
+
+/** Page: the effect, and the facts after it. "fetch": a fetch for `facts.fetch`; "land", "fail": the fetch's result
+ *  written; "retry": `retryPart`, then a fetch for the next copy; "fail-damaged": decision B, `failPart` on the damaged
+ *  copy and no fetch; "none": the event is dropped. `listening` turned on: the `online` listener is added. */
+export type PartStep = { effect: "none" | "fetch" | "land" | "fail" | "retry" | "fail-damaged"; facts: PartFacts };
+
+/** Page: the part's machine, one row per event. A message is about one copy, so it acts only on the region's copy, and
+ *  only in the state it implies (again: failed; damaged: landed, since decision B fails a landed copy on its own number).
+ *  @param now - the region's state and copy (readOwnPart) */
+export function partStep(now: Pick<PartRead, "state" | "copy">, facts: PartFacts, event: PartEvent): PartStep {
+  const none: PartStep = { effect: "none", facts };
+  const fetchOf = (copy: number): PartFetch => ({ copy, downloading: false, received: 0 });
+  switch (event.type) {
+    case "want":
+      if (now.state !== "pending" || facts.fetch) return none;
+      return { effect: "fetch", facts: { ...facts, fetch: fetchOf(now.copy) } };
+    case "fetched":
+    case "fetch-failed": {
+      if (facts.fetch?.copy !== event.copy) return none;
+      const ended = { ...facts, fetch: null };
+      // one fetch at a time, for the region's copy: a region moved past it cannot be met
+      if (now.state !== "pending" || now.copy !== event.copy) return { effect: "none", facts: ended };
+      if (event.type === "fetched") return { effect: "land", facts: { ...ended, fresh: false } };
+      return { effect: "fail", facts: { ...ended, listening: true } };
+    }
+    case "online":
+    case "again": {
+      const heard = event.type === "online" ? { ...facts, listening: false } : facts;
+      if (now.state !== "failed" || (event.type === "again" && event.copy !== now.copy))
+        return { ...none, facts: heard };
+      return { effect: "retry", facts: { ...heard, fetch: fetchOf(now.copy + 1) } };
+    }
+    case "damaged": {
+      if (now.state !== "landed" || event.copy !== now.copy) return none;
+      const marked = { ...facts, fresh: true, damagedCopy: now.copy };
+      // the copy fetched right after a damaged copy is damaged too (decision B): without this, damage tied to its copy
+      // would be fetched and unpacked again in a loop
+      if (facts.damagedCopy === now.copy - 1) return { effect: "fail-damaged", facts: { ...marked, listening: true } };
+      return { effect: "retry", facts: { ...marked, fetch: fetchOf(now.copy + 1) } };
+    }
+  }
+}
+
+/** What a waiting graph does next. "wait": wait on the region's counter from the read's count, then answer "pending".
+ *  A give-up carries the read's reason, the graph's answer. */
 export type WaitStep =
   | "break"
   | "write"
-  | "decode-more"
-  | "decode"
-  | "say-fetching"
-  | "fetch"
+  | "unpack-more"
+  | "unpack"
+  | "say"
   | "ask-again"
-  | "give-up"
-  | "wait-failed"
-  | "wait-pending";
+  | "wait"
+  | { giveUp: PartReason };
 
 /**
- * @param askedAt - the tries when this run asked the page for another fetch, or null
- * @param fetchSaid - without a shared buffer: "pending" was answered before this graph's own fetch
+ * The part is read through `read()`, only when needed (a copy of up to 33 MB).
+ * @param askedOn - the copy when this run asked the page for another fetch, or null
+ * @param damage - the copy damage was found on, and whether a graph has said it: "say" once, for a read of that copy; a
+ * landed copy whose damage was said waits for the page's fetch (it is not unpacked again)
  */
 export function waitStep(
-  w: { interrupted: boolean; decoded: boolean; decoding: boolean; askedAt: number | null; fetchSaid: boolean },
-  read: () => PartRead,
+  w: {
+    interrupted: boolean;
+    unpacked: boolean;
+    unpacking: boolean;
+    askedOn: number | null;
+    damage: { copy: number; said: boolean } | null;
+  },
+  read: () => SeqRead<PartRead>,
 ): WaitStep {
   if (w.interrupted) return "break";
-  if (w.decoded) return "write";
-  if (w.decoding) return "decode-more";
-  const { state, tries, shared } = read();
-  if (state === PART_LANDED) return "decode";
-  if (!shared) return w.fetchSaid ? "fetch" : "say-fetching";
-  if (state === PART_FAILED) {
+  if (w.unpacked) return "write";
+  if (w.unpacking) return "unpack-more";
+  const now = read();
+  if (!("value" in now)) return "wait";
+  const part = now.value;
+  const damaged = w.damage?.copy === part.copy;
+  if (damaged && !w.damage?.said) return "say";
+  if (part.state === "landed") return damaged ? "wait" : "unpack";
+  if (part.state === "failed") {
     // once per run; the failure of the fetch it asked for is final
-    if (w.askedAt === null) return "ask-again";
-    if (tries !== w.askedAt) return "give-up";
-    return "wait-failed";
+    if (w.askedOn === null) return "ask-again";
+    if (part.copy !== w.askedOn) return { giveUp: part.reason };
   }
-  return "wait-pending";
+  return "wait";
+}
+
+/** The unpack's phase (worker-graphics.ts keeps it with the copy it came from): none; native (the browser's decoder
+ *  unpacks a copy off this thread); unpacking (brotli-wasm steps); unpacked, not yet written; written; warming (its
+ *  modules imported a few at a time); warmed. */
+export type UnpackPhase = "none" | "native" | "unpacking" | "unpacked" | "written" | "warming" | "warmed";
+
+/** What the native gate and the idle step know besides the part. `useNative`: useNative for a copy, with mount's mode,
+ *  the decoder there is and the copy it failed on bound; `file`: the part's sizes, compressed and unpacked. */
+export type PartWork = {
+  started: boolean; // `startup` was answered
+  phase: UnpackPhase;
+  nativeRunning: boolean; // the browser's decoder is unpacking a copy, which the unpack may have left since
+  damagedOn: number | null; // the copy damage was found on, said or not
+  useNative: (copy: number) => boolean;
+  file: { size: number; raw: number };
+};
+
+/** The part as it landed, from a read. */
+export type LandedPart = Extract<PartRead, { state: "landed" }>;
+
+// The browser's decoder takes a landed copy it may unpack whose bytes are brotli-sized (else the wasm step says what is
+// wrong). A read made without the bytes, to decide whether to copy up to 33 MB, passes on its copy alone.
+function nativeFits(w: PartWork, now: SeqRead<PartRead>): now is { seq: number; value: LandedPart } {
+  if (!("value" in now) || now.value.state !== "landed" || !w.useNative(now.value.copy)) return false;
+  const { bytes } = now.value;
+  return bytes === null || (bytes.length === w.file.size && bytes.length !== w.file.raw);
+}
+
+/**
+ * The native gate: the part the browser's decoder starts on, or null. Started, nothing unpacked or under way, the
+ * decoder not running (one 33 MB decode at a time), then a read that fits, of a copy without damage (the part is read
+ * only past the flags).
+ */
+export function nativeGate(w: PartWork, read: () => SeqRead<PartRead>): LandedPart | null {
+  if (!w.started || w.phase !== "none" || w.nativeRunning) return null;
+  const now = read();
+  return nativeFits(w, now) && now.value.copy !== w.damagedOn ? now.value : null;
+}
+
+/** How long the engine is idle before the part's next idle step.
+ *  IDLE_MS 250 vs 1000: a graph sent 0.5-1.1 s after ready was 0.2-0.5 s faster; a run meeting a step waits as long. */
+export const IDLE_MS = 250;
+
+/** What an idle step does. "run": nothing, a run is in flight (its end comes back); "later": not idle for IDLE_MS yet;
+ *  "native": the native gate (the read fits; the gate checks the flags again); "unpack": the first unpack step of the
+ *  read's bytes; "none": nothing (busy, not landed, or damage on the read's copy: the op `graphics` after the page's
+ *  write comes back). */
+export type IdleStep = "run" | "later" | "write" | "unpack-more" | "warm" | "native" | "unpack" | "none";
+
+/**
+ * One idle step. The part is read through `read()` only when nothing is unpacked or under way.
+ * @param idleFor - ms since the last run ended or `startup` was answered
+ */
+export function idleStep(
+  w: PartWork & { runsInFlight: number; idleFor: number },
+  read: () => SeqRead<PartRead>,
+): IdleStep {
+  if (w.runsInFlight > 0) return "run";
+  if (w.idleFor < IDLE_MS) return "later";
+  switch (w.phase) {
+    case "unpacked":
+      return "write";
+    case "unpacking":
+      return "unpack-more";
+    case "written":
+    case "warming":
+      return "warm";
+    case "native": // the decoder's end comes back
+    case "warmed":
+      return "none";
+  }
+  const now = read();
+  if (!("value" in now) || now.value.state !== "landed" || now.value.copy === w.damagedOn) return "none";
+  return nativeFits(w, now) ? "native" : "unpack";
 }
 
 /**

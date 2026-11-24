@@ -113,14 +113,14 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 
 - `wiring.ts`: not a test file: the stand-in transport, store and tab lock, the wiring of the controllers, and
   `resetState()`, which every `app-*.test.ts` runs before each test (through `useWiring()`): every writable signal of
-  `state.ts` back to its value at load (found by shape, so a new signal is reset too), the controllers' own state, a new
+  the state modules (`state-all.ts` joins them as `S`) back to its value at load (found by shape, so a new signal is reset too), the controllers' own state, a new
   wiring, and the drop record checked at the end of each test. It makes the localStorage stand-in before it imports the
   controllers.
 - `app-engine.test.ts`: the engine controller (`app/engine.ts`).
   - Start, Break, reset, crash; the download dialog; the cross-tab lock; stale replies; the race scenarios; a second
     `connectEngine` releases the earlier wiring's handles (download, graphics subscription).
   - No engine: a run or command is refused.
-- `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners.
+- `app-run.test.ts`: the run controller (`app/run.ts`): log, history, graphs, rows, toasts, banners; the shown graph (`graphIndex`, a computed of the picked graph's number: `selectGraph` keeps it when the oldest drop off, a number no longer kept falls back to the last, a cleared log's restarted numbers meet no old pick, `selectGraphAt` stops at both ends) and `showFullSize`/`closeFullSize`; `openDialog`/`closeDialog` (closes any, or only its own kind or object: a dialog that another replaced stays) and `showPhone`.
   - "Clear log" and `canClearLog`; no engine: a command is refused and stays out of `history`; a run's promise settles when
     the after-run work throws.
 - `app-files.test.ts`: the files controller (`app/files.ts`): the storage banner, a run that rewrites an open file
@@ -130,8 +130,9 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `command-bar.test.ts`: `barButton` (`app/start.ts`), the off and disabled rule of the Import and Load buttons.
   while the first is pending; a failed call is asked again.
 - `app-matrix.test.ts`: the Results tab's matrix protocol (`app/output/matrix.ts`): a read's loading entry and answer, an error,
-  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; Copy of an open and a
-  closed matrix; the copied check's timer.
+  the answer dropped when the results were replaced, the matrix hidden or read again meanwhile; the request names the
+  results' run, and a refused answer (or results replaced before it) opens and copies nothing and says so; Copy of an
+  open and a closed matrix; the copied check's timer.
 - `app-viewport.test.ts`: the phone keyboard (`app/viewport.ts`): Safari's pan, the caret revealed, the drag guard.
 - `app-start.test.ts`: "Start engine" (`app/start.ts`): `startOffer` in each of the sixteen states, `startEngine` on the
   real controllers; pasted lines (`log/pasterun.ts`): `pastePlan`, `putBack`, `startFirst`'s toasts, another tab taking the
@@ -170,6 +171,13 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
     changed while asked or after "Do the same" (asked again), one deleted while asked (written; asked when its tab has
     unsaved edits), one edited before its write's turn (asked in the unsaved words), a dialog opened while a clash's file
     is read (the clash waits), a Replace against `openFile`'s read.
+- `rename.test.ts`: the inline rename and the draft rows (`app/files/rename.ts`, with the tree's state in
+  `tree-state.ts`) over fake-indexeddb, as the focus request and the tree's state show them.
+  - A field starting (the row in the tab order, the draft's free default, a blocked store), Enter, Esc and leaving a
+    rename (a usable name, one in use, one the store refuses, a list that was not current), Enter then the blur (one
+    rename), another field started meanwhile.
+  - A draft: Esc, Enter with a typed name, an empty one, a path, one in use; leaving it (writes the typed name or the free
+    default with a toast; opens nothing); a failed write; another field started meanwhile.
 - `documents.test.ts`: the open tabs and their documents (`app/editor/documents.ts`), no view or a stand-in one: open,
   activate, close and ask, close under a folder, a move, a retype, a reload, a run over a tab, the dot and `selection`
   derived, a view attached after a file opened.
@@ -187,35 +195,92 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   task at a time in order, each call's value, a failed task rejects its call and the queue goes on, two queues
   independent.
 - `client.test.ts`: engine client and worker transport: downloading start files into the Cache (size checks, abort,
-  build
-  mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
+  build mismatch, stale entries), start and end rules, error kinds, interrupt (`run()` clears the buffer as it posts; a lost
   SIGINT is written again while the run is on, never into the next run); store failures (`started` with `storeFailed`,
   `VersionError` as reason `updated`, a failed `sync` or `folderError` as `crashed`, cause `folder`); the start's facts
   (`about`, `startup`, `storeError`) are the live worker's, none after an ending or before a start is complete.
   - The lazy graphics part's page side, with a shared buffer: the header pending, then landed with the bytes; damaged:
-    dropped from the Cache, tries counted, fetched again with `cache: "reload"`; failed: the reason written, then the
-    worker's `again` and the browser's `online` fetch it again.
-- `part-header.test.ts`: the shared buffer the graphics part is handed over in (`engine/lazy-part.ts`): what the page's
-  writers (land, fail with a reason cut to the room, retry) leave, as the worker's readers see it, and the header's
-  layout and size.
-- `lazy-part.test.ts`: the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): what a waiting graph
-  does (Break, write, decode, fetch it itself, ask again once per run, a final failure, wait), and when the browser's own
-  decoder is used (never when mount forces brotli-wasm; not on the copy it failed on, again on a fresh one).
+    dropped from the Cache, a copy counted, fetched again with `cache: "reload"`; a second damaged copy in a row fails the
+    part with no fetch until a graph's `again`, and drops it from the Cache (decision B); failed: the reason written,
+    then the worker's `again` and the browser's `online` fetch it again, with one `online` listener per part (decision
+    B's failure sets it too). An `again` or `damaged` from an ended worker, or naming a copy the page has replaced (two
+    graphs saying one damage, race 13's late `damaged`, a late `again`), is dropped. The progress the listeners see, read
+    from the region (a miss with its bytes, a damage, a failed re-fetch, a retry, a Cache hit); an older build's part, its
+    download still on its way, says nothing to them, and once failed is not fetched again when the browser is back
+    online; a new build's part takes over the listeners. Without a shared buffer (no cross-origin isolation) `download()`
+    fetches the part with the start files into the Cache and counts it, and `cached()` checks it.
+- `seqlock.test.ts`: the seqlock the graphics part's shared region is written and read through (`engine/seqlock.ts`): the
+  counter 2 higher and even after each write; a writer that throws or returns a thenable writes nothing; the counter's
+  word refused to a writer; a kept writer or reader throws; a page write between a reader's two counter reads is read
+  again whole (busy with `waitMs` 0, at the count its copy began at, so a `waitSeq` on it returns at once); an odd
+  counter is busy after `waitMs`, woken by a second thread's notify; `waitSeq` returns at once on a moved count and is woken by another thread's write; `readBytes` a clamped copy; and a
+  writer thread against a reader for 0.4 s, no torn snapshot accepted (it accepted torn ones with the re-check as an
+  `Atomics.load` on an Apple-silicon Mac).
+- `part-header.test.ts`: the shared region the graphics part is handed over in (`engine/lazy-part.ts`, on the seqlock):
+  what the page's writers (land, fail with a reason cut to the room, retry: one more copy) leave, as the worker's
+  `readPart` sees it (the bytes only when asked for; an empty reason never read back empty), and the header's layout
+  (state, length, copy, counter) and size.
+- `lazy-part.test.ts`: the page's and the worker's decisions about the lazy graphics part (`engine/lazy-part.ts`): the
+  page's machine as a table (`partStep`: each row, and the events it drops); what a waiting graph does (Break, write,
+  unpack, ask again once per run, a final failure with its reason, wait, also on a busy read; race 11: damage said once,
+  by a graph whose read gives its copy, a landed copy whose damage was said waits, a fresh copy is unpacked); races 1 to
+  3: a page retry after any of a graph's reads of a failed part gives a whole snapshot or busy, never the empty reason
+  (the answer for written); when the browser's own decoder is used (never when mount forces brotli-wasm; not on the copy
+  it failed on, again on a fresh one); the native gate (started, no unpack, the decoder not running, and only then a
+  read: a landed, brotli-sized copy without damage on it, or a read without the bytes on its copy); and what an idle
+  step does (a run in flight, IDLE_MS of idle, then by the unpack's phase, nothing while native; with none, the native
+  gate or brotli-wasm, nothing on a busy or unlanded read or one of a copy with damage).
+- `worker-graphics.test.ts`: the worker's record of the graphics part (`engine/worker-graphics.ts`) with a fake engine
+  and a real shared region (a small brotli part; Node's `DecompressionStream` as the browser's decoder, held when a test
+  needs it): the idle steps stop for a run in flight and go on at its end with nothing else to wake them; a graph after
+  the write answers at once, with no second unpack or write; a graph that finds the part failed asks once, its `again`
+  naming the copy it read, and the failure of that fetch is its answer; race 13: the decoder's late result of a copy a
+  graph found damaged meanwhile is dropped, not written (its `damaged` names the copy); one browser decode at a time (a
+  fresh copy waits for the running one); a Break during a graph's own unpack while the decoder runs: nothing is written
+  until the decoder ends; race 11, with both decoders: damage an idle step finds blocks only its copy (a graph before
+  the fresh copy waits, not saying it, and the fresh copy is written while idle); damage the page has not acted on is
+  said by the next graph, and the one after waits rather than unpack that copy again; a read of the part that throws is
+  not damage, in a graph, an idle step or the browser decoder's own task: nothing is posted, the graph's reason promises
+  no fetch, no error escapes, and that copy is drawn or written later; finding 15: a warm step's throw is a warning that
+  stops the warm-up (no `damaged`, no further step), and a graph draws.
 - `store.test.ts`: IndexedDB file store: journalling, transactions and recovery, zip, `persist()`, tab lock; `write`'s
   expectation (`StoreConflict`), `info`, two writes in one millisecond.
-- `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one
-  test,
+- `snapshot-native.test.ts`: native library calls from an engine restored from the memory snapshot (skipped, as one test,
   without a current snapshot).
 - `engine.test.ts`: the engine in Pyodide under Node: runs, results, graphs, Break (also one pressed while the run waits
-  behind a describe: rc 1 before its first line; and one after its run ended), a worker that fails to load.
+  behind a describe: rc 1 before its first line; and one after its run ended), a matrix request ahead of, behind and
+  two runs behind other runs (refused when it names older results), and after a run whose op failed once the engine ran
+  (a worker whose result will not parse), a worker that fails to load.
   - The heap cap on a snapshot start (400 MB): a 10-million-row `generate` is r(909) and the data is kept; strings in
     globals until the heap is full (about 60 s) end as r(909), never rc 9999, and later runs work.
+- `lazy-graphics.test.ts`: the lazy graphics part on both threads, with a shared buffer and without one: the page's half, the real worker,
+  and both threads' `[dofile]` lines (the harness's `onConsole`); skipped without a current snapshot that has a graphics
+  part. A graph at `started` waits for the part and writes it in its run, then it is warmed while idle; a restarted
+  worker gets the landed part with no fetch and writes and warms it while idle with no run, and no sooner than `IDLE_MS`
+  after the last of a train of runs. With the snapshot served over HTTP (the harness's `served`), so that the page's
+  `fetch` can hold or damage the part: a graph waiting for a held part pauses in 100 ms slices (the harness's `waits`
+  counts them), a Break meanwhile is rc 1 within seconds with the data kept, and a graph draws once it lands (one
+  fetch); a damaged copy is r(199) for the graph that finds it, fetched again with `cache: "reload"`, and the next graph
+  draws.
+  Without a SharedArrayBuffer (gone from the page's thread only): boot writes the part before it answers, a graph right
+  after the start draws with no waiting line, the worker posts no `{graphics}` message, and the part is warmed while idle.
 - `memcap.test.ts`: the memory cap's rule (`engine/memcap.ts`).
   - iPhone, iPad and a touch Mac are capped (750 MB), a Mac without touch is not; `userAgentData.mobile`, `deviceMemory`
     of 4 or less.
   - `?memcap=<MB>` wins both ways, 0 is none, a bad value is ignored and said.
   - The loader patch applies to `pyodide.asm.mjs` once and throws on other text.
-- `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`).
+- `run-parts.test.ts`: what the log draws after a run's lines (`log/run-parts.ts`, no DOM): graph links, the unsaved-do
+  note in each layout's words, a phone's hint block and wide-table hint, Go to line, the end notes.
+- `layout.test.ts`: the layout's actions (`state/layout.ts`, no DOM): Wrap lines flips the signal and keeps "1" in localStorage
+  only while on; Split and Unsplit keep the choice and leave the Output tab the pane can show (Unsplit: the Log; Split:
+  Graph instead of the Log tab, Data and Results as they were).
+- `fold.test.ts`: the folded file list's moves (`files/fold.ts`, a stand-in registered as the `files-toggle` target; the list's focus move is read from
+  `focusWanted`): opening focuses the list from anywhere, folding focuses the button, Esc folds only an open list whose button
+  is drawn and only when no handler used the key.
+- `focus-targets.test.ts`: the focus registry (`ui/focus-targets.ts`, stand-in elements): `focusNow` for a target that is there, absent, gone, hidden, shown but not taking the focus or one of several, `focusStable`'s order (editor, else More actions, else nothing), an entry's own focus function and key (a request with no key reaches only the entries with none, so the tree's tab-order row is found among keyed rows); the one waiting request (`ask`, `takeRequest`, `cancel`: waits for a later registration, ends taken or not, is replaced, obeys `from`); and a source scan that every target name is registered by a component and no component registers another.
+- `tree-focus.test.ts`: the requests of the file tree, Find and the close of a tab (`files/tree-state.ts`, `files/close-focus.ts`, `log/find.ts`, stand-in elements): `focusRow` and `focusTree` and the values the test hook reads (`focusWanted`), the tab-order row taking a keyless request among keyed rows, a tree request's `from` (nothing or the tree, or anywhere), `rove` ending the other requests, `treeShown` for a row and for File actions alone, `openFind` asking the field once, and `focusAfterClose` choosing the selected tab, the tree or the editor (not a tab on a phone).
+- `run-gate.test.ts`: the Run gate (`src/app/editor/runnable.ts`): `runRefusal` per path kind, `activeRunRefusal` following the active tab, `canRunFile` combining the engine's `takesRun`.
+- `editor.test.ts`: the editor's and the log's logic (step 4b, `src/app/log/*.ts`, `src/app/editor/*.ts`); the page's key rules in `src/app/ui/keys.ts` (held Enter, `roveKey`: the axis and wrap rows, Alt, Ctrl or Cmd, keys not its own, no places; which row each component passes is pinned by e2e, not here).
   - The .log tokenizer, Download log's text, Find's matches, `runError`, a .csv's columns, the run-head words.
   - Where each code line is echoed (blank lines, comments, loops, `///`, nested do-files, `quietly` and `capture`
     blocks).
@@ -229,6 +294,11 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
   Results sections, the copy toast, a long Browse cell cut short, a graph's label and alt text.
 - `states.test.ts`: step 4d's plain logic (`app/states/words.ts`, and `predicates.ts` over all sixteen states): `resetAsks`, `rerunPath`, the stopping countdown, the
   banners' words, the action for each failed reason, the two drafted log notes (OQ-10; none for a tempfile).
+- `status.test.ts`: what the status bar and the phone's strip say (`editor/status.ts`, no DOM): each engine state's words in the
+  bar's full form and the strip's short form (the run's timer only in the bar; Break's timer beside the words in the bar,
+  after them in the strip), the start's step count, the last run's words in both forms and Go to line (strip only), the
+  memory, "Graphs loading" and its percent, the parts only the bar has (affiliation, the files note), and the order of
+  the parts in each form.
 - `site.test.ts`: step 5's landing and commands pages (`scripts/site-pages.ts`, `src/site/filter.ts`); the denied commands come from `commands.json`, generated from `browser.DENIED`.
   - Placeholders (`{{version}}`, `{{engine-mb}}`) filled, none left; the pages' links and where each is served; the
     headers file (isolation on the editor's path only; noindex on every path of a build that is not production's); each
@@ -258,20 +328,29 @@ loop, so a file has more tests than `test(` lines; `npm run test-counts` counts 
 - `imports.test.ts`: the architecture rules that Biome (`biome.json`, `biome/architecture.grit`) and the compiler cannot hold,
   checked on source text and the import graph (the path rules are in `biome.json` and the plugin; see `web/CLAUDE.md`).
   - No view reaches the transport through value imports (transitive).
+  - `ui/` imports nothing from `states/` or `files/` (types included).
+  - A state module (`src/app/state/`) imports values only from the signals package, `app/paths.ts` and other state modules.
   - `machine.ts`: two casts, no top-level `let` or `var`; the cast to `Ticket` occurs once in `web/`.
   - The transport names no state; `run.ts` subscribes to nothing.
   - The pages' HTML and CSS: `src/site/` apart from the editor's.
   - No CSS reads `data-engine`; no `.tsx` spells a set of engine state names; every `:hover` rule is inside `@media (hover: hover)` (SPEC).
 - `cycles.test.ts`: no import cycle in `src/`, type-only imports included (the files that reach one another are named in
   the failure); a cycle finder on a small graph.
-- `signals.types.ts` (not run: `npm run check` compiles it): the writable signals `state.ts` exports are the views' own.
+- `test-hook.test.ts`: only `main.tsx`'s flagged dynamic import reaches `app/test-hook.ts` (the seeds and `hook-state.ts` are imported by it alone), and nothing else writes `data-engine` or `window.__dofile`. The built page is checked in `start-and-lock.spec.ts`.
+- `hook-state.test.ts`: `hookState()` (`src/app/hook-state.ts`, which `app/test-hook.ts` gives the e2e hook and `state-all.ts` gives the tests as `S`) has every name the specs read as `state.<name>`.
+- `signals.types.ts` (not run: `npm run check` compiles it): the writable signals the state modules export (`state/*.ts`, `theme.ts`, `pickedVar` in `output/view.ts`) are the views' own.
+- `seqlock.types.ts` (not run: `npm run check` compiles it): `writeSeq` refuses an asynchronous write and one that
+  returns a value; `readSeq` refuses an asynchronous or thenable result; `failPart` refuses a plain string as its
+  `PartReason`.
 - `dispatch.types.ts` (not run: `npm run check` compiles it): the worker's dispatch table has an entry for every op and
   no other, each handler with its op's arguments and result (a missing op, a wrong result, wrong arguments and an extra
   op each fail to compile).
 - `snapshot.test.ts`: snapshot inflate and unpack; which site-packages files the bundle leaves out;
   the two heap scrub steps (`zeroLibraryCopies`, `zeroFreeMemory`) on a stand-in module.
 - `linalgshim.test.ts`: the linalg shim in the Pyodide engine.
-- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set).
+- `build-id.test.ts`: build id and the staleness check, including the snapshot settings (compared only when the caller asks: `SNAPSHOT_QUALITY` and the others set); `writeStartFiles` leaves neither `manifest.json` nor `stage.json` in the built folder.
+- `stage.test.ts`: `scripts/stage.ts` into a temporary folder (copies, removes an older wheel, writes `stage.json` last) and `staged()`: each of a missing record, another wheel, extra wheel or Pyodide version, and a missing or cut-short file gives a reason that names `npm run stage`.
+- `snapshot-inputs.test.ts`: `scripts/snapshot-inputs.txt`, the one list of the snapshot's inputs (read by `web.yml` and the `build-web` cache key through `snapshot-inputs.sh`): every pathspec matches a tracked file, the shell reader gives the table's lines, the workflows keep no list of their own, and every file `make-snapshot.ts` imports (transitively, runtime imports) is in the `[build]` section.
 
 ### End-to-end (Playwright, `web/e2e/`, each test in 4 browser profiles)
 
@@ -287,7 +366,7 @@ Each test runs in Chromium, Firefox, WebKit and an iPhone profile. Skipped cases
 Specs:
 - `shell.spec.ts`: layout and toolbar (its size in every state; the run controls unseen in the other-tab states, seen in the rest).
   - Desktop and phone layout; the first visit; the toolbar stays put from 1440 to 390 px in all sixteen engine states.
-  - Panes never remounted; banners; toast position; no key names on a phone.
+  - Panes never remounted; banners; the phone toast 8 px above the command line or tab bar, or the keyboard, in four cases (Log and Editor views, keyboard closed and open; iPhone project); no key names on a phone.
   - The status bar's "Not affiliated with StataCorp" (at 1440 px, not at 1199 px, not on the iPhone).
   - A stale snapshot, and a file store of a newer version, fail with reason `updated` (a real start).
 - `keyboard.spec.ts`: the phone's on-screen keyboard (`app/viewport.ts`) and the `?kblog` overlay, at 390 by 844 px:
@@ -295,7 +374,9 @@ Specs:
   drag guard.
 - `files.spec.ts`: files, tabs and the file panel.
   - The tree by keyboard; tabs with and without unsaved edits; Save; inline rename; row and head menus; delete.
-  - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page.
+  - Upload name clashes, the same bytes, a non-UTF-8 file, a folder upload, a drop anywhere on the page, two quick drops
+    of one path (applied in drop order); the re-ask dialog ("changed while you were deciding") takes the focus on Keep
+    mine and hands it back to what had it before the first.
   - New .do file and New folder; drafts in a folder; the current folder (selecting, folding, rename and delete).
   - The phone's strip, file dropdown (44 px targets) and "Files ⋯"; the desktop's tablist.
 - `states.spec.ts` (step 4d): engine states and their banners.
@@ -349,9 +430,9 @@ Specs:
   - Restore the sample as an upload: toast, "already here", the clash dialog (Keep mine, Replace with the sample).
   - The sample runs in the real engine at the editor's base to a table and a graph.
   - Where the browser keeps no storage, the sample's write brings no banner and the visitor's own change does.
-- `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook without the
+- `start-and-lock.spec.ts`: download counts, damaged cache, restart without cache, tab lock take-over, no test hook, seeds, `data-engine` or test module without the
   URL flag.
-- `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/main.tsx`) and the named helpers that
+- `hook.ts` and `seed.ts` (no tests): the hook's type (`DofileHook`, from `src/app/test-hook.ts`) and the named helpers that
   put the page's state in a shape (an engine state, a banner, log items, ...); the tabs' helpers (`markDirty`, `showTabs`,
   `seedEditorBox`) call the page's `src/app/editor/seeds.ts` through the hook's `documents`, so a seeded tab has a document; `fixtures.ts` holds the helpers shared by
   several specs (`isPhone`, `ready`, `settled`, `settle`, `putFiles`, `storedText`, `SAMPLE`, and the locators `toastOf`, `bannerOf`, `statusBar`, `toolbarOf`).
@@ -372,7 +453,7 @@ Specs:
   them in order while the run goes, in steps that each extend the last, and complete at the end) and, with
   `DOFILE_STREAM_BENCH=1`, a measurement of the log's cost per chunk over 50 and 500 lines (no assertion beyond the run
   completing).
-- `graphics.spec.ts` (experiment E1c, a lazy snapshot only; skipped without a graphics part): the part's request held or
+- `graphics.spec.ts` (a lazy snapshot only; skipped without a graphics part): the part's request held or
   refused with `page.route`. A run at ready that draws nothing does not wait for it; a Break while a graph waits is rc 1
   with the data kept and the part fetched once; "Graphs loading" and its ring while it downloads (every project, the
   phone's strip on iphone); written and imported while idle; a graph that waits while it lands draws; a return visit reads
@@ -380,16 +461,24 @@ Specs:
   r(199) with a clear message, no lasting label, and the next graph once online fetches it and draws.
   - A return visit (a persistent profile, so every project): the page's "landed (cache)" line comes before "ready" (the
     page's own clock), a graph sent at ready draws, the part is written once and fetched once.
-  - A damaged part: the graph says it arrived damaged, the Cache entry is dropped, the next graph fetches it and draws.
-  - Without cross-origin isolation (no SharedArrayBuffer): the worker alone makes one `fetch()` of the part and the
-    graph's synchronous XHR one request, the page never fetches it; a graph at ready draws without waiting for a held
-    fetch and its log says it waits for the files; the ring shows the download (told by the worker) and goes when it lands;
-    other runs work. A damaged part's retry goes to an address of its own (`fresh=`), not the HTTP cache's.
+  - A damaged part found while idle: the Cache entry is dropped and the part fetched again at once, and a graph draws
+    without saying the damage (race 11; the graph that finds a damaged copy itself and says it: `lazy-graphics.test.ts`).
+  - Without cross-origin isolation (no SharedArrayBuffer): the part is a start file: one request for it, the start's
+    download, and the worker writes it before ready; a graph at ready draws with no waiting line and no ring; other runs
+    work. A damaged part fails the start as a damaged heap does: it is dropped from the Cache, and the next start
+    fetches it again and a graph draws.
 - `output.spec.ts` (step 4c): the Output tabs; Copy image twice in the full-size view (fake clock: the first "Copied" timer
   does not clear the second).
+  - The full-size view's modal trap (`ui/modal-trap.ts`): a Space that opened it leaves the focus on the view, not on Close; Tab and
+    Shift+Tab wrap inside; Esc gives the focus back to Open full size; an opener that has left the page (the Graph tab
+    gone while it is open) gives the focus to the editor; a dialog over it (the other-tab dialog) has the keys: Esc and the
+    arrows leave the view alone, and closing the dialog gives the focus back to the view.
   - The three empty states and the reset wording; a .png on the light card in the dark theme; .dta tabs with no engine.
-  - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more), the
+  - With an engine: the Graph tab and full-size view (Copy image, Export PNG), the Data tab (filter, Show 50 more; the
+    name buttons' arrow keys leave Alt, Ctrl and Cmd alone), the
     Results tab (sections, Globals without the presets, copying, matrices), a .dta tab (variables, Load).
+  - Copy of a closed matrix pressed while a run goes on is refused when that run replaces the results (toast, nothing
+    copied); pressed again it copies the new results' matrix.
   - The clipboard is a recorder in every page.
 
 ### Screenshot run (Playwright, `web/screenshots/`, outside `npm run e2e` and CI)

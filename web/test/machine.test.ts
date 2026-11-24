@@ -6,7 +6,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
 import type { EngineState, NothingHidden, SameTags } from "../src/app/types.ts";
+import type {
+  Build,
+  CrashCause,
+  CutKind,
+  FailReason,
+  ResetKind,
+  RunHead,
+  RunResult,
+  Stage,
+} from "../src/engine/types.ts";
+
 import type {
   Answered,
   Answers,
@@ -41,16 +53,6 @@ import {
   UP,
   WORKER_LIVE,
 } from "../src/engine/machine.ts";
-import type {
-  Build,
-  CrashCause,
-  CutKind,
-  FailReason,
-  ResetKind,
-  RunHead,
-  RunResult,
-  Stage,
-} from "../src/engine/types.ts";
 
 type EventType = Event["type"];
 /** What a test feeds: a visitor's event or `lock-lost`, or an answer without its ticket. */
@@ -79,6 +81,7 @@ const result = (rc: number): RunResult => ({
   error_command: null,
   log: ". display 1\n1\n",
   results: {
+    runId: 1,
     e: { scalars: {}, macros: {}, matrices: {} },
     r: { scalars: {}, macros: {}, matrices: {} },
     e_changed: false,

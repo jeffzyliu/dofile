@@ -5,16 +5,17 @@ what is planned after it. The reasons are in `docs/web-audit-proposal.md` (the p
 `docs/archive/web-audit-surveys/` (the reports). This file does not repeat an item's content: an id such as `S2` is
 defined in the proposal's section 3.
 
-**Status (2026-11-16).** Phase 0 is merged into `audit/0-nets` and its end gate is green (`docs/web-audit-log.md`). Scope decided by the maintainer: proposal B, plus four redesigns moved in from C
+**Status (2026-11-16; session 4, 2026-11-23).** Phase 0 is merged into `audit/0-nets` and its end gate is green (`docs/web-audit-log.md`). Scope decided by the maintainer: proposal B, plus four redesigns moved in from C
 (R7 through the design note, R5, the focus-target registry of R3, R1) and screenshots as a net for the view moves.
-Section 2 lists the decisions; all are made.
+Section 2 lists the decisions; all are made. Session 4's decisions on its items (2026-11-23) are in the audit's log,
+"Phase 2 (session 4)"; the tables below carry their effect.
 
 ## 1. Scope
 
 | In | Items |
 |---|---|
 | Nets | N1 to N6; **N7 (new): screenshots for phase 2** |
-| Design notes | S0 (now also decides R7's ownership); **R5 note**; **R1 note** |
+| Design notes | S0 (now also decides R7's ownership); **R5 note**; **R1 note**; **S6 note** (the focus-target registry, added in session 4) |
 | Bugs | B1 to B5 |
 | Consistency | C1 to C4; **C5 (new): phone toast placement** |
 | Moves | S1 to S6, S9; S7 and S8 **without their graphics halves**; S9 **without its staging half** |
@@ -60,11 +61,12 @@ The proposal's six rules for every brief (its section 5) stand. Added here:
 9. **An e2e read that a move breaks becomes a named helper** in the e2e hook; it is not repointed at the signal's new
    place. (This is R6, done where B touches it.) The hook keeps one `state` object whatever happens to `state.ts`
    (S0 says how), so a move alone breaks no read: the rule is for a read whose meaning changed. Each lane keeps its
-   helpers in a file of its own, which the hook imports.
+   helpers in a file of its own, which the hook imports: lane b `e2e/seed-files.ts`, lane c `e2e/seed-views.ts`, both
+   re-exported by `e2e/seed.ts`, each created by the lane's first item that breaks a write (decided 2026-11-23).
 10. **A view move changes no pixel.** From phase 2 on, every pull request that touches a `.tsx` or `.css` file runs N7
     against the baseline of its base commit. A difference is explained in the pull request or fixed.
 11. **A design note is approved by the maintainer before its first item starts.** S0 before S1; the R5 note before R5;
-    the R1 note before R1.
+    the R1 note before R1; the S6 note before S6.
 12. **Renames happen inside the restructure that owns the file, not before.** A rename is never in the same commit as a
     spacing change. Before a rename, grep `biome/architecture.grit` and `test/imports.test.ts`: they match identifiers by
     name. The rules are in `web/STYLE.md` (Naming, Spacing).
@@ -80,9 +82,9 @@ Models, by risk. "S/h + O" is a Sonnet builder at high effort with an Opus revie
 | Tier | Items |
 |---|---|
 | Fable, high | S0 (authorized; Opus, high if the session's yes is not given) |
-| Opus, high | B1, B2, B3, S1, S2, S7, S8, the R1 note (a candidate for Fable: ask), R1 |
-| S/h + O | N1, S3, S5, S6 with R3r, R7r, R5 |
-| Sonnet, medium | N2 to N7, B4, B5, C1 to C5, S4, S9, W1 to W7, the R5 note, the Run gate, the N7 tightening |
+| Opus, high | B1, B2, B3, S1, S2, S7, S8, the R1 note (a candidate for Fable: ask), R1, the S6 note |
+| S/h + O | N1, S3, S5, S6 with R3r, R7r, R5, A6 |
+| Sonnet, medium | N2 to N7, B4, B5, C1 to C5, S4, S9, W1 to W7, the R5 note, the Run gate, the N7 tightening, the test-only code item |
 | Haiku | doc sync, renames, `docs/test-map.md` edits |
 
 N1's Opus reviewer has one job: to match each removed assertion to its replacement (the proposal's risk 3).
@@ -157,22 +159,25 @@ against phase 1's changes, then its baseline taken from `main`.
 | a, engine | C3: the shared-buffer protocol in `lazy-part.ts` | start | 2.1 |
 | a | S7, without graphics: per-start facts, the controller's wiring. It leaves `web/src/main.tsx` alone, or waits for S1, which edits it | C3, and S1 merged if it needs `main.tsx` | 2.1 |
 | a | S8, without graphics: `/work` mirror, boot and loader, typed dispatch (three items in a chain; the boundary is below) | S7 | 2.2 |
-| a | The R1 note | S8, and the condition below | 2.3 |
-| a | R1: the lazy graphics part as one machine, with its Node harness (three items). It takes the `worker.ts` graphics names (`askedAt`, `at`, the 22-variable `let` chain) and those of `lazy-part.ts`. It leaves `state.ts` and `app/engine.ts` alone: a change it needs there follows R7r | the note approved | 2.3, 2.4 |
+| a | The R1 note, `docs/design/lazy-graphics.md`: both threads, the page's machine in `client.ts` as well as the worker's (R1 replaces the graphics halves of S7 and S8) | S8, and the condition below | 2.3 |
+| a | R1: the lazy graphics part as one machine, with its Node harness (three items). It takes the `worker.ts` graphics names (`askedAt`, `at`, the 22-variable `let` chain) and those of `lazy-part.ts`. It leaves `state.ts` and `app/engine.ts` alone: a change it needs there follows R7r. It brings `docs/lazy-matplotlib.md` up to date with the code (the buffer's size, the worker's `prefetch` and `fetchPartNow`, the `browser.py` comment) | the note approved, and A6 merged (both edit `worker.ts`, `harness.ts` and `node-worker.ts`) | 2.3, 2.4 |
 | b, files | S1: editor documents in a DOM-free controller that owns Save, and `tabs` and `activeTab` (three items: the records with the derived signals; Save and the file code's calls; the scroll snapshot). Edits `web/src/main.tsx`. The Doc's shape is settled (decision 2, 2026-11-17: `docs/design/workspace.md` section 2, with the Save rule of section 3; the spike's branch `spike/doc-shape` is kept locally for S1) | start | 2.5 |
 | b | S2, first half: the generator turn design (below), one door for page writes, the order tests | S1 | 2.6 |
 | b | B1: uploads and "Restore the sample" take a turn (failing test first). `store.write` takes an expectation (one transaction); `createEntry` passes "absent"; the re-ask words go into SPEC's "Name clash" row. An engine change: snapshot first | S2's first half | 2.7 |
-| b | S2, second half: it opens with a commit of the `uploadNow` renames (`ClashNow` and its fields, `ClashAnswer.same`, `ask`, the dialog view, the module-level `now`); then `files/actions.ts` split three ways | B1 | 2.8 |
+| b | S2, second half: it opens with a commit of the `uploadNow` renames (`ClashNow` and its fields, `ClashAnswer.same`, `ask`, the dialog view, the module-level `now`); then `files/actions.ts` split three ways; and survey finding A2 (two quick drops of one path apply in read-finish order) fixed, a failing test first | B1 | 2.8 |
 | b | S3: `FilesPane.tsx` split, `rename.ts` with Node tests; it takes the `endRename` and `endDraft` names in `FilesPane.tsx` | S2 | 2.9 |
-| b | Run gate: Run, Run selection and the banner's Run are offered only for `.do` and `.ado` tabs, by a computed from the path. A typed `do x.txt` keeps Stata's behaviour | S1, and S5 merged (rule 8: both edit the run controls) | 2.17 |
+| b | Run gate: one rule decides whether Run is offered, for `.do` and `.ado` tabs only, by a computed from the path; Run, Run selection, the banner's Run and Ctrl/Cmd+Enter all follow it. On another tab the buttons are greyed with a short reason (its words go into SPEC; as Save is for a `.dta`), and Ctrl/Cmd+Enter is refused with a toast. A typed `do x.txt` keeps Stata's behaviour | S1, and S5 merged (rule 8: both edit the run controls) | 2.17 |
 | c, views | S4: output readers into `.ts`, one command bar, one variables table | start | 2.10 |
 | c | `echoLines` in `app/log/align.ts`: its names, and the first use of `web/STYLE.md`'s Spacing rule (the pilot) | start, standalone | 2.18 |
-| c | S5: `runText` (and its names), scroll-follow, `CommandLine.tsx`, state logic out of `App.tsx` | S1 (both edit `state.ts`) and S4 (its one command bar is also in `CommandLine.tsx`) | 2.11 |
-| c | S6 with R3r: one roving-key hook, one modal trap, the focus-target registry, owner functions for the shared signals (not `activeTab`: S1 owns it), and `graphIndex` as a computed with `selectGraph(n)` | S3, S5, and S7 merged (both edit `app/engine.ts`) | 2.12 |
-| c | R7r: `state.ts` split by owner, as S0 lays out; the e2e hook's `state` object unchanged | S6 | 2.13 |
+| c | S5: `runText` (and its names) as a `.ts` function returning typed parts, tested in Node, with a thin view; scroll-follow; `CommandLine.tsx` split into its four jobs; one status model (`.ts`, typed parts, Node tests) drawn by the desktop `StatusBar` and the phone's `PhoneStrip` (the phone uses short forms of the desktop's words; a visible change goes into SPEC and the N7 baseline); state logic out of `App.tsx` | S1 (both edit `state.ts`) and S4 (its one command bar is also in `CommandLine.tsx`) | 2.11 |
+| c | S6 with R3r: one roving-key hook, one modal trap, the focus-target registry (as the approved S6 note says; the builder first checks the note against the code and stops if what it relies on moved), owner functions for the shared signals (not `activeTab`: S1 owns it), and `graphIndex` as a computed with `selectGraph(n)`: selection by the graph's number, a by-position helper for FullSize's previous and next, a number no longer kept falls back to the last graph (today's behaviour) | S3, S5, the S6 note approved, and S7 merged (both edit `app/engine.ts`) | 2.12 |
+| c | R7r: `state.ts` split by owner, as S0 lays out; the e2e hook's `state` object unchanged. `within` and `movedPath` leave `files/tree.ts` for a small module of pure path helpers, so `runMoved` stays with the run's state and imports no `files/` code | S6 | 2.13 |
+| c | The S6 note: the focus-target registry (section 6) | start | 2.19 |
+| c | A6 (survey finding): Copy of a closed matrix copies a newer run's matrix when a run lands during the read. The copy is refused ("the results changed: copy again"), checked where the answer is made, not only on the page; a failing test first, one with Copy pressed during a run. The same check covers opening a matrix. An engine change: snapshot first | start | 2.20 |
+| c | Test-only code: the test hook, `editor/seeds.ts` and `<html data-engine>` in one module that the page loads only with `?test` (as `kblog.ts` is with `?kblog`, which stays its own); nothing of it runs without the flag (every editor spec opens with `?test`: checked; `web/CLAUDE.md`'s rule changes with it). Then, in a commit of its own, `main.tsx`'s lines ordered so that statements that depend on one another sit together, behaviour unchanged | R7r | 2.21 |
 | c | C5: phone toast placement. When it is merged into the session's branch and the preview is up, the orchestrator tells the maintainer, with the four cases to try on a real phone; the session's merge to `main` waits for that check | R7r | 2.16 |
 | d, build | S9, without staging (its clauses are below) | start | 2.14 |
-| d | R5: `public/` staged by one script, the config only reads it (its clauses are below) | S9; the R5 note is approved (2026-11-17, `docs/design/staging.md`: choices 1 to 5, choice 3 amended) | 2.15 |
+| d | R5: `public/` staged by one script, the config only reads it (its clauses are below). The `.md` filter of `web.yml` lets the root `README.md` count (it goes into the wheel); the one cold CI cache from the new key is accepted | S9; the R5 note is approved (2026-11-17, `docs/design/staging.md`: choices 1 to 5, choice 3 amended) | 2.15 |
 
 **S9 and R5, clause by clause.** S9: `scripts/lib`; `vite.config.ts` split into plugin modules; every snapshot knob in
 the manifest; `npm run commands` through a temp file; `wheel` stops deleting the release wheels in the root `dist/`; the
@@ -200,11 +205,20 @@ is not so when lane a reaches it, the lane ends at S8, phase 2 closes without R1
 graphics halves of S7 and S8 are not done in either case.
 
 **Sessions.** Session 3 runs lane a to S8, lane b to B1, S4 and S9, and ends with the phase's end gate on what it
-built. Session 4 runs the rest. Lane c is the long one: it
+built. Session 4 runs the rest; its first wave is the R1 note, the S6 note, S2's second half, S5 and R5. Lane c is the long one: it
 waits on lane b twice.
 
 **End gate.** G0's checks on every browser project; the engine checks of phase 1; N7 against the phase's start baseline,
 every difference accounted for.
+
+#### Notes for the 3.0 sweep
+
+- **Named roots (decided).** Imports use `#app/`, `#engine/`, `#stata/` and `#site/` through `package.json`
+  `"imports"`.
+- **Layer groups (a direction, pending the design note).** The maintainer leans to layers first: state, controllers, ui,
+  and views in `views/<feature>/` with their local helpers beside `index.tsx`.
+- **Biome drift risk.** The `ui/` overrides repeat the `app/**/*.ts` and `app/**/*.tsx` patterns, because a later
+  override replaces an earlier one's patterns; a change to those patterns must be made in both places.
 
 ### Phase 3: close (session 5)
 
@@ -212,7 +226,8 @@ A sweep that has to change a test or a shared doc logs the change for W5 or the 
 
 W1 to W7 each take, in their region, the names that say the wrong thing (the naming survey's first table, outside R1's
 files), units and bare literals (constants without a unit, functions returning seconds without saying so, unnamed
-literals), and promise callbacks (one spelling). Renames follow rule 12.
+literals), and promise callbacks (one spelling). Renames follow rule 12. W1 to W4 also take, in their region, the 36
+findings of Biome's `noFloatingPromises` (a fix, or `void` where nothing should wait); the rule is turned on after W4.
 
 | Item | After | Pull request |
 |---|---|---|
@@ -220,7 +235,7 @@ literals), and promise callbacks (one spelling). Renames follow rule 12.
 | W1, W2: sweep of `src/engine/`, the Python files, controllers and state | 3.0 | 3.1 |
 | W3, W4: sweep of the views and `src/stata/` | 3.0 | 3.2 |
 | W6, W7: CSS deletions; scripts, config, site, sample, HTML | 3.0 | 3.3 |
-| W5: sweep of `test/` and `e2e/`, with what the other sweeps logged for it; it takes the test helpers (one `until`, one encode and decode pair, distinct `settle` and `settled`) | 3.1 to 3.3 | 3.4 |
+| W5: sweep of `test/` and `e2e/`, with what the other sweeps logged for it; it takes the test helpers (one `until`, one encode and decode pair, distinct `settle` and `settled`); it re-derives the mutation checks of the Save tests on the code as phase 2 left it (the list M2 to M6 of #114 is lost) and strengthens the two weak Save assertions #114 left | 3.1 to 3.3 | 3.4 |
 | Spacing pass: `web/STYLE.md`'s Spacing rule over `web/`, whitespace only; its blank-line commits and its comment-move commits are separate; the whitespace commits go in `.git-blame-ignore-revs`; the pull request is merged with a merge commit | 3.1 to 3.4 | 3.7 |
 | Doc sync: `web/CLAUDE.md`, `web/README.md`, `docs/test-map.md`, SPEC sections 5, 6 and 8, `docs/web-engine-data-flow.md`; among them `web/CLAUDE.md`'s claim that every request gets a ticket (tickets are per worker start, 01-F7) | the sweeps and the spacing pass | 3.5 |
 | Whole-diff review, G0 to head, by an Opus reviewer that has read none of the items; its report to `docs/archive/web-audit-surveys/` | 3.5 | 3.6 |
@@ -270,7 +285,8 @@ How the two fit together:
 `audit/3-close`), cut from `main` when the session starts. Decided by the maintainer 2026-11-16, who also means to
 freeze `main` for the duration.
 
-- Each number in the phase tables is a pull request **into the session's branch**: 39 in all. The orchestrator merges
+- Each number in the phase tables is a pull request **into the session's branch**: 42 in all (39, then the S6 note, A6
+  and the test-only code item, added in session 4). The orchestrator merges
   it there once its reviewer accepts and its checks pass. "Merged" in an After column means merged there.
 - **An item is merged with a merge commit too, never rebased or squashed.** The commits the reviewer read land with
   their hashes unchanged; one item is one merge, named by its id, and `git revert -m 1` takes it out whole; an item
@@ -299,7 +315,7 @@ What it costs against 39 to `main`: bug fixes reach production at the session's 
 merge is larger to read. CI already runs for a pull request into any branch (`web.yml`, `ci.yml` and `lint.yml` have no
 branch filter).
 
-## 6. The three design notes
+## 6. The four design notes
 
 Each is one page in `docs/design/`, written by one agent that changes no code, and approved by the maintainer.
 
@@ -335,7 +351,12 @@ record, and which of them S8 already moved; what stays a side effect; how a lazy
 under Node, or why it cannot be; and the limit S8 works under (iOS runs the worker twice: imported modules only, no
 chunk of its own). It names the tests that pin today's behaviour before any line moves; among them
 `e2e/graphics.spec.ts`, which reads the worker's `[dofile] graphics part` console lines and times the idle wait from
-them.
+them. It is `docs/design/lazy-graphics.md`, and covers the page's half in `client.ts` as fully as the worker's.
+
+**The S6 note** (added in session 4). The focus-target registry that replaces the views' exported focus handles: the
+targets and their names, who registers each and when, what a request for a target that is gone does, and how the
+registry meets `useFocusRequest`, the modal trap and the roving-key hook. Written early, from the code of its day,
+naming targets and rules rather than lines, since S3 and S5 move code that registers targets before S6 starts.
 
 ## 7. Checks
 

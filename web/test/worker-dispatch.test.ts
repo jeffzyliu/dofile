@@ -3,7 +3,9 @@
 
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+
 import type { Op, ToWorker } from "../src/engine/types.ts";
+
 import type { OpEntry, OpTable } from "../src/engine/worker-dispatch.ts";
 import { dispatcher, errorForPage } from "../src/engine/worker-dispatch.ts";
 

@@ -18,7 +18,7 @@
 // - Always `yield*`, never `yield`: `yield* io.read(p)` has the type of the answer. A bare `yield` of anything
 //   else (a promise, another turn) is a type error, and the runner rejects the turn if one gets through.
 // - A helper that makes store calls is a generator too, called with `yield*` (renameNow's readText in
-//   files/actions.ts); a helper that makes none is a plain function.
+//   files/ops.ts); a helper that makes none is a plain function.
 // - What must wait for something outside the store goes after the turn, in the caller. Save is the case: its turn
 //   issues the write without waiting for it (`io.issue`) and returns it wrapped; the caller awaits the answer and
 //   applies it after the turn, so a slow write holds no rename.
@@ -29,9 +29,11 @@
 //   being told the operation failed, since nobody knows. The next turn starts; the store applies calls in the order
 //   they were made, so the next turn's calls land after the late one.
 
+import type { FileInfo } from "../types.ts";
+
 import type { Expect, FileStore } from "../../engine/store.ts";
 import { store } from "../store.ts";
-import type { FileInfo } from "../types.ts";
+
 import { SequentialPromiseQueue } from "./sequential-promise-queue.ts";
 
 declare const opBrand: unique symbol;

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { applyTheme, cycleTheme, decodeText, S, stored, useWiring } from "./wiring.ts";
 
 useWiring();

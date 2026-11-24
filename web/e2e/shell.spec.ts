@@ -15,15 +15,8 @@ import {
   test,
   toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
-import {
-  type EngineSeed,
-  type Selection,
-  seedEditorBox,
-  seedLog,
-  seedStatusBar,
-  showEngine,
-  showPhoneTab,
-} from "./seed";
+import type { EngineSeed, Selection } from "./seed";
+import { seedEditorBox, seedLog, seedStatusBar, showEngine, showPhoneTab } from "./seed";
 
 test("first visit: Esc does not dismiss the prompt; Not now leaves the page usable with no engine; Run is Start engine, which brings the prompt back; a run does nothing and opens no prompt", async ({
   page,
@@ -576,42 +569,49 @@ test("a failed Download all shows one banner with Try again, on every phone view
   await expect(banner).toHaveCount(0);
 });
 
-// The phone's toast sits above the command line and the tab bar; with the keyboard open (viewport.ts's attributes, set by
-// script: a real keyboard cannot be opened here) it sits above the command line at the foot of the visible area.
-test("phone: the toast is above the command line and the tab bar, and above the keyboard when it is open", async ({
-  page,
-  isMobile,
-}) => {
-  test.skip(!isMobile, "the iPhone profile");
-  await page.emulateMedia({ reducedMotion: "reduce" }); // the toast's place, not its way in
-  await page.goto("?test=manual");
-  await page.waitForFunction(() => "__dofile" in window);
-  await showPhoneTab(page, "log", { toast: "Saved analysis.do" });
-  await settled(page);
-  const rects = () =>
-    page.evaluate(() => {
+// The phone's toast sits 8 px (--s2) above what is lowest on the view: the command line (Log) or the tab bar (the views with no
+// command line); with the keyboard open (viewport.ts's attributes, set by script: a real keyboard cannot be opened here) the
+// tab bar is hidden, and it sits above the command line, or on the keyboard's edge where the view has none. The four cases
+// the maintainer tries on a real phone (docs/web-audit-log.md, C5).
+for (const [view, keyboard] of [
+  ["log", false],
+  ["log", true],
+  ["editor", false],
+  ["editor", true],
+] as const) {
+  test(`phone: the toast on the ${view} view with the keyboard ${keyboard ? "open" : "closed"} is 8 px above ${
+    view === "log" ? "the command line" : keyboard ? "the keyboard" : "the tab bar"
+  }`, async ({ page, isMobile }) => {
+    test.skip(!isMobile, "the iPhone profile");
+    await page.emulateMedia({ reducedMotion: "reduce" }); // the toast's place, not its way in
+    await page.goto("?test=manual");
+    await page.waitForFunction(() => "__dofile" in window);
+    await showPhoneTab(page, view, { toast: "Saved analysis.do" });
+    await settled(page);
+    const VISIBLE = 400; // the visible area above the keyboard
+    if (keyboard) {
+      await page.evaluate((h) => {
+        const root = document.documentElement;
+        root.style.setProperty("--vv-height", `${h}px`);
+        root.dataset.keyboard = "";
+      }, VISIBLE);
+      await settled(page);
+    }
+    const rects = await page.evaluate(() => {
       const r = (sel: string) => {
         const b = document.querySelector(sel)?.getBoundingClientRect();
         return b?.width ? { top: b.top, bottom: b.bottom } : null;
       };
       return { toast: r(".toast"), cmdline: r(".cmdline"), views: r(".views") };
     });
-  const closed = await rects();
-  expect(closed.toast!.bottom).toBeLessThanOrEqual(closed.cmdline!.top);
-  expect(closed.toast!.bottom).toBeLessThanOrEqual(closed.views!.top);
-  // the keyboard: the visible area is the top 400 px
-  await page.evaluate(() => {
-    const root = document.documentElement;
-    root.style.setProperty("--vv-height", "400px");
-    root.dataset.keyboard = "";
+    expect(rects.views === null).toBe(keyboard); // the tab bar is hidden with the keyboard open
+    if (rects.views) expect(rects.views.bottom - rects.views.top).toBeCloseTo(61, 0); // --tabbar-h with no safe area
+    const lowest = view === "log" ? rects.cmdline!.top : keyboard ? VISIBLE : rects.views!.top;
+    if (view === "log" && keyboard) expect(rects.cmdline!.bottom).toBeCloseTo(VISIBLE, 0); // the line sits on the keyboard
+    expect(rects.toast!.bottom).toBeCloseTo(lowest - 8, 0);
+    expect(rects.toast!.top).toBeGreaterThanOrEqual(0);
   });
-  await settled(page);
-  const open = await rects();
-  expect(open.views).toBeNull(); // the tab bar is hidden
-  expect(open.cmdline!.bottom).toBeCloseTo(400, 0); // the command line sits at the visible area's foot
-  expect(open.toast!.bottom).toBeLessThanOrEqual(open.cmdline!.top);
-  expect(open.toast!.top).toBeGreaterThanOrEqual(0);
-});
+}
 
 test("key hints: none in sight on a phone (the top bar, a file's menu, the ⋯ menus, the Editor and Log views with a nested do's note), the shortcuts still stated; shown on the desktop", async ({
   page,

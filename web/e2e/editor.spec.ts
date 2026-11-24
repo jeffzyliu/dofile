@@ -3,7 +3,9 @@
 // (the log's formatting is measured as computed styles from log items written through state.runWriter); those with an
 // engine start one per test.
 import { readFileSync } from "node:fs";
+
 import type { Page } from "@playwright/test";
+
 import {
   bannerOf,
   expect,
@@ -18,11 +20,11 @@ import {
   toastOf,
   toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
+import type { LastRun } from "./seed";
 import {
   activateTab,
   addBanner,
   clearToast,
-  type LastRun,
   openDialog,
   seedGraphs,
   seedLastRun,
@@ -826,6 +828,12 @@ test("the Output tabs by keyboard: each key moves the focus to the tab it select
   await page.keyboard.press("Home");
   await expect(tab("Log")).toBeFocused();
   await expect(field).not.toBeFocused();
+  await page.keyboard.press("ArrowDown"); // the tabs take both axes
+  await expect(tab("Graph")).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(tab("Log")).toBeFocused();
+  await page.keyboard.press("ArrowUp"); // wraps
+  await expect(tab("Results")).toBeFocused();
 });
 
 // "Clear log…" asks first (SPEC 3.5, 3.10; log/ClearLogDialog.tsx): the head's "Clear…" button, and on a phone the strip's
@@ -1040,10 +1048,18 @@ test("a tab keeps its place in its text: shown again after another tab, and on a
   // where it was, give or take a pixel (CodeMirror puts the line at the top back, with its offset)
   const near = (y: number) => async () => Math.abs((await top()) - y);
   const scrollTo = async (y: number) => {
-    await scroller.evaluate((e, y) => {
-      e.scrollTop = y;
-    }, y);
-    await settle(page); // the scroll event has been delivered
+    // A tab just shown has a restore pending (show() dispatches its saved scroll, or the top, which CodeMirror applies
+    // at its next measure, a frame after the aria-label changes). A scrollTop set before that measure is put back to
+    // the top, so set it again until it holds after the frames have run.
+    await expect
+      .poll(async () => {
+        await scroller.evaluate((e, y) => {
+          e.scrollTop = y;
+        }, y);
+        await settle(page); // the scroll event has been delivered
+        return top();
+      })
+      .toBeGreaterThan(y - 5);
   };
   await open(page, "a.do");
   await scrollTo(1500);
@@ -1438,6 +1454,39 @@ test("Run: the run-head, the graph after its echo, the error line marked, Go to 
   ).toContain("\n42\n");
   await expect(page.locator(".cm-err-line")).toHaveCount(0); // the new run cleared the old error
   if (!phone) await expect(statusBar(page)).toContainText("Last run: line 7 · ");
+});
+
+test("Run is for .do and .ado tabs only: on a .txt or .csv tab the Run buttons are greyed with the reason, a press and Ctrl/Cmd+Enter say it in a toast and run nothing; a .do tab runs", async ({
+  page,
+}) => {
+  const REASON = "Only .do and .ado files can run";
+  await setUp(page, { "a.do": "display 1", "n.txt": "display 2", "d.csv": "a,b\n1,2" }, "?test");
+  await startEngine(page);
+  await ready(page);
+  const lastKind = () => page.evaluate(() => window.__dofile.state.lastRun.value?.kind ?? null);
+  const run = page.getByRole("button", { name: /^Run( is not available.*)?$/ }).first();
+  for (const name of ["n.txt", "d.csv"]) {
+    await open(page, name);
+    await expect(run).toHaveAttribute("aria-disabled", "true");
+    await expect(run).toHaveAttribute("title", REASON);
+    await expect(run).toHaveAccessibleName("Run is not available: only .do and .ado files can run");
+    if (!isPhone(page)) await expect(page.getByRole("button", { name: "Run selection" })).toBeDisabled();
+    await run.click({ force: true }); // aria-disabled: Playwright waits for "enabled" otherwise
+    await expect(toastOf(page)).toHaveText(REASON);
+    await clearToast(page);
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(toastOf(page)).toHaveText(REASON);
+    await clearToast(page);
+  }
+  await settle(page);
+  expect(await lastKind()).toBeNull();
+
+  await open(page, "a.do");
+  await expect(page.getByRole("button", { name: "Run", exact: true })).not.toHaveAttribute("aria-disabled", "true");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect.poll(lastKind).toBe("file");
+  await ready(page);
 });
 
 test("Ctrl/Cmd+Enter runs from anywhere on the page, but not with a dialog open and not in another text field; held, it runs once", async ({

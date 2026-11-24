@@ -1,10 +1,12 @@
 // The logic and the words of the dialogs and banners that are plain text, with no view and no signal of their own (so
 // Node tests them: test/states.test.ts).
 
-import type { Line } from "../../engine/machine.ts";
 import { BREAK_GRACE_MS } from "../../engine/types.ts";
-import { megabytes } from "../bytes.ts";
 import type { CrashCause, EngineStateName, FailReason, ResetKind, RunHead, Stage } from "../types.ts";
+
+import type { Line } from "../../engine/machine.ts";
+
+import { megabytes } from "../bytes.ts";
 
 /** How long Break waits before the engine is reset (`BREAK_GRACE_MS` in engine/types.ts, the machine's `graceMs` by
  *  default). The page's words count from it ("In 4 s the engine is reset"); the machine decides, not these words. */

@@ -2,7 +2,9 @@
 // each toast's words too. A toast is a confirmation, or an error that needs no action (a copy the browser refused, a
 // load that failed); anything the visitor must act on, or choose between, is a banner or a dialog.
 import type { ComponentChildren, Ref } from "preact";
-import { announce, holdToast, toast, toastError } from "../state.ts";
+
+import { announce, holdToast, toast, toastError } from "../state/notices.ts";
+
 import { Icon } from "./Icon";
 
 export const LiveRegion = () => (
@@ -29,11 +31,11 @@ export interface BannerProps {
   children: ComponentChildren; // the sentence; its first words in <b> as drawn
   actions?: ComponentChildren; // buttons under it
   focusable?: boolean; // tabindex=-1, for a banner that takes the focus (S 9b)
-  bannerRef?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLDivElement>;
 }
 
-export const Banner = ({ kind = "info", children, actions, focusable, bannerRef }: BannerProps) => (
-  <div ref={bannerRef} class={`banner${kind === "info" ? "" : ` ${kind}`}`} tabIndex={focusable ? -1 : undefined}>
+export const Banner = ({ kind = "info", children, actions, focusable, ref }: BannerProps) => (
+  <div ref={ref} class={`banner${kind === "info" ? "" : ` ${kind}`}`} tabIndex={focusable ? -1 : undefined}>
     {kind !== "info" && <Icon name="warn" />}
     <div>
       {children}

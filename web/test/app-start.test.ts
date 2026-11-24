@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { sleep } from "./harness.ts";
 import {
   begin,
@@ -172,7 +173,7 @@ test("Start engine pressed (startEngine, the buttons' and Ctrl/Cmd+Enter's one a
   state("none");
   assert.equal(startEngine(), "prompt");
   assert.deepEqual([S.engine.value, S.dialog.value], [{ s: "asking" }, { d: "download" }]);
-  S.dialog.value = null; // another dialog took its place and closed
+  S.closeDialog(); // another dialog took its place and closed
   assert.equal(startEngine(), "prompt");
   assert.deepEqual([S.engine.value, S.dialog.value], [{ s: "asking" }, { d: "download" }]);
   engine.decline();
@@ -221,7 +222,7 @@ test("Start engine pressed (startEngine, the buttons' and Ctrl/Cmd+Enter's one a
   // another tab has the engine: the take-over dialog, never a start; the lock is taken only by the dialog's button
   await load({ free: false, cached: true });
   state("other-tab-idle");
-  S.dialog.value = null;
+  S.closeDialog();
   assert.equal(startEngine(), "take-over");
   assert.deepEqual([S.engine.value, S.dialog.value], [{ s: "other-tab-idle" }, { d: "other-tab" }]);
   assert.equal(lock.asked.filter((o) => o.steal).length, 0, "the press took no lock");

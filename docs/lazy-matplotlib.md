@@ -1,6 +1,6 @@
-# dofile web demo: experiment, loading matplotlib lazily
+# dofile web demo: loading matplotlib lazily
 
-## The lazy graphics part (experiment E1c)
+## The lazy graphics part
 
 The results of the experiments run on the way (phone captures, timing against main, the eager import, the page-side unpack
 that was dropped, compression) are in [archive/lazy-graphics-experiments.md](archive/lazy-graphics-experiments.md).
@@ -15,28 +15,41 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   fails. Brotli 11, 2026-11-15: heap 15.11 MB, bundle 12.22 MB, part 7.69 MB (32.9 MB raw, 1,822 files, 5.2 MB raw `.pyc`);
   `start-files.json`'s `download` is 41.57 MB with the part, 33.87 MB before "ready".
 - **With a SharedArrayBuffer the page fetches, never the worker** (`client.ts`, `#graphics`): a busy worker cannot advance a fetch. The Cache first
-  (at the start, so a return visit has it by "ready"), else the network once the start files are in, with
-  `cache: "no-cache"` (`"reload"` after the worker found it damaged) and the size checked. It is written to the Cache only when the build's heap is already there. The bytes
-  go to the worker in one `SharedArrayBuffer(16 + size)` (its layout, the header and the states: `src/engine/lazy-part.ts`). The page is cross-origin isolated in production (`_headers`: COOP `same-origin`, COEP
-  `require-corp` on every path), as Break already needs. Without a SharedArrayBuffer (plain http on a LAN address, say)
-  **the worker is the part's one owner and the page never fetches it**: a message cannot reach a graph blocked in Python,
-  so a graph could not use the page's bytes and would download them again. The worker fetches it itself once `startup`
-  is answered (`fetch`, off the engine's way); a graph that comes before that lands stops it and fetches the part with a
-  synchronous request (the bytes the stopped fetch had are lost, so the part arrives whole once, not without overlap).
-  There is no Cache then (plain http has none). The page still shows the download: the worker posts `{graphics: "fetching"}`,
-  `"progress"` (bytes received, at most every 100 ms), `"landed"` or `"failed"`, and the page's one writer of the progress
-  turns them into the "Graphs loading" ring and the download total. A graph that fetches it in a run first gets "pending"
-  from `waitGraphics`, so it prints the waiting line before its synchronous request blocks; that request has no progress to
-  tell, so the ring shows 0 of the total until it lands. A part that arrived damaged is fetched again from an address of its
-  own (`?fresh=`; the worker's `fetch` uses `cache: "reload"`), not from the browser's HTTP cache.
-- **Only a graph waits.** A `sys.meta_path` finder for `matplotlib`, `mpl_toolkits` and `pylab` and a wrapper on the graph
+  (at the end of `download()` and again once the worker has `started`, so a return visit has it by "ready"), else the network once the start files are in,
+  with `cache: "no-cache"` (`"reload"` after the worker found a copy damaged) and the size checked. It is written to the Cache only when the build's heap is already there. The bytes
+  go to the worker in one `SharedArrayBuffer(PART_HEADER + size)` (a 16-byte header, then the bytes or the reason it failed; the layout and the
+  page's writers `landPart`, `failPart` and `retryPart` are in `src/engine/lazy-part.ts`, the seqlock they write and read through in `src/engine/seqlock.ts`).
+  The region is the one record of whether the part is pending, landed or failed, of the copy number and of the reason; the page writes it only
+  in `#writePart`, which then tells the live worker (the op `graphics`), and the worker reads it as a whole snapshot, never a torn one. The page is cross-origin isolated in production (`_headers`: COOP `same-origin`, COEP
+  `require-corp` on every path), as Break already needs.
+- **What the page decides is one table.** `partStep` (`lazy-part.ts`) is a pure function of the region's state and copy, the page's own facts (the fetch on its
+  way with its copy, whether it downloads and the bytes received; `fresh`; `damagedCopy`; whether its one `online` listener is set) and the event; `client.ts`'s
+  `#partEvent` applies its effect. The events are: want (the start files are in, or the worker `started`), a fetch's result, the worker's `again` and
+  `damaged`, and `online`. The status bar's progress is computed from the region and the fetch (`graphicsProgress`) and stored nowhere: "fetching" is a
+  pending region whose fetch has gone to the network, and a Cache hit goes from pending to landed. `again` and `damaged` name the copy they are about
+  (`{graphics: "again" | "damaged", copy}`), and the page acts only when that is the region's copy and its state fits (`again`: failed; `damaged`: landed): a message
+  from a worker that has ended, about a copy the page has replaced, or of an older build's part is dropped. A failed part is fetched again, as a new copy, on a
+  graph's `again` and on `online` (one listener per part: set when the part fails, spent when it fires). A copy the worker found damaged is dropped from the Cache and fetched
+  again from the network past the HTTP cache (`cache: "reload"`), as is every fetch after it until a copy lands; each fetch of a fresh copy deletes the Cache entry itself before it looks, so it never reads the damaged copy back.
+  When the copy fetched right after a damaged one is damaged too, the page stops: the part fails ("the graphics files arrived damaged twice in a row; they are fetched again for the
+  next graph"), its Cache entry is deleted without the page waiting for the delete, and no fetch starts until a graph's `again` or `online`, so a part that is damaged every
+  time costs one download per graph that asks, never a loop with no click. An older build's fetch that ends later still writes its own part's region (a worker booted with it may be waiting on it)
+  and shows no progress.
+- **Without a SharedArrayBuffer (no cross-origin isolation, plain http on a LAN address, say) the part is a start file.** `download()` fetches and counts it with the others (the start downloads the whole 41.57 MB; on a secure
+  origin it is kept in the Cache with them, and `cached()` checks it), and `boot` reads, unpacks and writes it before it answers (`worker-boot.ts`, `writePartAtStart`). The page does not fetch it, the
+  worker posts no `graphics` message and no graph waits for it: only the import of what a first graph needs is left for the idle steps. A part that will not unpack or write is deleted from the Cache and fails the
+  start, as a damaged heap does, and the next start fetches it again. There is no "Graphs loading" ring.
+- **Only a graph waits** (with a SharedArrayBuffer). A `sys.meta_path` finder for `matplotlib`, `mpl_toolkits` and `pylab` and a wrapper on the graph
   store's `put` call `waitGraphics`, which unpacks a landed part with brotli-wasm in 256 KB steps (the interrupt buffer
-  read between them: a Break there is rc 1 and the unpack goes on from that step later), or `Atomics.wait`s in 100 ms
+  read between them: a Break there is rc 1 and the unpack goes on from that step later), or waits on the region's counter (`Atomics.wait`, woken by the page's write) in 100 ms
   slices, looking at the interrupt buffer between them: a Break is rc 1 with the data kept, and the page's fetch goes on
   (no download again). A failed or offline part gives rc 199 "graphs are not available: …"; other work is unaffected; a
-  graph that finds it failed asks the page for one more fetch (`{graphics: "again"}`) and waits for it, so once online the
-  next graph draws; its failure is final for that run. The page also fetches it again on the `online` event. A run that does not graph never touches any of it.
-- **A return visit's start and its non-graph runs are not slowed; a graph sent before the idle work is done pays for it in the run.** The page asks for the part at the end of `download()`: on a first visit after the start files are in (so it never takes
+  graph that finds it failed asks the page for one more fetch, once per run (`{graphics: "again", copy}`, the copy it read), and waits for it, so once online the
+  next graph draws; the failure of that fetch is final for that run. A part found damaged (an unpack or a write throws) is dropped from the Cache by the page and fetched again; the graph that finds it says so (rc 199), and the next one waits for the fresh fetch.
+  When an idle step found the damage and the page has already moved on, the next graph waits for the fresh copy and draws without saying it (race 11). A read of the part that throws (the copy of
+  its bytes out of the region, which a phone may not be able to allocate) is not damage: the worker posts nothing and the page does not fetch; the graph answers rc 199
+  "the graphics files could not be read (…); the next graph reads them again", and the next graph, or the idle step after the next wake (a run's end, a page write), reads it again. That holds in a graph, in an idle step and in the browser decoder's own task. A run that does not graph never touches any of it.
+- **A return visit's start and its non-graph runs are not slowed; a graph sent before the idle work is done pays for it in the run.** The page asks for the part at the end of `download()` and again once the worker has `started`: on a first visit after the start files are in (so it never takes
   bandwidth from them), on a return visit at once, so it is read from the Cache while the worker starts ("landed (cache)"
   comes before "ready"). The worker does nothing of it before `startup` is answered. Then the browser's own brotli decoder (Firefox, Safari; it runs
   off the worker's thread) unpacks it as soon as it is there, run or no run. A brotli-wasm unpack (Chromium) in 256 KB
@@ -55,7 +68,7 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   SharedArrayBuffer does not help, since nothing outside the worker holds the raw bytes. Only a decode on another thread
   (the page, or a nested worker) into a ~33 MB SharedArrayBuffer that the graph `Atomics.wait`s on would; that covers
   isolated pages only (not the plain-http phone) and saves the wasm decode (about 0.15 s with the JIT on). Without a
-  SharedArrayBuffer nothing can be done. Before a graph waits, the run's log so far is sent to the page (browser.py,
+  SharedArrayBuffer `boot` has written the part, so no graph meets the decoder at work. Before a graph waits, the run's log so far is sent to the page (browser.py,
   `flush_output`), so the lines before a graph do not wait for it.
   `tools/measure-startup.ts --first-run` times a run at "ready" on the return visit, and `--during-import` one sent while the
   background import runs.
@@ -63,7 +76,7 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   dialog's bar counts what comes before the start, and says under it "+ 7.7 MB of graphics after the start"; after the
   start, while the part downloads, the status bar (on a phone, the strip under the top bar) shows "Graphs loading" and a
   ring of its percent (a progressbar named "Graphs loading, 3.1 of 7.7 MB"). Nothing once it lands, and no lasting label
-  after a failure (the graph's own error says why).
+  after a failure (the graph's own error says why). Without a SharedArrayBuffer the part is in the bar's total and there is no ring.
 - **Measured** (`tools/measure-startup.ts`, median of 5, brotli 11, one Mac, Chromium and WebKit; a difference counts when it
   beats the spread and is at least 0.5 s or 2 MB): before "ready" the first visit downloads 33.9 MB, not 44.1 (41.6 MB with
   the part); ready comes 1.0 s sooner at 100 Mbps and 3.0 s sooner at 30 Mbps (not different unthrottled). A non-graph run at
@@ -72,114 +85,12 @@ waits, and a return visit is not slower. The first (E1b) made every run wait for
   heap (0.52 to 0.58 s against 0.12 to 0.13 s): it decodes, writes and imports in the run.
 - **Known limits.** On an iPhone, a graph sent in the first seconds after load does the part's work inside the run and took
   3 to 7 s on one phone (a build with matplotlib in the heap: about 0.4 s); a graph after a few seconds is as fast. Over plain
-  http (a LAN address: no Cache, no SharedArrayBuffer) the worker fetches the part itself and the ring shows 0 of 7.7 MB while a
-  graph's own request runs. On Firefox a graph at "ready" takes 0.73 s against 0.10 s (n = 5, unthrottled; from the page's
+  http (a LAN address: no Cache, no SharedArrayBuffer) the start downloads the whole part with the start files on every visit and
+  writes it before "ready". On Firefox a graph at "ready" takes 0.73 s against 0.10 s (n = 5, unthrottled; from the page's
   start +0.43 s): brotli-wasm unpack, write and import in the run, as on the other browsers but slower in the first two
   (archive/lazy-graphics-experiments.md, section 6). Not tested: a real phone over https, Android. With `IDLE_MS` 250
   (2026-11-16), also not measured: memory, and typing during the warm-up; a slow CPU only by proxy (efficiency cores).
-- **Not done:** the restart race and the two-tab case are argued, not tested; a part that arrives damaged is dropped from the Cache by the page (the worker posts `{graphics: "damaged"}`), fetched again from the network, and the graph that found it says so (rc 199), the next one waits for the fresh fetch;
-  `nodraw` graphs also wait.
+- **Not done:** the restart race and the two-tab case are argued, not tested; `nodraw` graphs also wait.
 
-The sections below are the 2026-11-07 findings and the plan this design replaces; their estimates are not updated.
-
-An experiment that is not done: whether the snapshot should load matplotlib on the first plot.
-Moved out of [phase2-plan.md](phase2-plan.md) on 2026-11-10; the text is unchanged.
-
-## Experiment: loading matplotlib lazily
-
-Status: **done as the lazy graphics part (above)**. Findings and conjectures recorded 2026-11-07, while working on the snapshot
-([pyodide-snapshot.md](pyodide-snapshot.md)).
-
-**The question.** Matplotlib is about 28% of the site-packages files and about 23 MB of the snapshot's raw heap, and it is
-needed only when a program draws a graph. Should it be loaded on demand in the snapshot flow (left out of the heap and the
-main download), in the regular flow (which already imports it at the first plot), or both? The first plot should not take
-about a second, as it does in the regular flow today. The snapshot's eager import (matplotlib in the heap, as before this
-design) was to be kept unless lazy loading saves **significant** time at a cold and a warm start without bringing that
-delay back.
-
-### Measured
-
-Pyodide 314.0.7 under Node, a normal boot, an M-series Mac, 3 runs each; the first plot is `scatter y x` in a fresh `Engine`
-after numpy, scipy and `dofile.engine` were loaded. `browser.start()` itself takes 1.8 s (numpy and scipy); matplotlib and PIL
-come with the first graph. Not yet measured in a browser.
-
-| Part of the first plot | Time | Share |
-|---|---|---|
-| Compiling matplotlib's 147 `.py` files to bytecode (no `.pyc` exists for any) | 0.59–0.61 s | about 68% |
-| Running the modules' code (173 modules) | about 0.2 s | about 25% |
-| Fonts and first-use drawing | about 0.03 s | about 3% |
-| The plot itself | 0.04–0.05 s | about 5% |
-| **First plot** | **0.87–0.89 s** | |
-
-- **With unchecked-hash `.pyc` files written for those 147 modules beforehand, the first plot took 0.29 s** (the one experiment
-  behind "0.9 s to 0.3 s": `.pyc` files written just before the plot, standing in for a build step).
-- **Fonts are not the delay:** the font list loads in 0.001 s (Pyodide's matplotlib ships a prebuilt list). On CPython a cold
-  font cache cost 11.2 s (scanning 1,070 system fonts), which does not exist in the browser.
-- **In the snapshot flow the first plot is already fast** (the sample program took 0.11 s against 0.87 s in the regular flow),
-  because matplotlib is imported and compiled before the heap is saved.
-- **The engine already imports matplotlib lazily** (`graphics/render.py` imports it inside functions), so neither flow needs an
-  engine change. The profile showed no `pyplot` import during the first plot (read off the profile, not checked in the source).
-- **What matplotlib is worth in the snapshot** (stage-by-stage build, brotli 5, and the bundle): importing it adds 23 MB of raw
-  heap and **4.5 MB** compressed; its files and dependencies (pillow, fonttools, kiwisolver, contourpy, pyparsing, dateutil,
-  pytz, six) are 1,052 of the 3,884 files, 26–27 MB of 93 MB raw, **7.4 MB** compressed. Only 16 of the 136 native libraries
-  are graphics-only.
-- **No `.pyc` anywhere in the bundle**, so the regular flow compiles everything it imports on every page load. Pyodide's
-  package loader does not write `.pyc` files.
-
-### Conjectures (not measured)
-
-**Snapshot flow, lazy graphics.**
-1. The build's warm-up draws nothing, so matplotlib is never imported (assert `'matplotlib' not in sys.modules`). The bundle is
-   split into a core part and a graphics part (matplotlib, mpl_toolkits, pylab, PIL, pillow, kiwisolver, contourpy, fontTools,
-   cycler, pyparsing, dateutil, pytz, six) with its own file index and `.pyc` files for the modules a plot imports. The 16
-   graphics libraries leave the re-link list and link normally at their first import.
-2. The page restores the core snapshot as today, so the engine is ready sooner.
-3. After "ready" the worker fetches the graphics part (Cache API, brotli), decompresses it and writes it into site-packages.
-4. `run` waits for those files, because any command can draw. Optionally the worker imports matplotlib right after, so the
-   first plot pays no import.
-
-| Estimate, brotli 11 (from the 42.3 MB build, before docstring stripping) | Then (eager, the old design) | Lazy: core, before "ready" | Lazy: graphics, after |
-|---|---|---|---|
-| Heap | 22.2 MB (measured) | about 18.6 MB | |
-| Files | 20.0 MB (measured) | about 13.8 MB | about 6.2 MB, plus about 2 MB of `.pyc` (a guess) |
-| Total | 42.3 MB | **about 32–33 MB** | **about 8 MB** |
-
-The graphics shares are the brotli 5 figures scaled by the ratios measured between brotli 5 and 11 (0.77 heap, 0.84 files). A
-visitor who plots downloads about the same in all; the gain is about 9.7 MB less before "ready". Timing guesses: a warm start
-about 1.05 s instead of 1.2 s; the first plot after a warm start about 0.4 s with `.pyc` or about 1.0 s without; a cold start
-about 0.8 s faster at 100 Mbps and 2.6 s faster at 30 Mbps, which would bring the snapshot at 30 Mbps from 13.9 s to about
-11.3 s, ahead of the regular boot's 13.9 s.
-
-**Regular flow.**
-- **(a) Import matplotlib in the background once the engine is ready.** It moves the 0.9 s off the click and changes no
-  download. A Run issued during that import waits up to about 0.9 s (Python is single-threaded in the worker).
-- **(b) Ship precompiled `.pyc` files for the graphics packages.** The first plot at about 0.3 s. Matplotlib comes from
-  Pyodide's CDN without `.pyc` files, so this needs our own repackaged bundle, tied to this Python build.
-- **(c) The same compile cost probably applies to the whole stack** (scipy import 1.65 s, matplotlib 0.94 s, numpy 0.22 s,
-  engine 0.51 s). If about two thirds is compiling, `.pyc` for everything could cut several seconds from the regular boot.
-  Not measured.
-- **(d) Keep compiled bytecode between visits** (IndexedDB). An idea only: `.pyc` files are checked against the source's
-  modification time, which differs on every page load.
-
-### The experiment
-
-1. **Build the lazy snapshot** (a build option): warm-up without drawing, the assertion, the split bundle, `.pyc` for the
-   modules a first plot imports (found by diffing `sys.modules` around it). Measure the raw, q5 and q11 sizes of the heap, the
-   core files, the graphics files, and the graphics files with `.pyc`. This replaces the estimate table.
-2. **Time it under Node:** the core restore, loading the graphics part, and the first plot with and without `.pyc` and with a
-   pre-import, against the eager first program (0.11 s).
-3. **Time it in the browser** with `web/tools/measure-startup.ts`: unthrottled, 100 and 30 Mbps, cold and warm, plus a plot
-   started one second after "ready".
-4. **Decide the gating:** whether `run` waits for the graphics files for every program, and what the status line says.
-5. **Regular flow:** measure (a), (b) and (c), including the compile-versus-import split for numpy, scipy and dofile.
-6. **Correctness:** `npm run check-snapshot` on the lazy variant, and the native-library test; core code must not import a
-   graphics package (`pytz`, `dateutil` and `six` are the doubtful ones).
-
-**Decision rule.** Adopt lazy graphics in the snapshot flow only if, measured, a cold first visit at 30 Mbps is about 2 s
-faster, a warm start is at least about 0.2 s faster, and the first plot stays at or under about 0.5 s. Otherwise keep it eager.
-For the regular flow, take the cheapest of (a) and (b) that brings the first plot well under a second without making Run wait
-noticeably.
-
-**Risks.** A plot started in the first moments waits for the graphics download on a slow network. A second file to keep in sync
-with the manifest. `.pyc` files tie the graphics part to this exact Python build. Core code that quietly imports a graphics
-package would fail only on the lazy path.
+The 2026-11-07 findings and the plan this design replaced (their estimates not updated) are in
+[archive/lazy-graphics-experiments.md](archive/lazy-graphics-experiments.md), section 8.

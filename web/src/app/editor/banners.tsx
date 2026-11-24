@@ -2,12 +2,17 @@
 // Download is the editor's text, saved or not, in the file's line break. Both banners hand the focus on when they go
 // with the focus in them (DismissibleBanner).
 
+import type { BannerOf } from "../types.ts";
+
+import { dismiss } from "../state/notices.ts";
+
+import { reloadFromStore } from "../files.ts";
+
+import { DismissibleBanner } from "../ui/DismissibleBanner";
+
 import { saveAs } from "../files/save.ts";
 import { baseName } from "../files/tree.ts";
-import { reloadFromStore } from "../files.ts";
-import { dismiss } from "../state.ts";
-import type { BannerOf } from "../types.ts";
-import { DismissibleBanner } from "../ui/DismissibleBanner";
+
 import { savedIsText, textOf } from "./documents.ts";
 
 export const SaveFailedBanner = ({ banner }: { banner: BannerOf<"save-failed"> }) => {

@@ -2,19 +2,28 @@
 // its kind. The host draws a new dialog for each new value (clash 2 after clash 1); a view unmounted with no answer
 // answers Cancel: Esc's meaning (for a clash, "keep yours for every clash left").
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import { formatSize } from "../bytes.ts";
-import { close as closeTab, save as saveTab } from "../editor/documents.ts";
-import { refresh } from "../files.ts";
-import { dialog, files } from "../state.ts";
+
 import type { DialogOf } from "../types.ts";
+
+import { files } from "../state/files.ts";
+import { closeDialog } from "../state/notices.ts";
+
+import { refresh } from "../files.ts";
+
 import { Dialog } from "../ui/Dialog";
-import { answerClash, type ClashAnswer, clashNow, deleteAll, deleteEntries, WORDS } from "./actions.ts";
-import { focusAfterClose } from "./EditorTabs";
-import { focusTree } from "./FilesPane";
+
+import { close as closeTab, save as saveTab } from "../editor/documents.ts";
+
+import { formatSize } from "../bytes.ts";
+import { focusAfterClose } from "./close-focus.ts";
+import { deleteAll, deleteEntries } from "./ops.ts";
 import { baseName, shortDate } from "./tree.ts";
+import { focusTree } from "./tree-state.ts";
+import type { ClashAnswer } from "./upload.ts";
+import { answerClash, clashNow, WORDS } from "./upload.ts";
 
 const close = () => {
-  dialog.value = null;
+  closeDialog();
 };
 
 /** Run `cancel` when the view is unmounted before it answered. Returns `answered()`, to call when it answers. A layout
@@ -37,45 +46,45 @@ function useAnswer(cancel: () => void) {
 
 export function ClashDialog({ dialog: d }: { dialog: DialogOf<"clash"> }) {
   const facts = clashNow();
-  const [same, setSame] = useState(false);
+  const [isForRest, setForRest] = useState(false);
   const answered = useAnswer(() => answerClash("stop"));
   const give = (a: ClashAnswer) => {
     answered();
     close();
     answerClash(a);
   };
-  const left = facts?.left ?? d.total - d.index;
-  const others = facts?.others ?? 0;
+  const remainingCount = facts?.remainingCount ?? d.total - d.index;
+  const unaskedCount = facts?.unaskedCount ?? 0;
   const words = facts?.words ?? WORDS.upload;
   return (
     <Dialog
       role="alertdialog"
-      title={facts?.changed ? words.changedTitle(d.path) : words.title(d.path)}
+      title={facts?.changedWhileAsked ? words.changedTitle(d.path) : words.title(d.path)}
       describedBy="clash-question"
       onCancel={() => give("stop")}
       actions={
         <>
-          <button type="button" class="btn" onClick={() => give({ replace: true, same })}>
+          <button type="button" class="btn" onClick={() => give({ replace: true, isForRest })}>
             {words.replace}
           </button>
-          <button type="button" class="btn primary" data-autofocus onClick={() => give({ replace: false, same })}>
+          <button type="button" class="btn primary" data-autofocus onClick={() => give({ replace: false, isForRest })}>
             Keep mine
           </button>
         </>
       }
     >
-      <p id="clash-question">{facts?.changed ? words.changedQuestion : words.question}</p>
-      {facts?.unsaved && <p>{baseName(d.path)} is open with unsaved edits; replacing it discards them.</p>}
+      <p id="clash-question">{facts?.changedWhileAsked ? words.changedQuestion : words.question}</p>
+      {facts?.hasUnsavedEdits && <p>{baseName(d.path)} is open with unsaved edits; replacing it discards them.</p>}
       <p class="meta">
         {facts?.yours && `Yours: ${formatSize(facts.yours.size)}, ${shortDate(facts.yours.mtime)} · `}
-        {facts && `${words.theirs}: ${formatSize(facts.uploaded)} · `}
+        {facts && `${words.theirs}: ${formatSize(facts.uploadedBytes)} · `}
         {`clash ${d.index} of ${d.total}`}
-        {others > 0 && ` · ${words.others(others)}`}.
+        {unaskedCount > 0 && ` · ${words.others(unaskedCount)}`}.
       </p>
-      {left > 0 && (
+      {remainingCount > 0 && (
         <label class="check">
-          <input type="checkbox" checked={same} onChange={(e) => setSame(e.currentTarget.checked)} />
-          Do the same for the other {left === 1 ? "clash" : `${left} clashes`}
+          <input type="checkbox" checked={isForRest} onChange={(e) => setForRest(e.currentTarget.checked)} />
+          Do the same for the other {remainingCount === 1 ? "clash" : `${remainingCount} clashes`}
         </label>
       )}
     </Dialog>
@@ -156,7 +165,7 @@ export function CloseTabDialog({ dialog: d }: { dialog: DialogOf<"close-tab"> })
     if (saving.current) return;
     saving.current = true;
     const saved = await saveTab(d.path);
-    if (dialog.value === d) close(); // not a dialog that replaced this one meanwhile
+    closeDialog(d); // not a dialog that replaced this one meanwhile
     if (saved) {
       closeTab(d.path);
       focusAfterClose();

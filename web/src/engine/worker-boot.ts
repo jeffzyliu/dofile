@@ -3,6 +3,9 @@
 
 import type { BrotliWasmType } from "brotli-wasm";
 import { loadPyodide } from "pyodide";
+
+import type { About, BootArgs, MountArgs, SnapshotFile, SnapshotFiles, Stage, Startup } from "./types.ts";
+
 import { MIB } from "./memcap.ts";
 import type { CreateModule, SnapshotPy } from "./snapshot.ts";
 import {
@@ -13,8 +16,8 @@ import {
   restoreOptions,
   unpackAsync,
   withHeapCap,
+  writeGraphics,
 } from "./snapshot.ts";
-import type { About, BootArgs, MountArgs, SnapshotFile, SnapshotFiles, Stage, Startup } from "./types.ts";
 import { ROOT } from "./work-mirror.ts";
 
 /** dofile.browser (src/dofile/browser.py): JSON text in and out. */
@@ -42,6 +45,13 @@ type Io = { stdout: (line: string) => void; stderr: (line: string) => void };
 type StageOf = (id: Stage) => void;
 /** A lazy snapshot's graphics part, as `boot` was given it. */
 export type GraphicsArgs = NonNullable<BootArgs["graphics"]>;
+/** Where the graphics part is and how to unpack it, from `mount`, for boot's fetch of it without a shared buffer. */
+export type PartSource = {
+  snapshotURL: string; // mount's `snapshot`
+  built: number; // names the snapshot's Cache
+  brotliWasm: BrotliWasmType | null;
+  brotliMode: string | undefined; // mount's `brotli`: "wasm" forces brotli-wasm
+};
 
 export const since = (t: number) => (performance.now() - t) / 1000; // seconds
 export const failedDownload = (message: string) => Object.assign(new Error(message), { name: "DownloadError" });
@@ -306,9 +316,49 @@ export async function startPython(
   return { py, brotli: null };
 }
 
+// Without a shared buffer (no cross-origin isolation) the graphics part is a start file: read as the heap is (the
+// snapshot's Cache first, else the network; a file: base from disk), unpacked and written before `boot` answers. A
+// part that will not unpack or write is deleted from the Cache, as a damaged heap is (loadFromSnapshot), and fails the
+// start; the next start fetches it again.
+async function writePartAtStart(
+  py: SnapshotPy,
+  file: SnapshotFile,
+  { snapshotURL, built, brotliWasm, brotliMode }: PartSource,
+): Promise<void> {
+  const t0 = performance.now();
+  const url = `${snapshotURL}${file.name}`;
+  const isFile = snapshotURL.startsWith("file:"); // Node, the tests: no Cache API by design
+
+  // a refusal was said already, by mount's read of the heap
+  const cache = isFile
+    ? undefined
+    : await snapshotCache(built, (e) => {
+        if (!isStorageRefusal(e)) throw e;
+      });
+  const packed = await fetchBytes(url, cache);
+  const readS = since(t0);
+  try {
+    const tUnpack = performance.now();
+    const native = !isFile && brotliMode !== "wasm" && hasNativeBrotli();
+    const [raw, decoder] = await unpackAsync(brotliWasm!, packed, file, native); // a snapshot start has brotli-wasm
+    const unpackS = since(tUnpack);
+    const tWrite = performance.now();
+    const n = writeGraphics(py, raw);
+    console.info(
+      `[dofile] graphics part: written at the start (no shared buffer): read ${readS.toFixed(2)}s, unpack (${decoder}) ${unpackS.toFixed(2)}s; write ${n} files ${since(tWrite).toFixed(2)}s`,
+    );
+  } catch (e) {
+    await cache?.delete(url).catch(() => {});
+    throw e;
+  }
+}
+
 /** The `boot` op's work: the wheels (the normal boot only: a snapshot has them), then dofile.browser in /work. Writes
  *  where the time went into `startup`.
- *  @param lazyGraphics - called with the engine when the build has a lazy graphics part, before `boot` answers
+ *  @param part - where the graphics part is, for its fetch without a shared buffer
+ *  @param partWritten - called when the part was written here (no shared buffer), before `boot` answers
+ *  @param lazyGraphics - called with the engine when the build has a lazy graphics part (a shared buffer), before
+ *  `boot` answers
  *  @returns the engine and what it says about itself (`About`, as JSON) */
 export async function startEngine(
   py: SnapshotPy,
@@ -317,12 +367,16 @@ export async function startEngine(
     fromSnapshot,
     stage,
     startup,
+    part,
+    partWritten,
     lazyGraphics,
   }: {
     fromSnapshot: boolean;
     stage: StageOf;
     startup: Partial<Startup>;
-    lazyGraphics: (browser: Browser, part: GraphicsArgs) => void;
+    part: PartSource;
+    partWritten: (part: GraphicsArgs) => void;
+    lazyGraphics: (browser: Browser, part: GraphicsArgs, sab: SharedArrayBuffer) => void;
   },
 ): Promise<{ browser: Browser; about: About }> {
   const tPackages = performance.now();
@@ -349,7 +403,13 @@ export async function startEngine(
   const about = JSON.parse(browser.start(ROOT));
   const buffer = interruptBuffer ?? null;
   if (buffer) browser.keep_breaks(() => Atomics.store(buffer, 0, 2));
-  if (graphics) lazyGraphics(browser, graphics); // a lazy snapshot: nothing else of the part before `startup`
+  if (graphics?.sab) {
+    lazyGraphics(browser, graphics, graphics.sab); // a lazy part: nothing else of it before `startup`
+  } else if (graphics) {
+    await writePartAtStart(py, graphics.file, part);
+    browser.graphics_written(); // importlib's caches
+    partWritten(graphics);
+  }
   startup.engineS = since(tEngine);
   return { browser, about };
 }

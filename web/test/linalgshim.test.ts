@@ -6,7 +6,9 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { loadPyodide } from "pyodide";
+
 import { installEngine } from "../scripts/install-engine.ts";
 
 async function boot() {

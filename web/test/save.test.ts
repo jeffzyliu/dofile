@@ -6,14 +6,16 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
-import type { ClashAnswer } from "../src/app/files/actions.ts";
 
-const S = await import("../src/app/state.ts");
+import type { ClashAnswer } from "../src/app/files/upload.ts";
+
+const { S } = await import("./state-all.ts");
 const { store } = await import("../src/app/store.ts");
 const { connectFiles, refresh, afterRun, reloadFromStore } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");
 const { openFile } = await import("../src/app/files/open.ts");
-const A = await import("../src/app/files/actions.ts");
+const Ops = await import("../src/app/files/ops.ts");
+const Up = await import("../src/app/files/upload.ts");
 const { fileTurn } = await import("../src/app/files/turns.ts");
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -31,7 +33,7 @@ beforeEach(async () => {
   await refresh();
   for (const t of D.tabs.value) D.close(t.path);
   for (const b of S.banners.value) S.dismiss(b);
-  S.dialog.value = null;
+  S.closeDialog();
 });
 
 /** Open `path` with `text` in the store, as the active tab. */
@@ -79,8 +81,8 @@ function answering(a: ClashAnswer) {
   return effect(() => {
     if (S.dialog.value?.d !== "clash") return;
     queueMicrotask(() => {
-      S.dialog.value = null;
-      A.answerClash(a);
+      S.closeDialog();
+      Up.answerClash(a);
     });
   });
 }
@@ -134,7 +136,7 @@ test("Save against rename: a rename pressed before it is honoured, the text writ
     written.push(path);
     return write.call(store, path, data);
   };
-  const renamed = A.renameEntry("a.do", "b.do");
+  const renamed = Ops.renameEntry("a.do", "b.do");
   const saved = D.save("a.do");
   open();
   try {
@@ -162,7 +164,7 @@ test("Save against rename: a Save that answers after a rename leaves its outcome
   try {
     saved = D.save("a.do");
     await new Promise((r) => setTimeout(r, 5)); // its turn has issued the write
-    await A.renameEntry("a.do", "b.do");
+    await Ops.renameEntry("a.do", "b.do");
   } finally {
     store.write = write;
   }
@@ -174,7 +176,7 @@ test("Save against rename: a Save that answers after a rename leaves its outcome
 test("Save against a rename that retypes its clean tab (a.do to a.dta): nothing is written", async () => {
   await opened("a.do", "1"); // an edited tab keeps its text under the new name: no retype
   const open = await hold();
-  const renamed = A.renameEntry("a.do", "a.dta");
+  const renamed = Ops.renameEntry("a.do", "a.dta");
   const saved = D.save("a.do");
   open();
   await renamed;
@@ -188,7 +190,7 @@ test("Save against delete: a delete pressed before it closes the tab, and nothin
   await opened("a.do", "1");
   edit("a.do");
   const open = await hold();
-  const deleted = A.deleteEntries(["a.do"]);
+  const deleted = Ops.deleteEntries(["a.do"]);
   const saved = D.save("a.do");
   open();
   await deleted;
@@ -203,11 +205,11 @@ test("Save against delete: a delete pressed before it closes the tab, and nothin
 test("Save rule: an upload's Replace of the tab whose turn comes before a pending Save cancels it: the store keeps the upload, the tab shows it clean", async () => {
   await opened("a.do", "mine");
   edit("a.do");
-  const done = A.upload([{ path: "a.do", data: enc("uploaded") }]);
+  const done = Up.upload([{ path: "a.do", data: enc("uploaded") }]);
   await asked();
   const open = await hold();
-  S.dialog.value = null;
-  A.answerClash({ replace: true, same: false }); // the upload's write takes the turn after the held one
+  S.closeDialog();
+  Up.answerClash({ replace: true, isForRest: false }); // the upload's write takes the turn after the held one
   await new Promise((r) => setTimeout(r, 0));
   const saved = D.save("a.do"); // and the Save the one after that
   open();
@@ -222,7 +224,7 @@ test("Save rule: an upload's Replace of the tab whose turn comes before a pendin
 test("an upload's Replace answered while a Save of the tab waits: the Save writes first, the upload asks again (the file changed), and Replace leaves the upload in the store and the tab, clean", async () => {
   await opened("a.do", "mine");
   edit("a.do");
-  const done = A.upload([{ path: "a.do", data: enc("uploaded") }]);
+  const done = Up.upload([{ path: "a.do", data: enc("uploaded") }]);
   await asked();
   const open = await hold();
   const edited = D.textOf("a.do");
@@ -247,7 +249,7 @@ test("an upload's Replace answered while a Save of the tab waits: the Save write
   const count = effect(() => {
     if (S.dialog.value?.d === "clash") clashDialogs.add(S.dialog.value);
   });
-  const stop = answering({ replace: true, same: false }); // the open dialog, and any asked again
+  const stop = answering({ replace: true, isForRest: false }); // the open dialog, and any asked again
   try {
     await done;
     await saved;

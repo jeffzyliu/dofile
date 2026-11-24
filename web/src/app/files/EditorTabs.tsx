@@ -1,15 +1,22 @@
 // The editor's tabs (docs/design/SPEC.md, section 3.2) in the Editor pane's head, and the phone's file switcher
 // (FileSwitcher). Ctrl/Cmd+W is the browser's: not bound. The tabs are editor/documents.ts's.
 import { signal } from "@preact/signals";
-import { useLayoutEffect, useRef } from "preact/hooks";
-import { editorCommands } from "../editor/commands.ts";
-import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
-import { phoneTab } from "../state.ts";
+import { useRef } from "preact/hooks";
+
 import type { OpenTab } from "../types.ts";
-import { fromNothing, useFocusRequest } from "../ui/focus-hooks.ts";
+
+import { showPhone } from "../state/layout.ts";
+
+import { useFocusRequest, useFocusTarget } from "../ui/focus-hooks.ts";
+import { fromNothing } from "../ui/focus-targets.ts";
 import { Icon } from "../ui/Icon";
-import { closeMenu, type MenuItem, openMenu, openMenuState } from "../ui/Menu";
-import { focusTree, treeShown } from "./FilesPane";
+import { roveKey } from "../ui/keys.ts";
+import type { MenuItem } from "../ui/Menu";
+import { closeMenu, openMenu, openMenuState } from "../ui/Menu";
+
+import { activate, activeTab, askClose, save, tabs } from "../editor/documents.ts";
+
+import { focusAfterClose } from "./close-focus.ts";
 import { baseName, tabLabels } from "./tree.ts";
 
 const tabId = (i: number) => `file-tab-${i}`;
@@ -17,27 +24,8 @@ const Unsaved = () => <span class="dot" role="img" aria-label="unsaved changes" 
 
 // the tab a key moved to, or the tab selected after a close: it takes the focus when it is drawn (FileTab)
 const tabAsked = signal<string | null>(null);
-// a tab closed from the keyboard or the close-tab dialog: EditorTabs places the focus from its next render
-const closeAsked = signal(false);
-
-/** After a tab closed (its element, which may have had the focus, is gone): the selected tab takes the focus, else the
- *  file tree's row in the tab order when the list is shown, else the editor; never the page itself. */
-export function focusAfterClose() {
-  closeAsked.value = true;
-}
-
 export function EditorTabs() {
   const strip = useRef<HTMLDivElement>(null);
-  const asked = closeAsked.value;
-  // from the render that drew the tabs left (docs/web-page-flows.md, section 1)
-  useLayoutEffect(() => {
-    if (!asked) return;
-    closeAsked.value = false;
-    const shown = (strip.current?.getClientRects().length ?? 0) > 0;
-    if (shown && activeTab.value !== null) tabAsked.value = activeTab.value;
-    else if (treeShown()) focusTree();
-    else editorCommands.focus();
-  }, [asked]);
   const list = tabs.value;
   if (!list.length) return null;
   const labels = tabLabels(list.map((t) => t.path));
@@ -51,10 +39,10 @@ export function EditorTabs() {
   };
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back
-    const next = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: list.length - 1 }[e.key];
-    if (next !== undefined) {
+    const next = roveKey(e, at, list.length, { axis: "x", wrap: true });
+    if (next !== null) {
       e.preventDefault();
-      select((next + list.length) % list.length);
+      select(next);
     } else if (e.key === "Delete" && at >= 0) {
       e.preventDefault();
       close(list[at].path, true);
@@ -63,7 +51,7 @@ export function EditorTabs() {
   return (
     <div ref={strip} role="tablist" aria-label="Open files" class="tabstrip file-tabs" onKeyDown={onKeyDown}>
       {list.map((t, i) => (
-        <FileTab key={t.path} t={t} i={i} at={at} label={labels[i]} close={close} list={strip} />
+        <FileTab key={t.path} t={t} i={i} at={at} label={labels[i]} close={close} list={() => strip.current} />
       ))}
     </div>
   );
@@ -84,17 +72,18 @@ function FileTab({
   at: number;
   label: string;
   close: (path: string, keyboard: boolean) => void;
-  list: { current: HTMLElement | null };
+  list: () => HTMLElement | null;
 }) {
-  const el = useRef<HTMLDivElement>(null);
-  useFocusRequest(
-    tabAsked.value === t.path,
-    el,
-    () => {
+  const el = useFocusTarget<HTMLDivElement>("open-file-tab", { get: (own) => (i === at ? own : null) });
+  useFocusRequest({
+    asked: tabAsked.value === t.path,
+    end: () => {
       tabAsked.value = null;
     },
-    (at) => fromNothing(at) || !!list.current?.contains(at), // a closed tab leaves it on nothing
-  );
+    // a closed tab leaves the focus on nothing
+    from: (focused) => fromNothing(focused) || !!list()?.contains(focused),
+    get: () => el.current,
+  });
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keys are the tablist's (arrows, Home, End, Delete); a tab holds the × (a click target of its own), so it is not a button
     <div
@@ -168,7 +157,7 @@ const switcherItems = (): MenuItem[] => {
     {
       label: "Show all files",
       onSelect: () => {
-        phoneTab.value = "files";
+        showPhone("files");
       },
     },
   ];

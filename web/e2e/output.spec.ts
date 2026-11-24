@@ -1,15 +1,26 @@
 // The Output tabs (Graph, Data, Results), the full-size graph view and a .dta file's tab in real browsers
 // (src/app/output/). The tests reach the page through its test hook: `run` runs code through the run controller, `state`
-// holds the signals (a test sets `tabs`, `activeTab`, `phoneTab` and `graphFull` itself, which views may write). The
+// holds the signals (a test sets `tabs` and `activeTab` itself, and the phone's view and the full-size view through `showPhone` and `showFullSize`). The
 // clipboard is replaced by a recorder in every page (reading the real one needs a permission each browser handles its own
 // way), so a test reads what the page copied.
 //  - The empty states and a .dta tab with no engine need none: `?test=manual`.
 //  - Everything else is one test with an engine (each start costs a while): one run draws three graphs, fits a model and
 //    leaves a wide dataset, and the tabs are checked against that. On the phone profile there is no Graph tab (graphs
-//    show in the log), so only the full-size view is checked there, opened through `graphFull`.
+//    show in the log), so only the full-size view is checked there, opened through `showFullSize`.
 import type { Page } from "@playwright/test";
-import { expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
-import { addBanner, type PhoneTab, seedGraphs, showGraphFull, showPhoneTab, showTabs, showTheme } from "./seed";
+
+import { engineState, expect, isPhone, putFiles, ready, startEngine, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
+import type { PhoneTab } from "./seed";
+import {
+  addBanner,
+  closeDialog,
+  openDialog,
+  seedGraphs,
+  showGraphFull,
+  showPhoneTab,
+  showTabs,
+  showTheme,
+} from "./seed";
 
 declare global {
   interface Window {
@@ -35,7 +46,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-/** Show an Output tab: the Output tablist on a desktop, the phone's bottom bar (its `phoneTab` signal) on a phone. */
+/** Show an Output tab: the Output tablist on a desktop, the phone's bottom bar (its `phoneTab` signal, set by `showPhone`) on a phone. */
 async function showTab(page: Page, tab: "graph" | "data" | "results") {
   if (isPhone(page))
     await showPhoneTab(page, tab as PhoneTab); // never "graph": the phone has no Graph tab
@@ -86,6 +97,100 @@ test("Copy image twice in the full-size view: the first 'Copied' timer does not 
   await expect(viewer.locator(".vsaid")).toHaveText("Copied");
   await page.clock.fastForward(2000);
   await expect(viewer.locator(".vsaid")).toHaveText("");
+});
+
+const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+test("the full-size view: its first focus is the view, not Close; Tab and Shift+Tab wrap inside it; Esc hands the focus back to Open full size", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  const stops = () =>
+    viewer.evaluate((root) =>
+      [...root.querySelectorAll<HTMLElement>("button:not([disabled])")]
+        .filter((el) => el.getClientRects().length > 0)
+        .map((el) => el.textContent?.trim()),
+    );
+  const focusedText = () => page.evaluate(() => document.activeElement?.textContent?.trim());
+  if (isPhone(page)) {
+    await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }], { full: true });
+  } else {
+    await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }]);
+    await showTab(page, "graph");
+    const open = page.getByRole("button", { name: "Open full size" });
+    await open.focus();
+    await page.keyboard.press("Space"); // a Space that opened the view must not press Close, the first button
+    await expect(viewer).toBeVisible();
+  }
+  await expect(viewer).toBeFocused();
+  await page.waitForTimeout(200); // a Close pressed by the opening Space would close the view about now
+  await expect(viewer).toBeVisible();
+  const all = await stops();
+  expect(all.length).toBeGreaterThan(1);
+  await page.keyboard.press("Shift+Tab"); // from the view itself: the last stop
+  expect(await focusedText()).toBe(all[all.length - 1]);
+  await page.keyboard.press("Tab"); // from the last: the first
+  expect(await focusedText()).toBe(all[0]);
+  await page.keyboard.press("Shift+Tab"); // from the first: the last
+  expect(await focusedText()).toBe(all[all.length - 1]);
+  if (!isPhone(page)) {
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open full size" })).toBeFocused();
+  }
+});
+
+test("the full-size view whose opener has left the page gives the focus to the editor, not to the page", async ({
+  page,
+}) => {
+  test.skip(isPhone(page), "a phone has no Graph tab, so no Open full size to leave");
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  await seedGraphs(page, [{ n: 1, png: PIXEL, theme: "light", from: "run", command: "scatter y x" }]);
+  await showTab(page, "graph");
+  await page.getByRole("button", { name: "Open full size" }).click();
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  await expect(viewer).toBeFocused();
+  // the Graph tab, and with it the opener, goes while the view is open
+  await page.evaluate(() => {
+    window.__dofile.state.outputTab.value = "data";
+  });
+  await expect(page.getByRole("button", { name: "Open full size" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]")))).toBe(true);
+});
+
+test("a dialog over the full-size view has the keys: Esc and the arrows leave the view alone, and closing it gives the focus back to the view", async ({
+  page,
+}) => {
+  await page.goto("?test=manual");
+  await expect.poll(() => engineState(page)).toBe("none");
+  const graphs = [1, 2].map((n) => ({
+    n,
+    png: PIXEL,
+    theme: "light" as const,
+    from: "run" as const,
+    command: "scatter y x",
+  }));
+  await seedGraphs(page, graphs, { full: true });
+  const viewer = page.getByRole("dialog", { name: "Full-size graph" });
+  const title = await viewer.locator(".vtitle").textContent();
+  await openDialog(page, { d: "other-tab" });
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Close editor" })).toBeVisible();
+  await expect(viewer).toBeVisible();
+  await expect(viewer.locator(".vtitle")).toHaveText(title ?? "");
+  if (!isPhone(page)) {
+    await page.keyboard.press("Tab"); // WebKit's Tab skips buttons by default
+    await expect(page.getByRole("button", { name: "Use dofile in this tab" })).toBeFocused();
+  }
+  await closeDialog(page);
+  await expect(viewer).toBeFocused();
 });
 
 test("a .png from the files is on the light card in the dark theme: its colors are its own", async ({ page }) => {
@@ -151,6 +256,36 @@ test("a .dta tab with no engine shows its two bars, copies the use command, and 
   await view.getByRole("button", { name: "Copy the use command" }).click();
   expect(await copied(page)).toEqual(['use "data/wages.dta", clear']);
   await expect(toastOf(page)).toHaveText("Copied");
+});
+
+test("Copy of a closed matrix pressed while a run goes on is refused when that run replaces the results", async ({
+  page,
+}) => {
+  await page.goto("?test");
+  await startEngine(page);
+  await ready(page);
+  await run(page, "clear\nset obs 20\ngenerate x = _n\ngenerate y = x + mod(_n, 3)\nquietly regress y x");
+  await showTab(page, "results");
+  await page
+    .getByRole("button", { name: /^Matrices/ })
+    .first()
+    .click();
+  const copyBtn = page.getByRole("button", { name: "Copy e(b)", exact: true });
+  await expect(copyBtn).toBeVisible();
+  const before = (await copied(page)).length;
+
+  // the matrix is read after the run that is on its way (the engine answers one op at a time, in order)
+  const slow = page.evaluate(() => window.__dofile.run("sleep 1500\nquietly regress y"));
+  await expect.poll(() => engineState(page)).toBe("running");
+  await showTab(page, "results"); // a phone's run opened the Log
+  await copyBtn.click();
+  expect((await slow)!.rc).toBe(0);
+  await expect(toastOf(page)).toHaveText("The results changed: copy again");
+  expect(await copied(page), "nothing was copied").toHaveLength(before);
+
+  await copyBtn.click(); // pressed again: the new results' matrix (the constant only)
+  await expect(toastOf(page)).toHaveText("Copied e(b)");
+  expect((await copied(page)).at(-1)).toMatch(/^\t_cons\n\S+\t[-.\d]+$/);
 });
 
 test("the Graph, Data and Results tabs and a .dta tab, after a run through the hook", async ({ page, browserName }) => {
@@ -264,6 +399,48 @@ test("the Graph, Data and Results tabs and a .dta tab, after a run through the h
   await page.keyboard.press("ArrowDown");
   await expect(names.nth(1)).toBeFocused();
   await expect(page.locator(".t tr.picked")).toHaveCount(0);
+  // with Alt, Ctrl or Cmd the keys are the browser's (Alt+Left is Back): the focus stays and the key is not cancelled
+  const withModifier = await page.evaluate(() => {
+    const prevented: string[] = [];
+    const moved: string[] = [];
+    let last = false;
+    const listen = (e: KeyboardEvent) => {
+      last = e.defaultPrevented;
+    };
+    document.addEventListener("keydown", listen);
+    for (const mod of ["altKey", "ctrlKey", "metaKey"]) {
+      for (const key of ["ArrowDown", "ArrowUp", "Home", "End"]) {
+        const before = document.activeElement as HTMLElement;
+        last = false;
+        before.dispatchEvent(new KeyboardEvent("keydown", { key, [mod]: true, bubbles: true, cancelable: true }));
+        if (last) prevented.push(`${mod}+${key}`);
+        if (document.activeElement !== before) moved.push(`${mod}+${key}`);
+        before.focus();
+      }
+    }
+    document.removeEventListener("keydown", listen);
+    return { prevented, moved };
+  });
+  expect(withModifier).toEqual({ prevented: [], moved: [] });
+  await expect(names.nth(1)).toBeFocused();
+  // the list's own axis: Up and Down stop at the ends (no wrap), Home and End jump, Left and Right are not its keys
+  await page.keyboard.press("ArrowUp");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowLeft");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(names.nth(34)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(names.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(names.nth(1)).toBeFocused();
   // Browse: 50 of 160 rows, read only
   const subhead = page.locator(".subhead", { hasText: "Browse" });
   await expect(subhead).toContainText("first 50 of 160 rows · read only");

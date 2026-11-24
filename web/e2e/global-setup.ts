@@ -3,6 +3,7 @@
 // production addresses would link the pages to dofile.dev and app.dofile.dev, so every test that crosses between them
 // would leave localhost: `npm run e2e` builds with DOFILE_URLS=local.
 import { readdirSync, readFileSync } from "node:fs";
+
 import { EDITOR_OUT, LOCAL_EDITOR_URL, LOCAL_SITE_URL, SITE_OUT } from "../scripts/urls.ts";
 
 const get = (url: string) =>

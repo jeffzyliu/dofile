@@ -1,9 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import type { Plugin } from "vite";
+
 import commandData from "../../src/stata/commands.json" with { type: "json" };
-import { about, type BuildInputs } from "../build-id.ts";
+import { outDirOf } from "./paths.ts";
+
+import type { BuildInputs } from "../build-id.ts";
+import { about } from "../build-id.ts";
 import {
   canonicalURL,
   engineMB,
@@ -15,7 +20,6 @@ import {
 } from "../site-pages.ts";
 import { EDITOR_URL, PRODUCTION, SITE_URL } from "../urls.ts";
 import { hideHeadersFile, slash } from "./headers.ts";
-import { outDirOf } from "./paths.ts";
 
 const web = new URL("../../", import.meta.url);
 
@@ -82,17 +86,17 @@ export const canonical: Plugin = {
 /**
  * The landing and commands pages, filled (scripts/site-pages.ts).
  * @param editorSource - the editor's build folder, whose start-files.json says the download size
- * @param inputs - what the page is built from
+ * @param inputs - what the page is built from, read when a page is filled
  * @param devList - the dev server's start-files.json (start-list-dev.ts), which a build reads from the editor's folder instead
  */
-export const sitePages = (editorSource: string, inputs: BuildInputs, devList: () => string): Plugin => ({
+export const sitePages = (editorSource: string, inputs: () => BuildInputs, devList: () => string): Plugin => ({
   name: "site-pages",
   transformIndexHtml: {
     order: "pre",
     handler(html, ctx) {
       if (!isSitePage(ctx.path)) return html;
       const engineBytes = ctx.server ? JSON.parse(devList()).download : editorList(editorSource).download;
-      const tokens = { version: about(inputs).dofile, engineMB: engineMB(engineBytes), editorURL: EDITOR_URL };
+      const tokens = { version: about(inputs()).dofile, engineMB: engineMB(engineBytes), editorURL: EDITOR_URL };
       const filled = fillTokens(html, tokens);
       return ctx.path.endsWith("/commands.html") ? fillCommands(filled, commandData, commandData.denied) : filled;
     },

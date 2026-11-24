@@ -30,6 +30,15 @@ or {
     $filename <: r".*/src/engine/machine\.ts$",
     register_diagnostic(span=$m, message="machine.ts imports types only")
   },
+  // focus-targets.ts holds no hook, as a value or a type import: the Node tests import it.
+  or {
+    value_import($source),
+    `import type { $_ } from $source`
+  } as $m where {
+    $filename <: r".*/src/app/ui/focus-targets\.ts$",
+    $source <: r".*preact/hooks.*",
+    register_diagnostic(span=$m, message="focus-targets.ts imports nothing from preact/hooks: a Node test imports it (the hook is in focus-hooks.ts)")
+  },
   `Math.random` as $m where {
     $filename <: r".*/src/engine/machine\.ts$",
     register_diagnostic(span=$m, message="machine.ts is pure: no random number")
@@ -69,24 +78,24 @@ or {
     $filename <: not r".*/src/(?:app/engine\.ts|engine/machine\.ts)$",
     register_diagnostic(span=$m, message="only the engine controller (src/app/engine.ts) calls transition() and initial()")
   },
-  // Each signal has one writer: a writer object is named only by state.ts and its owner.
+  // Each signal has one writer: a writer object is named only by its state module and its owner.
   or {
     `engineWriter`,
     `graphicsWriter`
   } as $m where {
     $filename <: r".*/src/.*",
-    $filename <: not r".*/src/app/(?:state|engine)\.ts$",
-    register_diagnostic(span=$m, message="engineWriter and graphicsWriter are named only by state.ts and app/engine.ts")
+    $filename <: not r".*/src/app/(?:state/engine|engine)\.ts$",
+    register_diagnostic(span=$m, message="engineWriter and graphicsWriter are named only by state/engine.ts and app/engine.ts")
   },
   `runWriter` as $m where {
     $filename <: r".*/src/.*",
-    $filename <: not r".*/src/app/(?:state|run)\.ts$",
-    register_diagnostic(span=$m, message="runWriter is named only by state.ts and app/run.ts")
+    $filename <: not r".*/src/app/(?:state/run|run)\.ts$",
+    register_diagnostic(span=$m, message="runWriter is named only by state/run.ts and app/run.ts")
   },
   `filesWriter` as $m where {
     $filename <: r".*/src/.*",
-    $filename <: not r".*/src/app/(?:state|files)\.ts$",
-    register_diagnostic(span=$m, message="filesWriter is named only by state.ts and app/files.ts")
+    $filename <: not r".*/src/app/(?:state/files|files)\.ts$",
+    register_diagnostic(span=$m, message="filesWriter is named only by state/files.ts and app/files.ts")
   },
   // The controller's queue has one way in: enqueue(), called from dispatch() and reply() only; nothing else puts an
   // event into the queue or empties it, but connectEngine().

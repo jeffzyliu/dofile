@@ -12,11 +12,14 @@
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { loadPyodide } from "pyodide";
+
+import { repo } from "./lib/paths.ts";
+
 import { inputs, readManifest, staleness } from "./build-id.ts";
 import { installEngine } from "./install-engine.ts";
 import { arg, hasFlag } from "./lib/args.ts";
-import { repo } from "./lib/paths.ts";
 import { runChild as runScript, runShards } from "./lib/shards.ts";
 import { bootFromSnapshot, defaultDir, NATIVE_CHECKS } from "./snapshot-node.ts";
 

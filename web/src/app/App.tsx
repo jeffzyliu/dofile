@@ -1,33 +1,45 @@
 // The editor page's layout (SPEC section 2). One tree for every width, so the editor and the log are never mounted
 // twice; app.css arranges it by `data-layout` and the width.
 
-import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
-import { BannerSlot } from "./banners";
-import { DialogHost } from "./dialogs";
+
+import type { OutputTab, PhoneTab } from "./types.ts";
+
+import { engine } from "./state/engine.ts";
+import { files, hasFiles } from "./state/files.ts";
+import { isPhone, layout, outputTab, phoneTab, setSplit, showPhone, split, toggleWrap, wrap } from "./state/layout.ts";
+
+import { downloadAll } from "./files.ts";
+
+import { useFocusTarget } from "./ui/focus-hooks.ts";
+import { Icon } from "./ui/Icon";
+import { LiveRegion, ToastHost } from "./ui/Live";
+import type { MenuItem } from "./ui/Menu";
+import { MenuButton, MenuHost } from "./ui/Menu";
+import { Tablist, tabpanelProps } from "./ui/Tablist";
+
 import { activeTab, tabs } from "./editor/documents.ts";
 import { Editor } from "./editor/Editor";
 import { PhoneRun, RunControls } from "./editor/RunControls";
 import { StatusBar } from "./editor/StatusBar";
-import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
 import { EditorTabs, FileSwitcher } from "./files/EditorTabs";
 import { FileBar } from "./files/FileBar";
-import { FilesBody, FilesHead, fileMenuItems, focusTree, NewFileButton } from "./files/FilesPane";
-import { downloadAll } from "./files.ts";
-import { CommandLine, LogActions, logMenuItems, PhoneStrip } from "./log/CommandLine";
+import { FilesBody, FilesHead, fileMenuItems, NewFileButton } from "./files/FilesPane";
+import { filesOpen, foldFiles, onFilesKey } from "./files/fold.ts";
+import { CommandLine } from "./log/CommandLine";
+import { LogActions, logMenuItems } from "./log/LogActions";
 import { LogView } from "./log/LogView";
+import { PhoneStrip } from "./log/PhoneStrip";
 import { DtaView } from "./output/DtaView";
 import { FullSize } from "./output/FullSize";
 import { DataTab, GraphTab, ResultsTab } from "./output/tabs";
-import { engine, files, hasFiles, isPhone, layout, outputTab, phoneTab, saved, split, theme, wrap } from "./state.ts";
 import { takesReset } from "./states/predicates.ts";
 import { askReset } from "./states/ResetDialog";
-import { cycleTheme, THEME_ARIA, THEME_LABEL } from "./theme.ts";
-import type { OutputTab, PhoneTab } from "./types.ts";
-import { Icon } from "./ui/Icon";
-import { LiveRegion, ToastHost } from "./ui/Live";
-import { MenuButton, MenuHost, type MenuItem } from "./ui/Menu";
-import { Tablist, tabpanelProps } from "./ui/Tablist";
+
+import { BannerSlot } from "./banners";
+import { DialogHost } from "./dialogs";
+import { ABOUT, COMMANDS_URL, LANDING_URL } from "./env";
+import { cycleTheme, THEME_ARIA, THEME_LABEL, theme } from "./theme.ts";
 
 /** Wrap lines leaves the menu open, so the visitor sees it flip. */
 const wrapItem = (): MenuItem => ({ label: "Wrap lines", checked: wrap.value, onSelect: toggleWrap, keepOpen: true });
@@ -65,6 +77,16 @@ const phoneMoreItems = (): MenuItem[] => [
   { label: "About dofile", hint: ABOUT.dofile, href: LANDING_URL },
 ];
 
+/** The "More actions" button of the desktop toolbar and the phone's top bar: the registry's `more-actions` target. */
+function MoreActions({ items }: { items: () => MenuItem[] }) {
+  const button = useFocusTarget<HTMLButtonElement>("more-actions");
+  return (
+    <MenuButton label="More actions" items={items} ref={button}>
+      <Icon name="more" />
+    </MenuButton>
+  );
+}
+
 const Toolbar = () => (
   <header class="toolbar">
     <h1 class="visually-hidden">dofile editor</h1>
@@ -77,9 +99,7 @@ const Toolbar = () => (
       <Icon name="theme" />
       <span class="theme-word">{THEME_LABEL[theme.value]}</span>
     </button>
-    <MenuButton label="More actions" items={moreItems}>
-      <Icon name="more" />
-    </MenuButton>
+    <MoreActions items={moreItems} />
   </header>
 );
 
@@ -88,9 +108,7 @@ const VIEW_TITLE = { files: "Files", log: "Log", data: "Data", results: "Results
 const PhoneTopBar = () => (
   <header class="toolbar topbar">
     <h1 class="title">{phoneTab.value === "editor" ? <FileSwitcher /> : VIEW_TITLE[phoneTab.value]}</h1>
-    <MenuButton label="More actions" items={phoneMoreItems}>
-      <Icon name="more" />
-    </MenuButton>
+    <MoreActions items={phoneMoreItems} />
     <PhoneRun />
   </header>
 );
@@ -117,32 +135,15 @@ function Pane({ view, class: cls, label, children, ...rest }: PaneProps) {
   );
 }
 
-/** Whether the folded file list (700 to 1199 px) is shown. */
-const filesOpen = signal(false);
-let filesToggle: HTMLButtonElement | null = null;
-
-function foldFiles(open: boolean) {
-  filesOpen.value = open;
-  if (!open) filesToggle?.focus();
-  else focusTree(true);
-}
-
-/** Esc in the unfolded file list folds it, unless a handler in the list already used that Esc (preventDefault). */
-function onFilesKey(e: KeyboardEvent) {
-  if (e.key !== "Escape" || e.defaultPrevented || !filesOpen.value || !filesToggle?.getClientRects().length) return;
-  e.preventDefault();
-  foldFiles(false);
-}
-
+/** The Files button of the folded list: the registry's `files-toggle` target. */
 function FilesToggle() {
+  const button = useFocusTarget<HTMLButtonElement>("files-toggle");
   const n = files.value.filter((f) => !f.dir).length;
   return (
     <button
       type="button"
       class="fold-toggle"
-      ref={(el) => {
-        filesToggle = el;
-      }}
+      ref={button}
       aria-expanded={filesOpen.value}
       aria-controls="files-pane"
       onClick={() => foldFiles(!filesOpen.value)}
@@ -151,18 +152,6 @@ function FilesToggle() {
       Files{n > 0 && <span class="count">{n}</span>}
     </button>
   );
-}
-
-function toggleWrap() {
-  wrap.value = !wrap.value;
-  saved.set("dofile.wrap", wrap.value ? "1" : null);
-}
-
-function setSplit(on: boolean) {
-  split.value = on;
-  saved.set("dofile.split", on ? null : "0");
-  if (on && outputTab.value === "log") outputTab.value = "graph";
-  if (!on) outputTab.value = "log"; // unsplit: the Log is what the visitor sees first
 }
 
 const OUTPUT_TABS = [
@@ -280,9 +269,7 @@ const PhoneViews = () => (
       tabClass="view"
       tabs={VIEWS}
       value={phoneTab.value}
-      onChange={(t) => {
-        phoneTab.value = t;
-      }}
+      onChange={showPhone}
     />
   </nav>
 );

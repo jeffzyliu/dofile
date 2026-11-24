@@ -1,71 +1,38 @@
-// The full-size graph view (docs/design/SPEC.md, section 3.7), over the whole page; open while state.ts `graphFull` is
+// The full-size graph view (docs/design/SPEC.md, section 3.7), over the whole page; open while state/run.ts `graphFull` is
 // true. A fixed overlay, not a native modal <dialog>: the browser's top layer would cover the toast ("Copied" after
 // Copy image). So it keeps the dialog's promises itself: role="dialog" aria-modal, focus in, Tab kept inside, focus
 // back.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { say as announce, graphFull, graphIndex, graphs } from "../state.ts";
+import { useEffect, useRef, useState } from "preact/hooks";
+
+import { say as announce } from "../state/notices.ts";
+import { closeFullSize, graphFull, graphIndex, graphs, selectGraphAt } from "../state/run.ts";
+
 import { Key } from "../ui/Icon";
+import { useModalTrap } from "../ui/modal-trap.ts";
+
 import { canCopyImage, copyImage, exportPng } from "./clip.ts";
 import { graphAlt, graphTitle } from "./format.ts";
-import { GraphCard, shownGraph, Thumbs } from "./GraphTab";
-import { fullOpener } from "./view.ts";
-
-const close = () => {
-  graphFull.value = false;
-};
+import { GraphCard, Thumbs } from "./GraphTab";
 
 function Viewer() {
-  const root = useRef<HTMLDivElement>(null);
   const [said, say] = useState("");
   const saidTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(saidTimer.current), []);
   const list = graphs.value;
-  const at = shownGraph(list, graphIndex.value);
+  const at = graphIndex.value;
   const g = list[at];
-  const move = (by: number) => {
-    graphIndex.value = Math.min(Math.max(at + by, 0), list.length - 1);
-  };
-  const keys = useRef({ move, at });
-  keys.current = { move, at };
-
-  // the focus goes in on open (to the view itself, so a Space that opened it cannot press Close) and back on close; a
-  // layout effect, so the keys work from the first frame the view is seen in
-  useLayoutEffect(() => {
-    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const opener = fullOpener.el?.isConnected ? fullOpener.el : active;
-    fullOpener.el = null;
-    root.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector("dialog[open]")) return; // a dialog over the view has the keys
-      if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        e.preventDefault();
-        keys.current.move(e.key === "ArrowLeft" ? -1 : 1);
-      } else if (e.key === "Tab") {
-        const shown = (el: HTMLElement) => el.getClientRects().length > 0; // Previous and Next are hidden on a desktop
-        const stops = [...(root.current?.querySelectorAll<HTMLElement>("button:not([disabled])") ?? [])].filter(shown);
-        if (!stops.length) return;
-        const first = stops[0];
-        const last = stops[stops.length - 1];
-        const now = document.activeElement;
-        if (!root.current?.contains(now) || (e.shiftKey && (now === first || now === root.current))) {
-          e.preventDefault();
-          (e.shiftKey ? last : first).focus();
-        } else if (!e.shiftKey && now === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      if (opener?.isConnected) opener.focus();
-    };
-  }, []);
+  const move = (by: number) => selectGraphAt(at + by);
+  // the focus goes to the view itself, so a Space that opened it cannot press Close, the first button
+  const root = useModalTrap<HTMLDivElement>({
+    first: (view) => view,
+    onEscape: closeFullSize,
+    onKey: (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      move(e.key === "ArrowLeft" ? -1 : 1);
+    },
+  });
 
   // a move to another graph is said once (not on open: the view's name says what it is)
   const seen = useRef(g.n);
@@ -78,7 +45,7 @@ function Viewer() {
   return (
     <div class="viewer" ref={root} role="dialog" aria-modal="true" aria-label="Full-size graph" tabIndex={-1}>
       <div class="vhead">
-        <button type="button" class="btn quiet vclose" aria-keyshortcuts="Escape" onClick={close}>
+        <button type="button" class="btn quiet vclose" aria-keyshortcuts="Escape" onClick={closeFullSize}>
           Close <Key k="Esc" />
         </button>
         <span class="vtitle">{graphTitle(g, list)}</span>
@@ -127,7 +94,7 @@ export function FullSize() {
   const none = graphs.value.length === 0;
   // with no graph left (Clear log) there is nothing to show: close it, from an effect, not while drawing
   useEffect(() => {
-    if (open && none) close();
+    if (open && none) closeFullSize();
   }, [open, none]);
   return open && !none ? <Viewer /> : null;
 }

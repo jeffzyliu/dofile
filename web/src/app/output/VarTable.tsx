@@ -1,6 +1,9 @@
 // The variables table of the Data tab and of a .dta's tab; the name buttons, the marked row and the arrow keys only when
 // `pick` is given.
+
 import type { DataSummary } from "../types.ts";
+
+import { roveKey } from "../ui/keys.ts";
 
 type Variable = Pick<
   Exclude<DataSummary, { error: string }>["variables"][number],
@@ -19,10 +22,10 @@ export function VarTable({ variables, pick }: { variables: Variable[]; pick?: Pi
   const onKeyDown = (e: KeyboardEvent) => {
     const buttons = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button.var")];
     const i = buttons.indexOf(e.target as HTMLButtonElement);
-    const next = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: buttons.length - 1 }[e.key];
-    if (i < 0 || next === undefined) return;
+    const next = i < 0 ? null : roveKey(e, i, buttons.length, { axis: "y", wrap: false });
+    if (next === null) return;
     e.preventDefault();
-    buttons[Math.min(Math.max(next, 0), buttons.length - 1)]?.focus();
+    buttons[next]?.focus();
   };
   return (
     <div class="scroll-x">

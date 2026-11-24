@@ -6,16 +6,17 @@ import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 import zlib from "node:zlib";
+
+import type { SnapshotPy } from "../src/engine/snapshot.ts";
 import {
   hasNativeBrotli,
   inflate,
-  inflateNative,
   isDeadWeight,
   isStorageRefusal,
   packGraphics,
-  type SnapshotPy,
   unpack,
   unpackAsync,
+  unpackNative,
   unpackSteps,
   writeGraphics,
   zeroFreeMemory,
@@ -66,13 +67,13 @@ test("unpack decodes a file, passes through one a host already decoded, and chec
 });
 
 // the browser's own decoder (DecompressionStream("brotli")); skipped where the runtime has none
-test("inflateNative and unpackAsync give the same bytes as brotli-wasm, and a damaged file falls back to the wasm error", {
+test("unpackNative and unpackAsync give the same bytes as brotli-wasm, and a damaged file falls back to the wasm error", {
   skip: !hasNativeBrotli() && "no native brotli here",
 }, async () => {
-  const out = await inflateNative(packed, data.length);
+  const out = await unpackNative(packed, data.length);
   assert.equal(Buffer.compare(Buffer.from(out.buffer, out.byteOffset, out.length), data), 0);
-  await assert.rejects(inflateNative(packed.subarray(0, packed.length - 1000), data.length));
-  await assert.rejects(inflateNative(packed, data.length - 1), /larger than the/);
+  await assert.rejects(unpackNative(packed.subarray(0, packed.length - 1000), data.length));
+  await assert.rejects(unpackNative(packed, data.length - 1), /larger than the/);
   const file = { raw: data.length, size: packed.length };
   const [viaNative, how] = await unpackAsync(brotli, packed, file, true);
   assert.equal(how, "native");

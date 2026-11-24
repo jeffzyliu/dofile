@@ -1183,7 +1183,7 @@ input.filter::placeholder {
   font: var(--text-xs) / 1.6 var(--font-ui);
   color: var(--muted);
 }
-/* "Wrap lines" (App.tsx toggleWrap; LogView.tsx gives the log the class wrap): the log's long lines wrap; the banner art keeps its shape */
+/* "Wrap lines" (state/layout.ts toggleWrap; LogView.tsx gives the log the class wrap): the log's long lines wrap; the banner art keeps its shape */
 .log.wrap {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1201,10 +1201,12 @@ input.filter::placeholder {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* the command line's height on a phone, which the toast is placed against: above it and the tab bar (8 + 44 + 8 px and
-   its edge, and the safe area), and with the keyboard open above it at the visible area's foot */
+/* the command line's and the tab bar's heights on a phone, which the toast is placed against: above them, and with the
+   keyboard open above the command line at the visible area's foot. The tab bar is exactly --tabbar-h (ui.css .tabbar
+   takes it as its height): 8 + 44 + 8 px and its edge, and the safe area. */
 .app[data-layout="phone"] {
   --cmdline-h: 3.25rem;
+  --tabbar-h: calc(61px + env(safe-area-inset-bottom, 0px));
 }
 .app[data-layout="phone"] .cmdline {
   height: var(--cmdline-h);
@@ -1213,13 +1215,13 @@ input.filter::placeholder {
 }
 /* the views with no command line (Files, Editor, Data, Results) put it just above the tab bar */
 .app[data-layout="phone"] .toasts {
-  bottom: calc(61px + env(safe-area-inset-bottom, 0px) + var(--s2));
+  bottom: calc(var(--tabbar-h) + var(--s2));
 }
 :root[data-keyboard] .app[data-layout="phone"] .toasts {
   top: calc(var(--vv-height) - var(--s2));
 }
 .app[data-layout="phone"]:has(.log-pane:not([hidden])) .toasts {
-  bottom: calc(var(--cmdline-h) + 61px + env(safe-area-inset-bottom, 0px) + var(--s2));
+  bottom: calc(var(--cmdline-h) + var(--tabbar-h) + var(--s2));
 }
 :root[data-keyboard] .app[data-layout="phone"]:has(.log-pane:not([hidden])) .toasts {
   bottom: auto;

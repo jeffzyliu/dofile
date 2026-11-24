@@ -16,13 +16,14 @@ Run from `web/` (`npm install` once). The scripts that need the dofile wheel reb
 
 ```bash
 npm test                  # the engine in Pyodide under Node, the file store, the client, the controllers (~70 s)
-npm run dev               # two dev servers, on the LAN too: the editor on 5173, the landing and commands pages on 5174
+npm run dev               # `stage`, then two dev servers, on the LAN too: the editor on 5173, the landing and commands pages on 5174
                           #   (prints a warning first when the snapshot is stale; `npm run snapshot` fixes it)
-npm run e2e               # the snapshot, `build:local`, then Chromium, Firefox, WebKit, iPhone (`npx playwright install` once;
+npm run e2e               # `e2e:prepare` (`stage`, the snapshot, `build:vite` for local), then Chromium, Firefox, WebKit, iPhone (`npx playwright install` once;
                           #   SNAPSHOT_QUALITY=5: the snapshot in seconds; E2E_PORT=4181: ports 4181/4182, not 4173/4174)
-npm run build             # the editor into dist/app/, the pages into dist/site/; needs DOFILE_URLS=production,
+npm run build             # `stage`, then the editor into dist/app/ and the pages into dist/site/; needs DOFILE_URLS=production,
                           #   DOFILE_URLS=local (`npm run build:local`), or both DOFILE_SITE_URL and DOFILE_EDITOR_URL
 npm run snapshot          # the Pyodide memory snapshot the page starts from; again after any engine change
+npm run stage             # the wheel, then `public/` (wheels, Pyodide's runtime): the only writer of them; `vite` only reads
 npm run check             # Biome (errors), then TypeScript
 npm run format            # Biome: layout, import order, safe lint fixes
 npm run lint:strict       # Biome as CI runs it: warnings fail too
@@ -43,10 +44,14 @@ The other scripts (the screenshot run, `preview`, the `check-*` runs inside Pyod
   types; one `tsconfig.json` covers them all); Node strips the types, so imports spell the `.ts` extension and only erasable syntax is allowed (no `enum`,
   `namespace` or constructor parameter properties; `npm run check` enforces it). The engine's types are
   `src/engine/types.ts`; keep them and SPEC section 6 in step.
-- **Code style: `web/STYLE.md`** (comments, functions). Read it before writing or reviewing code here.
-- **State.** One module of signals, `src/app/state.ts`, except the open tabs: `src/app/editor/documents.ts` keeps one
-  record per tab, its `tabs`, `activeTab` and `selection` are computeds over them, and a tab changes only through its
-  functions (it needs no view; the editor attaches its view on mount). A signal with one owner is exported `ReadonlySignal`, so a view
+- **Code style: `web/STYLE.md`** (comments, functions, the contract of the shared UI helpers in `src/app/ui/`). Read it before
+  writing or reviewing code here.
+- **State.** One module of signals per owner, in `src/app/state/` (`engine.ts`, `files.ts`, `run.ts`, `layout.ts`,
+  `notices.ts`, `saved.ts`; `theme` is in `theme.ts`, the Data tab's `pickedVar` in `output/view.ts`), except the open tabs:
+  `src/app/editor/documents.ts` keeps one record per tab, its `tabs`, `activeTab` and `selection` are computeds over them,
+  and a tab changes only through its functions (it needs no view; the editor attaches its view on mount). A state module
+  imports only types, `app/paths.ts` (pure path helpers), the signals package and other state modules. The tests read
+  the modules joined as `S` (`test/state-all.ts`); the test hook's `state` is the same join. A signal with one owner is exported `ReadonlySignal`, so a view
   that assigns it fails `npm run check`. The controllers (`src/app/engine.ts`, `run.ts`, `files.ts`, `start.ts`) are `.ts`
   files that import no `.tsx`, tested in Node (`test/app-*.test.ts`, on `test/wiring.ts`; each file starts from
   `resetState()`). Views read signals and call the controllers' actions; they never call the transport or the machine.
@@ -76,11 +81,13 @@ The other scripts (the screenshot run, `preview`, the `check-*` runs inside Pyod
   fails `npm run check`, `npm run lint:strict` or `npm test`: fix the code, not the rule, unless the rule has changed.
   A type a view needs lives in `src/app/types.ts`, not in a registry (type imports count as cycles). Tests that read
   source text must not depend on how a line is wrapped.
-- **The test hook stays, behind a flag.** `?test` sets `window.__dofile` (its keys: the object in `main.tsx`);
-  `?test=manual` starts no engine until the test calls `start()`. Without the flag it does not exist. The store is
-  blocked until the tab lock answers: a test waits for `!store.blocked` before it writes. `<html data-engine>` always holds
-  the state name (for tests; no CSS reads it). Its type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its
-  own. What a test sets up in the page's state goes through the helpers in `e2e/seed.ts` (`showEngine`, `addBanner`,
+- **Test-only code is one module, loaded only with the flag.** `src/app/test-hook.ts` holds the hook `window.__dofile`
+  (its keys: the object there), the tab seeds (`editor/seeds.ts`) and `<html data-engine>`; `main.tsx` imports it
+  dynamically only under `?test` (as it does `kblog.ts` under `?kblog`, which stays its own). `?test=manual` starts no
+  engine until the test calls `start()`. Without the flag none of it is loaded or runs: **a spec that needs the hook or
+  `data-engine` opens with `?test`**, and test code outside the module never writes either. The store is blocked until the tab
+  lock answers: a test waits for `!store.blocked` before it writes. `data-engine` holds the state name (no CSS reads it).
+  The hook's type is `DofileHook`, derived from that object (`e2e/hook.ts`); a spec declares no hook type of its own. What a test sets up in the page's state goes through the helpers in `e2e/seed.ts` (`showEngine`, `addBanner`,
   `seedLog`, ...), not a signal written in the spec.
 - **e2e specs import `test` and `expect` from `e2e/fixtures.ts`**, not `@playwright/test`. Its fixture answers
   `persisted()` true (`test.use({ persisted: false })` for the browser's own) and retries a stalled first `goto`; a context

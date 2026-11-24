@@ -1,76 +1,76 @@
-// The shared buffer the page hands the lazy graphics part over in: what the page writes, the worker reads
-// (src/engine/lazy-part.ts; client.ts writes, worker.ts reads), both through the module's names.
+// The shared region the lazy graphics part is handed over in (src/engine/lazy-part.ts, on seqlock.ts): what the page's
+// writers leave, as the worker's readPart sees it, and the layout.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
+import type { PartRead } from "../src/engine/lazy-part.ts";
 import {
   failPart,
+  HDR_COPY,
   HDR_LENGTH,
+  HDR_SEQ,
   HDR_STATE,
-  HDR_TRIES,
   landPart,
-  PART_FAILED,
   PART_HEADER,
   PART_LANDED,
-  PART_PENDING,
-  partData,
-  partHeader,
-  partState,
-  partTries,
+  partReason,
+  partRegion,
+  readPart,
   retryPart,
 } from "../src/engine/lazy-part.ts";
 
-// what the worker sees, in the order it reads (tries before state)
-const see = (sab: SharedArrayBuffer) => {
-  const hdr = partHeader(sab);
-  const tries = partTries(hdr);
-  const state = partState(hdr);
-  return { state, tries, data: partData(sab, hdr) };
+const make = (room: number) => {
+  const sab = new SharedArrayBuffer(PART_HEADER + room);
+  return { sab, part: partRegion(sab) };
 };
-const land = landPart;
-const fail = failPart;
-const retry = retryPart;
+// what the worker sees: one whole snapshot, the bytes copied
+const see = (part: ReturnType<typeof partRegion>): PartRead => {
+  const read = readPart(part, 0, { withBytes: true });
+  assert.ok("value" in read, "not busy: no write is under way");
+  return read.value;
+};
 
-test("a new buffer is pending, with no bytes and no tries", () => {
-  const r = see(new SharedArrayBuffer(PART_HEADER + 8));
-  assert.deepEqual([r.state, r.tries, r.data.length], [PART_PENDING, 0, 0]);
+test("a new region is pending, at copy 0", () => {
+  assert.deepEqual(see(make(8).part), { state: "pending", copy: 0 });
 });
 
-test("a landed part is read back byte for byte", () => {
-  const sab = new SharedArrayBuffer(PART_HEADER + 8);
-  land(sab, Uint8Array.of(1, 2, 3));
-  const r = see(sab);
-  assert.equal(r.state, PART_LANDED);
-  assert.deepEqual([...r.data], [1, 2, 3]);
+test("a landed part is read back byte for byte, its bytes only when asked for", () => {
+  const { part } = make(8);
+  landPart(part, Uint8Array.of(1, 2, 3));
+
+  assert.deepEqual(see(part), { state: "landed", copy: 0, bytes: Uint8Array.of(1, 2, 3) });
+  assert.deepEqual(readPart(part, 0), { seq: 2, value: { state: "landed", copy: 0, bytes: null } });
 });
 
-test("a reason longer than the buffer is cut to fit", () => {
-  const sab = new SharedArrayBuffer(PART_HEADER + 5);
-  fail(sab, "abcdefghij");
-  const r = see(sab);
-  assert.equal(r.state, PART_FAILED);
-  assert.equal(new TextDecoder().decode(r.data), "abcde");
+test("a reason longer than the room is cut to fit; an empty reason is never read back empty", () => {
+  const { part } = make(5);
+  failPart(part, partReason("abcdefghij"));
+  assert.deepEqual(see(part), { state: "failed", copy: 0, reason: "abcde" });
+
+  failPart(part, partReason(""));
+  const read = see(part);
+  assert.ok(read.state === "failed" && read.reason !== "", "partReason gives a fixed text for an empty one");
 });
 
-test("a retry counts a try, clears the length and is pending again", () => {
-  const sab = new SharedArrayBuffer(PART_HEADER + 8);
-  fail(sab, "no");
-  retry(sab);
-  const r = see(sab);
-  assert.deepEqual([r.state, r.tries, r.data.length], [PART_PENDING, 1, 0]);
-  land(sab, Uint8Array.of(9));
-  assert.deepEqual([...see(sab).data], [9]);
-  assert.equal(see(sab).tries, 1);
+test("a retry counts a copy and is pending again; the copy that lands keeps its number", () => {
+  const { part } = make(8);
+  failPart(part, partReason("no"));
+  retryPart(part);
+  assert.deepEqual(see(part), { state: "pending", copy: 1 });
+
+  landPart(part, Uint8Array.of(9));
+  assert.deepEqual(see(part), { state: "landed", copy: 1, bytes: Uint8Array.of(9) });
 });
 
-test("the layout: Int32 state, length, tries, then the bytes from PART_HEADER", () => {
-  const sab = new SharedArrayBuffer(PART_HEADER + 8);
-  land(sab, Uint8Array.of(7, 8));
-  retry(sab);
-  land(sab, Uint8Array.of(5, 6, 4));
-  const raw = new Int32Array(sab, 0, 4);
-  assert.deepEqual([HDR_STATE, HDR_LENGTH, HDR_TRIES], [0, 1, 2]);
-  assert.deepEqual([...raw], [PART_LANDED, 3, 1, 0]);
+test("the layout: Int32 state, length, copy, the seqlock's counter, then the bytes from PART_HEADER", () => {
+  const { sab, part } = make(8);
+  landPart(part, Uint8Array.of(7, 8));
+  retryPart(part);
+  landPart(part, Uint8Array.of(5, 6, 4));
+
+  assert.deepEqual([HDR_STATE, HDR_LENGTH, HDR_COPY, HDR_SEQ], [0, 1, 2, 3]);
+  assert.deepEqual([...new Int32Array(sab, 0, 4)], [PART_LANDED, 3, 1, 6], "three writes, the counter 2 each");
   assert.equal(PART_HEADER, 16);
   assert.deepEqual([...new Uint8Array(sab, PART_HEADER, 3)], [5, 6, 4]);
 });

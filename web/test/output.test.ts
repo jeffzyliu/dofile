@@ -3,7 +3,10 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { binarySize as bytes } from "../src/app/bytes.ts";
+
+import type { Graph } from "../src/app/types.ts";
+import type { Macros, Results } from "../src/engine/types.ts";
+
 import {
   CELL_MAX,
   copiedNote,
@@ -18,8 +21,8 @@ import {
   shown,
   sizeLabel,
 } from "../src/app/output/format.ts";
-import type { Graph } from "../src/app/types.ts";
-import type { Macros, Results } from "../src/engine/types.ts";
+
+import { binarySize as bytes } from "../src/app/bytes.ts";
 
 test("a value shows 8 significant digits, with no trailing zeros and no leading zero", () => {
   assert.equal(shown(500), "500");
@@ -138,6 +141,7 @@ const results = (
   r: Partial<typeof NONE> = {},
   flags = { e: false, r: false },
 ): Results => ({
+  runId: 1,
   e: { ...NONE, ...e },
   r: { ...NONE, ...r },
   e_changed: flags.e,

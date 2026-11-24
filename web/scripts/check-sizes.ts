@@ -3,6 +3,7 @@
 // each file over the limit (exit 1), a warning for each within 2 MiB of it, over the two build folders.
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+
 import { EDITOR_OUT, SITE_OUT } from "./urls.ts";
 
 export const LIMIT = 25 * 1024 * 1024; // 26214400 bytes

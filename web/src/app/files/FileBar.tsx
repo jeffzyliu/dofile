@@ -1,15 +1,21 @@
 // The bars over an open .csv, .tsv or .log in the editor (docs/design/SPEC.md, section 3.11). Draws nothing for other
 // files (a .dta tab's bars are output/DtaView.tsx's).
 import { useEffect, useState } from "preact/hooks";
+
 import { fileCommand } from "../../stata/quote.ts";
-import { activeTab, tabs } from "../editor/documents.ts";
+
+import { files, fresh } from "../state/files.ts";
+
 import { runCommand } from "../run.ts";
-import { files, fresh } from "../state.ts";
 import { store } from "../store.ts";
+
 import { CommandBar } from "../ui/CommandBar";
 import { Icon } from "../ui/Icon";
-import { downloadEntry } from "./actions.ts";
+
+import { activeTab, tabs } from "../editor/documents.ts";
+
 import { decodeText } from "./open.ts";
+import { downloadEntry } from "./ops.ts";
 import { baseName, extOf, rowCount } from "./tree.ts";
 
 const TABLE = new Set([".csv", ".tsv"]);

@@ -1,8 +1,10 @@
 // The Files pane's banner for a file the editor cannot open (docs/design/SPEC.md, section 3.11). open.ts adds it.
 
 import type { BannerOf } from "../types.ts";
+
 import { DismissibleBanner } from "../ui/DismissibleBanner";
-import { downloadEntry } from "./actions.ts";
+
+import { downloadEntry } from "./ops.ts";
 import { baseName } from "./tree.ts";
 
 export function NotTextBanner({ banner }: { banner: BannerOf<"not-text"> }) {

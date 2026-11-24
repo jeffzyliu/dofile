@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { isTypedInput, straighten, straightenInserted } from "../src/stata/straighten.ts";
 
 test("straighten: curly quotes and the em dash go back to what was typed; the en dash and plain text stay", () => {

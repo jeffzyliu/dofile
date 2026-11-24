@@ -1,8 +1,10 @@
 // The session's graphs: a run's, and a .png opened from the files. Their numbers count from 1 until "Clear log".
 
-import * as S from "./state.ts";
-import { runWriter as W } from "./state.ts";
 import type { Graph } from "./types.ts";
+
+import { selectGraph, runWriter as W } from "./state/run.ts";
+
+import { resolvedTheme } from "./theme.ts";
 
 export const MAX_GRAPHS = 20; // the graphs a session keeps; the oldest go first
 
@@ -14,14 +16,14 @@ export const nextGraphNumber = () => ++graphCount;
 /** No graphs, the first one selected, and the numbers start again from 1. */
 export function clearGraphs() {
   W.graphs.value = [];
-  S.graphIndex.value = 0;
+  selectGraph(null); // the numbers start again: a number picked before would meet a new graph
   graphCount = 0;
 }
 
 /** Keep `added` after the graphs there are (the last 20), and show the latest. */
 export function keepGraphs(added: Graph[]) {
   W.graphs.value = [...W.graphs.value, ...added].slice(-MAX_GRAPHS);
-  S.graphIndex.value = W.graphs.value.length - 1; // the latest graph is the one shown
+  selectGraph(null); // the latest graph is the one shown
 }
 
 /** A .png opened from the files: it joins the session's graphs and is the one shown. Its colors are its own; `theme` is
@@ -30,12 +32,12 @@ export function keepGraphs(added: Graph[]) {
 export function addFileGraph(path: string, png: string): Graph {
   const i = W.graphs.value.findIndex((g) => g.from === "file" && g.path === path);
   if (i >= 0) {
-    const g: Graph = { ...W.graphs.value[i], png, theme: S.resolvedTheme.value };
+    const g: Graph = { ...W.graphs.value[i], png, theme: resolvedTheme.value };
     W.graphs.value = W.graphs.value.map((x, j) => (j === i ? g : x));
-    S.graphIndex.value = i;
+    selectGraph(g.n);
     return g;
   }
-  const g: Graph = { n: nextGraphNumber(), png, theme: S.resolvedTheme.value, from: "file", path };
+  const g: Graph = { n: nextGraphNumber(), png, theme: resolvedTheme.value, from: "file", path };
   keepGraphs([g]);
   return g;
 }

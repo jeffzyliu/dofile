@@ -1,7 +1,9 @@
 // Runs the two servers of `npm run dev` or `npm run preview` (the editor's and the pages') side by side, and stops both
 // when one ends: a server that fails to start (its port is taken: strictPort) must not leave the other running, with
 // links to a dead port. `node scripts/together.ts dev | preview`. Ports: urls.ts.
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+
 import { DEV_EDITOR_PORT, DEV_SITE_PORT, LOCAL_EDITOR_URL, LOCAL_SITE_URL } from "./urls.ts";
 
 const what = process.argv[2];

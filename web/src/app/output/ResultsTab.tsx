@@ -4,12 +4,17 @@
 // another model's).
 
 import { useId } from "preact/hooks";
-import { macros, results } from "../state.ts";
+
+import { macros, results } from "../state/run.ts";
+
 import { Icon } from "../ui/Icon";
+
 import { copyText } from "./clip.ts";
-import { full, type ResultGroup, type ResultRow, type ResultSection, sections, shown, sizeLabel } from "./format.ts";
+import type { ResultGroup, ResultRow, ResultSection } from "./format.ts";
+import { full, sections, shown, sizeLabel } from "./format.ts";
 import { closeMatrix, copyRow, matrixFor, readMatrix } from "./matrix.ts";
-import { copiedRow, folds, type OpenMatrix } from "./view.ts";
+import type { OpenMatrix } from "./view.ts";
+import { copiedRow, folds } from "./view.ts";
 
 const EMPTY = "e() and r() appear after an estimation or a command such as ";
 const EMPTY_2 = ", with the locals and globals your runs set.";

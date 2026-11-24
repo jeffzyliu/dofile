@@ -2,16 +2,20 @@
 // download-failed banners. Views change files through the store itself; each change calls store.onChange, which lists
 // the store again here. docs/design/SPEC.md, sections 3.1 and 7.
 
-import { keepFiles } from "../engine/tab.ts";
 import type { FileChange, FileInfo, PendingRow } from "../engine/types.ts";
+
+import { persisted, filesWriter as W } from "./state/files.ts";
+import * as Notices from "./state/notices.ts";
+
+import { keepFiles } from "../engine/tab.ts";
+
 import { ranOver, tabs } from "./editor/documents.ts";
-import { reloadTab } from "./files/actions.ts";
 import { decodeText } from "./files/open.ts";
 import { saveAs } from "./files/save.ts";
 import { fileTurn, turnsOn } from "./files/turns.ts";
+import { reloadTab } from "./files/upload.ts";
+
 import { SAMPLE_PATHS, seedSample } from "./sample.ts";
-import * as S from "./state.ts";
-import { filesWriter as W } from "./state.ts";
 
 type Store = {
   list(): Promise<FileInfo[]>;
@@ -67,9 +71,9 @@ export function block() {
 // the files changed (the page's change, `row`, or a run's): the storage banner, once per visit, if the browser may
 // clear them
 function changed(row?: PendingRow) {
-  if ((row && seeding.has(row.path)) || warned || S.persisted.value !== false) return;
+  if ((row && seeding.has(row.path)) || warned || persisted.value !== false) return;
   warned = true;
-  S.addBanner({ b: "storage" });
+  Notices.addBanner({ b: "storage" });
 }
 
 /** List the store into `files`. A store that cannot be read leaves the list as it was (the reason goes to the console).
@@ -114,7 +118,7 @@ async function followOpen(c: FileChange) {
       return; // the store cannot give it now: nothing is known of the run's version
     }
     if (!textTab()) return; // closed meanwhile
-    if (ranOver(c.name, decodeText(bytes, true)) === "kept") S.addBanner({ b: "run-changed", path: c.name });
+    if (ranOver(c.name, decodeText(bytes, true)) === "kept") Notices.addBanner({ b: "run-changed", path: c.name });
   });
 }
 
@@ -141,12 +145,12 @@ export async function downloadAll(): Promise<boolean> {
   try {
     if (!(await store.list()).some((f) => !f.dir)) return false; // nothing to download: no empty zip
     saveAs(await store.zip());
-    S.dismiss({ b: "download-failed" });
+    Notices.dismiss({ b: "download-failed" });
     return true;
   } catch (e) {
     console.warn(`[dofile] download all: ${(e as Error)?.message ?? e}`);
-    S.addBanner({ b: "download-failed" });
-    S.say("Your files couldn't be downloaded");
+    Notices.addBanner({ b: "download-failed" });
+    Notices.say("Your files couldn't be downloaded");
     return false;
   }
 }

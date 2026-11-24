@@ -33,8 +33,8 @@ export interface LifecycleOps {
   boot: { args: BootArgs; result: About };
   startup: { args: void; result: Startup };
   run: { args: { code: string } & RunOptions; result: RunResult };
-  /** The graphics part in the shared buffer landed, failed or is fetched again. The page never sends it without a
-   *  buffer. */
+  /** The graphics part in the shared buffer landed, failed or is fetched again. Only with a buffer: without one boot
+   *  writes the part. */
   graphics: { args: void; result: void };
 }
 /** Ops DECLARED to change nothing: not the data, r(), e(), the macros, the matrices, the graphs, the sort order, the
@@ -42,7 +42,7 @@ export interface LifecycleOps {
 export interface ReadOps {
   describe: { args: DescribeArgs; result: DataSummary };
   describe_file: { args: { path: string }; result: DataSummary };
-  matrix: { args: { name: string }; result: Matrix };
+  matrix: { args: { name: string; runId: number }; result: MatrixAnswer };
   macros: { args: void; result: Macros };
   browse: { args: DescribeArgs; result: BrowseRows };
   memory: { args: void; result: Memory };
@@ -68,12 +68,10 @@ export type FromWorker =
   // /work could not take the page's version after a run (the store has the run's files): it is out of step with the
   // store. Sent right after that run's answer.
   | { folderError: string }
-  // the lazy graphics part. With a shared buffer: "again" (a graph found it failed) or "damaged" (the page refetches
-  // it). Without one the worker fetches it and these tell the page how it goes; "damaged" then means the worker dropped
-  // its copy
-  | { graphics: "again" | "damaged" | "fetching" | "landed" }
-  | { graphics: "progress"; received: number }
-  | { graphics: "failed"; why: string };
+  // the lazy graphics part in the shared buffer: "again" (a graph found it failed) or "damaged" (the page
+  // refetches it), about `copy`, the copy the graph or the unpack read. Without a buffer boot writes the part and none
+  // is sent
+  | { graphics: "again" | "damaged"; copy: number };
 
 /** Where the worker's copy of the file store failed: "open" (the storage did not open, or could not be read), "copy"
  *  (it was read, but the files could not be written into /work). */
@@ -91,8 +89,8 @@ export type BootArgs = {
   wheel: Wheel;
   extraWheels?: Wheel[];
   interruptBuffer?: Int32Array | null;
-  /** A lazy snapshot's graphics part. `sab`: the buffer the page hands it over in (layout: lazy-part.ts); null: the
-   *  worker fetches it itself. */
+  /** A lazy snapshot's graphics part. `sab`: the buffer the page hands it over in (layout: lazy-part.ts); null: no
+   *  buffer, so `boot` fetches, unpacks and writes the part before it answers (a start file, download()). */
   graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null };
 };
 
@@ -149,6 +147,8 @@ export interface ResultSet {
   matrices: Record<string, string>;
 } // "3x3"
 export interface Results {
+  /** The worker's number of the run that made these results (it counts its runs, when each starts); the `matrix` op names it. */
+  runId: number;
   e: ResultSet;
   r: ResultSet;
   e_changed: boolean;
@@ -213,6 +213,8 @@ export type DataSummary =
     }
   | { error: string };
 export type Matrix = { rows: string[]; cols: string[]; data: Value[][] } | { error: string }; // names as "eq:name"
+/** `changed`: a later run than `runId` has made the results since, so the matrix is not the one the page showed. */
+export type MatrixAnswer = Matrix | { changed: true };
 export interface Macros {
   locals: Record<string, string>;
   globals: Record<string, string>;

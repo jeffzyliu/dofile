@@ -2,20 +2,27 @@
 // has run on it since it started; otherwise it opens the dialog (words.ts resetAsks). If the engine can no longer be
 // reset while the dialog is open (it failed, another tab took it), the dialog closes itself.
 import { useEffect } from "preact/hooks";
-import * as eng from "../engine.ts";
-import { dialog, engine, engineRuns } from "../state.ts";
+
 import type { DialogOf } from "../types.ts";
+
+import { engine } from "../state/engine.ts";
+import { closeDialog, openDialog } from "../state/notices.ts";
+import { engineRuns } from "../state/run.ts";
+
+import * as eng from "../engine.ts";
+
 import { Dialog } from "../ui/Dialog";
+
 import { engineUp } from "./predicates.ts";
 import { resetAsks } from "./words.ts";
 
 export function askReset() {
-  if (resetAsks(engine.value.s, engineRuns.value)) dialog.value = { d: "reset" };
+  if (resetAsks(engine.value.s, engineRuns.value)) openDialog({ d: "reset" });
   else eng.reset();
 }
 
 const close = () => {
-  if (dialog.value?.d === "reset") dialog.value = null;
+  closeDialog("reset");
 };
 
 export function ResetDialog(_: { dialog: DialogOf<"reset"> }) {

@@ -2,12 +2,16 @@
 // made by web/sample/make_sample.py. Their bytes are in sample-files.ts (generated: `npm run sample`). Plain
 // TypeScript, tested in Node (test/sample.test.ts).
 
-import { upload } from "./files/actions.ts";
+import { showToast } from "./state/notices.ts";
+import { saved } from "./state/saved.ts";
+
+import { store } from "./store.ts";
+
 import { openFile } from "./files/open.ts";
 import { fileTurn } from "./files/turns.ts";
+import { upload } from "./files/upload.ts";
+
 import { SAMPLE } from "./sample-files.ts";
-import { saved, showToast } from "./state.ts";
-import { store } from "./store.ts";
 
 /** The file the first visit opens. */
 export const SAMPLE_MAIN = "analysis.do";

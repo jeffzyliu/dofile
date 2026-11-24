@@ -4,7 +4,9 @@
 //   pandas: also load it (only for checking `export sasxport`: check-snapshot.ts --pandas);
 //   mock: names micropip treats as installed, so neither they nor their libraries are loaded (a lazy snapshot's build)
 import { readFileSync } from "node:fs";
+
 import type { PyodideAPI } from "pyodide";
+
 import { extraWheelsDir, wheelDir, wheels } from "./lib/wheels.ts";
 
 export async function installEngine(

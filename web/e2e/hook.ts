@@ -1,5 +1,5 @@
-// The page's test hook (`?test`), typed from the object src/main.tsx builds.
-import type { DofileHook } from "../src/main.tsx";
+// The page's test hook (`?test`), typed from the object src/app/test-hook.ts builds.
+import type { DofileHook } from "../src/app/test-hook.ts";
 
 declare global {
   interface Window {

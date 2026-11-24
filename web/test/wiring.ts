@@ -9,10 +9,10 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach } from "node:test";
+
 import type { ReadonlySignal, Signal } from "@preact/signals-core";
+
 import type { Banner, EngineState, EngineStateName, LastRun, LogItem, RunHead } from "../src/app/types.ts";
-import type { Builds, Lifecycle, Reader } from "../src/engine/client.ts";
-import type { Ending, Reply } from "../src/engine/machine.ts";
 import type {
   Build,
   CrashCause,
@@ -25,6 +25,11 @@ import type {
   RunResult,
   StoreCause,
 } from "../src/engine/types.ts";
+
+import type { Ending, Reply } from "../src/engine/machine.ts";
+
+import type { Builds, Lifecycle, Reader } from "../src/engine/client.ts";
+
 import { sleep } from "./harness.ts";
 
 // A log item and a banner with every member's fields, for reading in assertions: a test reads the fields of the member
@@ -57,7 +62,7 @@ Object.defineProperty(globalThis, "localStorage", {
   },
 });
 
-export const S = await import("../src/app/state.ts");
+export const { S } = await import("./state-all.ts");
 /** The open tabs and their documents. */
 export const D = await import("../src/app/editor/documents.ts");
 export const engine = await import("../src/app/engine.ts");
@@ -66,6 +71,7 @@ export const { addFileGraph, MAX_GRAPHS } = await import("../src/app/graphs.ts")
 export const { keep, connectFiles, afterRun, downloadAll } = await import("../src/app/files.ts");
 export const { startEngine } = await import("../src/app/start.ts");
 export const { cycleTheme, applyTheme } = await import("../src/app/theme.ts");
+export const { setSplit, toggleWrap } = await import("../src/app/state/layout.ts");
 export const { decodeText } = await import("../src/app/files/open.ts");
 export const { watchViewport, KEYBOARD, SETTLE } = await import("../src/app/viewport.ts");
 
@@ -99,7 +105,7 @@ export const result = (more: object = {}) =>
     error: null,
     error_command: null,
     log: "",
-    results: { e: {}, r: {}, e_changed: false, r_changed: false },
+    results: { runId: 1, e: {}, r: {}, e_changed: false, r_changed: false },
     nobs: 0,
     nvars: 0,
     new_graphs: 0,
@@ -295,7 +301,7 @@ export function setUp(opts: Wiring = {}) {
   wire(opts);
 }
 
-/** The writable signals of state.ts: every exported signal that takes an assignment (a computed one does not). */
+/** The writable signals of the state modules: every exported signal that takes an assignment (a computed one does not). */
 const initial = new Map<string, unknown>();
 const writables = Object.entries(S).filter(([, v]) => {
   const proto = v !== null && typeof v === "object" ? Object.getPrototypeOf(v) : null;
@@ -303,14 +309,15 @@ const writables = Object.entries(S).filter(([, v]) => {
 }) as [string, Signal<unknown>][];
 for (const [name, signal] of writables) initial.set(name, structuredClone(signal.peek()));
 
-/** Every writable signal of state.ts back to its value at load, the controllers' own state, the stand-ins and the drop
- *  record: a new wiring that nothing of an earlier test can reach. A signal added to state.ts is reset too. */
+/** Every writable signal of the state modules back to its value at load, the controllers' own state, the stand-ins and the drop
+ *  record: a new wiring that nothing of an earlier test can reach. A signal added to one of them is reset too. */
 export function resetState() {
   stored.clear();
   dropsWanted = [];
   wire(); // not opened: nothing of the last test's can act, and the drop record is empty
   handlers.engineGone(); // the controllers' own state: the count of the session's runs, what the old engine left
   for (const [name, signal] of writables) signal.value = structuredClone(initial.get(name));
+  S.setLayout("desktop"); // read-only for the views: set through its function
   S.holdToast(true); // no toast timer left over
   for (const t of D.tabs.value) D.close(t.path);
   clearLog();

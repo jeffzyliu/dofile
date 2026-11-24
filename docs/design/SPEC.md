@@ -163,6 +163,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   button holds in its one cell, so the button is as wide with "Run" as with "Start engine" and the toolbar does not
   move. The table of states is in section 5; the code's one statement of it is `app/start.ts`, and the flow is in
   `docs/web-page-flows.md`, section 2.
+- **Run is for .do and .ado tabs** (the maintainer, 2026-11-23: one rule for every Run control; greyed with the reason, not hidden, as Save is for a .dta). One computed from the active tab's path (`app/editor/runnable.ts`, `activeRunRefusal`) decides it for Run, Run selection, the phone's Run, the reset banner's "Run the file again" (on its own file's path) and Ctrl/Cmd+Enter; the engine's gate (`takesRun`) combines with it in `canRunFile`. On any other tab (a .txt, .csv, .log, .md, .json or .dta) with an engine that takes a run, Run is `aria-disabled` with `.off` and Run selection is disabled, both with the `title` "Only .do and .ado files can run" (Run's name is "Run is not available: only .do and .ado files can run", the reason lower case after the colon); a press of Run, and Ctrl/Cmd+Enter, show that sentence in an error toast and run nothing; on such a tab these words win even while a run is on, since the file can never run there. With no engine "Start engine" and its key still start it, on any tab. Not gated: a typed `do x.txt` in the command line (Stata's behaviour). The words are the maintainer's, 2026-11-23.
 - **Break** (`.btn.stop`): outlined and disabled when idle, filled red (`.live`) while running; its other labels are in
   section 5. **Save** has the dot when the active tab is unsaved, and the "⌘ S" chip.
 - **⋯ menu** (`S 12`): "Download all (.zip)" (disabled while the store has no file), "Wrap lines" (a switch, below), "Reset the engine…",
@@ -188,7 +189,7 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   run-head (`.runhead`, section 4); each echo (`.echo`); output; notes (`.note`: the path shim's "(path … is … in the working
   folder)"); the error and its `r(N);` (`.err`); the engine's hint (`.hint`); "Go to line 17" (`.jump`), which moves the
   editor's cursor. A rename of the run's file, or of a folder above it, moves the last run's path and every run-head's and
-  run end's too (`runMoved`, `state.ts`), so the link opens the renamed file; a file that cannot be read (deleted) opens
+  run end's too (`runMoved`, `state/run.ts`), so the link opens the renamed file; a file that cannot be read (deleted) opens
   nothing and a toast says so. Mono at `--log`, 80 columns, no wrapping unless "Wrap lines" is on (class `.log.wrap`); wide tables scroll sideways. The notes at a run's end are the
   exception: they wrap in the pane (section 8, "As built in step 4b").
 - The head, run-heads and the page's own notes are shown only: never in Download log or a log file (`S 15`).
@@ -242,6 +243,10 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   and the landing page carries the line. State texts: section 5. Last run: "Last run: whole file (started with no locals)
   · r(111) at line 17 · 0.38 s" (`E`); "Last run: stopped by Break · r(1) · 18.4 s" (`S 10`); the rc in the error color.
   Memory comes from the `memory` op after the start and each run; it cannot update during a run (OQ-8).
+- **One model for the bar and the phone's strip** (`editor/status.ts`, tested in Node): the bar draws its full form, the strip
+  its short form of the same parts (the state's words without the run's timer, "Engine 612 MB", the last run as "r(111)"
+  and "line 17 · 0.38 s", Go to line, and "Graphs loading" after the memory). The affiliation line and the files note
+  are the bar's only. The words of the strip are as section 3.5's Phone only item gives them.
 
 ### 3.7 Graph tab and full-size view (P1, step 4c)
 - **Tab** (`E`): the latest graph on `.graph-card`; a foot with thumbnails of the session's graphs, "graph 1 of 1 · scatter
@@ -285,15 +290,19 @@ Files and the editor work in every engine state except `other-tab` (section 5).
   `aria-expanded`, named "e(b), 1 x 3", the keyboard's toggle (Enter, Space). A click that ends a text selection in the row
   does nothing. The row shows the pointer. The copy icon (`Copy e(b)`; the check after a copy, as a scalar's) and Ctrl/Cmd+C
   on the caret copy the whole matrix as tab-separated text; the toast says "Copied e(b)", and a copy that had to read the
-  matrix leaves it closed; the icon does not toggle the row. A click on a grid cell copies that cell's every digit ("Copied
+  matrix leaves it closed; the icon does not toggle the row. A copy that had to read the matrix, or an open, whose read finds
+  that a later run replaced the results (the engine refuses a request that names older results than its latest run's)
+  copies and opens nothing and says so in an error toast: "The results changed: copy again" (the maintainer's words,
+  2026-11-23; the capital "T" too), "The results changed: open it again" for an open (the maintainer, 2026-11-23); the visitor presses again. The engine counts a run when it starts, so a run that fails after the
+  engine ran (its op rejected: the page keeps the old results) refuses the old row until the next run. A click on a grid cell copies that cell's every digit ("Copied
   e(b)[y1, age]": row name, column name); a text selection in the grid is not a click; cells are for mouse and touch, with
   no keyboard navigation (the copy icon covers it). Each cell shows the pointer and tints on hover (`hover: hover`).
 - **Empty** (`S 18`): "No results yet" / "e() and r() appear after an estimation or a command such as `summarize`, with the
   locals and globals your runs set."
 - **Keyboard and ARIA:** each row's copy icon is a Tab stop (Tab walks group heads, matrix carets and copy icons in order;
   no arrow keys), `aria-describedby` the whole value for a scalar or macro; group heads and matrix carets are buttons with
-  `aria-expanded`. **Calls:** `RunResult.results`; `macros` after each run; `matrix {name}` when
-  a matrix row opens.
+  `aria-expanded`. **Calls:** `RunResult.results`; `macros` after each run; `matrix {name, runId}` when
+  a matrix row opens or a closed one is copied (`runId`: `Results.runId` of the results the row shows).
 
 ### 3.10 Dialogs, banners, toast, menus (P1, step 4d unless noted)
 A dialog is a `<dialog>` centered over the scrim, a bottom sheet on a phone. Focus starts on the safe choice, Esc cancels,
@@ -626,7 +635,7 @@ handler with another op's arguments or result, fails the type check (`web/test/d
 | `run` | lifecycle | `{code, fresh_locals?, plot_theme?}` | `RunResult`; while it runs, `{id, log}` chunks | rejects (kind `op`) when the op fails in the worker, for example with no memory for its result, or (kind `no-engine`) when its worker is not live; the machine then ends the run with rc 9998, kind `run-failed`, and the worker stays. A rejection of an ending kind (`reset`, `stopped`, `failed`, `failed-twice`) says nothing: the machine has cut the run | engine | Worker. Then writes the run's difference to the store (section 7). |
 | `describe_file` (new) | read | `{path}` | `DataSummary` of a .dta in `/work`, without loading it | a path outside the folder rejects; other errors are `{error}` as the result | engine | Worker. Step 1: `Engine.describe_file(path)`, `browser.describe_file(path)`. It leaves the data in memory, r() and the log as they were. |
 | `describe` | read | `{vars?, offset?, limit?}` | `DataSummary` | `{error}` as the result | engine | Worker. |
-| `matrix` | read | `{name}` | `Matrix` | `{error}` as the result | engine | Worker. |
+| `matrix` | read | `{name, runId}` | `MatrixAnswer`: a `Matrix`, or `{changed: true}` | `{error}` as the result; `{changed: true}` when `runId` is not the number of the engine's latest results (a run was ahead of the request in the queue) | engine | Worker. The page's `runId` is the `Results.runId` of the results it shows. |
 | `macros` (new) | read | none | `Macros` | | engine | Worker. Step 1: `Engine.macros()`, `browser.macros()`. |
 | `browse` (new) | read | `{vars?, offset?, limit?}` | `BrowseRows` | `{error}` as the result | engine | Worker. Step 1: `Engine.data_rows()`, `browser.browse()`. |
 | `memory` (new) | read | none | `Memory` | | engine | Worker; it adds `heap_bytes`. Step 1: `Engine.memory()`, `browser.memory()`. |
@@ -658,7 +667,9 @@ As built:
   when that is one) and no `kind`; every other failure is a client error with a `kind` (an unreachable list:
   `failed`/`download`). It checks the list's build (`checkBuild`, below) before fetching anything, fetches with
   `cache: "no-cache"`, and never caches a file whose byte count is not the listed size.
-  `download()` is the Cache's writer for the start files; the worker only reads it. A lazy snapshot's graphics part is the
+  `download()` is the Cache's writer for the start files; the worker only reads it. Without a SharedArrayBuffer (no
+  cross-origin isolation) a lazy snapshot's graphics part is a start file: `download()` fetches it with the others and
+  counts it (`total` is the whole `download`), and `cached()` checks it. With one, the part is the
   one other entry: the page's `#graphics` (client.ts) puts it in the same Cache, only once the part has arrived whole at its
   listed size and the build's heap is already there, and `download()`'s clean-up keeps it (the list names it in
   `snapshot.graphics`). `download()`'s `total` is the list's `download` less the part (what comes before the start); the
@@ -673,7 +684,7 @@ As built:
   "Stop download") the state is `failed` and no worker is made. There is no offline start. `startList()` fetches the list.
   A restart is another path: the machine's `starting-list` state asks `build()` for the list, fetched fresh and checked, before
   it makes a worker (the Cache may have been evicted since the first start). The page's download size, `engineBytes`, is a
-  constant of `web/src/app/state.ts`, read from the page's meta tag at load.
+  constant of `web/src/app/state/engine.ts`, read from the page's meta tag at load.
 - **One statement of the build:** `start-files.json`. `checkBuild(list)` is the one comparison of the page's build with
   it: the build id, a SHA-256 over a stamp made once per build (or per dev-server start), the dofile wheel's hash, the extra
   wheels' hashes and the Pyodide version (`scripts/build-id.ts`, `buildId`). The page's id is made from the files it is
@@ -754,20 +765,22 @@ interface LifecycleOps {                         // sent only by the transport's
   graphics: { args: void; result: void };       // a lazy snapshot's graphics part landed, failed or is fetched again (in `sab`)
 }
 // `boot`'s arguments: the wheels, the Break buffer, and for a lazy snapshot the graphics part the page fetches after the
-// start files, in `sab` (a graph that finds it failed posts {graphics: "again"} and waits for one more fetch; the
-// buffer's layout, the header and the states: src/engine/lazy-part.ts);
-// `sab` null (no SharedArrayBuffer): the worker fetches the part itself once started, and the page never does (a graph
-// that finds it missing stops that fetch and makes a synchronous request); the worker tells the page how it goes, for the
-// "Graphs loading" ring and the download total: {graphics: "fetching"}, {graphics: "progress", received}, {graphics: "landed"},
-// {graphics: "failed", why}, and {graphics: "damaged"} when it dropped its copy (its next fetch skips the HTTP cache). Only a graph waits for it. Nothing of it happens
-// in the worker before `startup` is answered; then the browser's own decoder (off the thread) unpacks it once it is there,
+// start files, in `sab` (a graph that finds it failed posts {graphics: "again", copy} and waits for one more fetch; a copy
+// that will not unpack or write posts {graphics: "damaged", copy}, and the page fetches it again past the HTTP cache,
+// except the copy fetched right after a damaged one, which fails the part until a graph's "again" or the browser back
+// online; each names the copy it is about, and the page drops one about a copy it has replaced, or from an ended worker;
+// the buffer's layout, the header and the states: src/engine/lazy-part.ts);
+// `sab` null (no SharedArrayBuffer): the part is a start file (`download()`), and `boot` reads it as `mount` reads the
+// heap (the snapshot's Cache, else the network), unpacks and writes it before it answers; a part that will not unpack or
+// write is deleted from the Cache and fails the start, as a damaged heap does. No {graphics} message is sent then. With
+// `sab`, only a graph waits for the part. Nothing of it happens in the worker before `startup` is answered; then the browser's own decoder (off the thread) unpacks it once it is there,
 // and a brotli-wasm unpack, the write and the import of what a first graph needs run only once the engine has been idle
 // (no run sent or running) for 1 s, one short step per task.
 type BootArgs = { wheel: Wheel; extraWheels?: Wheel[]; interruptBuffer?: Int32Array | null;
   graphics?: { file: SnapshotFile; sab: SharedArrayBuffer | null } };
 interface ReadOps {                              // declared to change nothing: anyone may send them, through query()
   describe: { args: DescribeArgs; result: DataSummary };   describe_file: { args: { path: string }; result: DataSummary };
-  matrix: { args: { name: string }; result: Matrix };      macros: { args: void; result: Macros };
+  matrix: { args: { name: string; runId: number }; result: MatrixAnswer };   macros: { args: void; result: Macros };
   browse: { args: DescribeArgs; result: BrowseRows };      memory: { args: void; result: Memory };
   files: { args: void; result: FileInfo[] };               read: { args: { path: string }; result: Uint8Array };   // views of /work, for tests
 }
@@ -780,8 +793,7 @@ type Stage = "download" | "unpack" | "python" | "files" | "packages" | "engine";
 type FromWorker = { id: number; result: Ops[Op]["result"] } | { id: number; error: string; name: string; type?: string }
                | { id: number; log: string }    // a chunk of a running run's log (OQ-1)
                | { stage: Stage }               // a start-up stage began
-               | { graphics: "again" | "damaged" | "fetching" | "landed" }   // the lazy graphics part (below)
-               | { graphics: "progress"; received: number } | { graphics: "failed"; why: string };
+               | { graphics: "again" | "damaged"; copy: number };   // the lazy graphics part in `sab` (below)
 // `mount`'s arguments: the start's folders, and for a snapshot start the build's list (built, and the two big files)
 type MountArgs = { indexURL?: string; brotli?: string }
   & ({ snapshot: string; built: number; files: SnapshotFiles } | { snapshot?: undefined; built?: undefined; files?: undefined });
@@ -800,7 +812,7 @@ interface FileInfo { path: string; dir: boolean; size: number; mtime: number }  
 
 type Value = number | string | null;             // null: missing "." (or infinity); ".a" to ".z": extended missing
 interface ResultSet { scalars: Record<string, Value>; macros: Record<string, string>; matrices: Record<string, string> }  // "3x3"
-interface Results { e: ResultSet; r: ResultSet; e_changed: boolean; r_changed: boolean }  // as `results` in MCP-SCHEMA.md
+interface Results { runId: number; e: ResultSet; r: ResultSet; e_changed: boolean; r_changed: boolean }  // as `results` in MCP-SCHEMA.md, and `runId`: the worker's count of its runs, taken when a run starts (set by the worker, not by Python)
 interface RunOptions {
   fresh_locals?: boolean;                        // true: clear the top-level locals first. Default false.
   plot_theme?: "light" | "dark";                 // the style of the PNGs in `images` only; `graph export` files unchanged
@@ -835,6 +847,7 @@ interface Variable { name: string; type: string; format: string; label: string |
 type DataSummary = { nobs: number; nvars: number; matched: number; offset: number; variables: Variable[]; more: number;
                      filename: string | null } | { error: string };
 type Matrix = { rows: string[]; cols: string[]; data: Value[][] } | { error: string };    // names as "eq:name"
+type MatrixAnswer = Matrix | { changed: true };   // changed: a later run than `runId` made the results since
 
 // Step 1. Python: Engine.run(code, images=False, *, fresh_locals=False, plot_theme=None, on_output=None);
 // browser.run(code, images=True, fresh_locals=False, plot_theme=None, on_output=None).
@@ -990,7 +1003,7 @@ export const fresh: ReadonlySignal<Set<string>>;         // file service: paths 
 export const persisted: ReadonlySignal<boolean | null>;  // file service, from storage.persist() and persisted()
 export const split: Signal<boolean>;             // the Log head's Split and Unsplit; kept in localStorage
 export const outputTab: Signal<"log" | "graph" | "data" | "results" | "help">;   // the Output tablist; "log" only unsplit; Unsplit always shows it
-export const phoneTab: Signal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar; Run sets "log";
+export const phoneTab: ReadonlySignal<"files" | "editor" | "log" | "data" | "results">;  // the phone's tab bar, through showPhone(tab); Run sets "log";
                                                  // 4a's openFile sets "editor" (a text or .dta tab)
 export const log: ReadonlySignal<LogItem[]>;             // run controller; "Clear log" empties it but the head
 export const lastRun: ReadonlySignal<LastRun | null>;    // run controller
@@ -1002,19 +1015,19 @@ export const rows: ReadonlySignal<BrowseRows | null>;    // run controller alone
                                                  // moreRows() for the Data tab's "Show 50 more"
 export const pickedVar: Signal<string | null>;   // the Data tab
 export const graphs: ReadonlySignal<Graph[]>;            // run controller: a run's, and addFileGraph() for a .png; "Clear log" empties
-export const graphIndex: Signal<number>;         // the Graph tab, the full-size view and the log's graph links (by `n`)
-export const graphFull: Signal<boolean>;         // the full-size view is open: 4c's Open full size and Close, 4b's inline tap
+export const graphIndex: ReadonlySignal<number>; // the shown graph's place in `graphs` (computed from the picked `n`; the last when none or gone); selectGraph(n), selectGraphAt(place)
+export const graphFull: ReadonlySignal<boolean>; // the full-size view is open: showFullSize() (4c's Open full size, 4b's inline tap), closeFullSize()
 export const theme: Signal<"system" | "light" | "dark">;   // the theme button
-export const wrap: Signal<boolean>;              // "Wrap lines" in the ⋯ menus (App.tsx toggleWrap); views read it; kept in localStorage
+export const wrap: Signal<boolean>;              // "Wrap lines" in the ⋯ menus (state/layout.ts toggleWrap); views read it; kept in localStorage
 export const toast: ReadonlySignal<string | null>;       // anyone, through showToast(text, kind?); it clears itself (toastMs: 4 to 10 s)
 export const toastError: ReadonlySignal<boolean>;        // the toast reports an error (warning icon), not a confirmation
-export const dialog: Signal<Dialog>;             // whoever opens one; the dialog closes itself
+export const dialog: ReadonlySignal<Dialog>;       // the one open dialog: openDialog(d); closeDialog() closes any, closeDialog(own) only that kind or object
 export const banners: ReadonlySignal<Banner[]>;          // their owners, through addBanner(); Dismiss removes one (dismiss())
 export const announce: ReadonlySignal<string>;           // the hidden live region: through say() (controllers, showToast, views)
 ```
 
 **As built** (steps 3 and 3.5; the step 4 agents write against this):
-- **Files.** The signals: `web/src/app/state.ts` (TypeScript on `@preact/signals-core`, so the Node tests import it as it is;
+- **Files.** The signals: `web/src/app/state/`, one module per owner (`engine.ts`, `files.ts`, `run.ts`, `layout.ts`, `notices.ts`, `saved.ts`), with `theme` in `theme.ts` and `pickedVar` in `output/view.ts` (TypeScript on `@preact/signals-core`, so the Node tests import it as it is;
   components read the same signals through `@preact/signals`). The types above: `web/src/app/types.ts`; section 6's:
   `web/src/engine/types.ts`. Everything in `web/src/engine/`, the controllers and `web/test/` is TypeScript, which Node runs by
   removing the types. The controllers are `.ts` files that import no `.tsx`, tested in `web/test/app-*.test.ts`.
@@ -1024,17 +1037,18 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   transport or the machine (an import-graph test checks it).
 - **Who writes a signal.** A signal with one owner is a `ReadonlySignal`, so a view that assigns one fails `npm run check`:
   `engine`; `memory`, `log`, `lastRun`, `history`, `results`, `macros`, `data`, `rows`, `graphs`; `files`, `fresh`,
-  `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`). The owner
-  writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state.ts`), which only its owner imports (a
-  test checks it). The others stay writable by views: `graphIndex`, `graphFull`, `dialog`, `split`,
-  `outputTab`, `phoneTab`, `pickedVar`, `theme`, `layout`, `isolated`.
-- **The open tabs** are not in `state.ts`: `editor/documents.ts` keeps one record per tab (its path and its document,
+  `persisted`; `banners`, `toast`, `announce` (these three through `addBanner`/`dismiss`, `showToast` and `say`); `dialog`
+  (`openDialog`, `closeDialog`); `phoneTab` (`showPhone`). The owner
+  writes through a writer object (`engineWriter`, `runWriter`, `filesWriter` in `state/engine.ts`, `state/run.ts`, `state/files.ts`), which only its owner imports (a
+  test checks it). The others stay writable by views: `split`,
+  `outputTab`, `wrap`, `pickedVar`, `theme`. (`layout` is set through `setLayout`; `isolated` is set once at load.)
+- **The open tabs** are not in `state/`: `editor/documents.ts` keeps one record per tab (its path and its document,
   or nothing for a .dta tab) and exports `tabs: ReadonlySignal<OpenTab[]>`, `activeTab: ReadonlySignal<string | null>`
   and `selection` (the shown text tab's whole selected lines), all computed from the records; a tab's `dirty` is its
   text against the store's, stored nowhere. Tabs change only through its functions (`addText`, `addDta`, `activate`,
   `close`, `askClose`, `closeUnder`, `moved`, `retype`, `reload`, `ranOver`, `update`); it needs no view, and the
   editor's view attaches to it when it mounts (`attachView`). The test hook's `state` has `tabs` and `activeTab` beside
-  the signals of `state.ts`.
+  the signals of the state modules.
 - **`ABOUT`** (`web/src/app/env.ts`) is compiled in: `dofile` (the version), `engine_commit` and `stata_version`. It is there
   from the first paint, with or without an engine; there is no `about` signal. `web/test/engine.test.ts` compares it with what
   `boot` answers.
@@ -1069,7 +1083,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`UPDATED` is reason "updated"'s); `stageNow` (the live region) and `stageStatus` (the status bar) are the words of each
     `Stage`, which the worker sends as typed ids; `stagesOf(snapshot)` is the stages in order.
   - `run.ts` is the one writer of `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs` and
-    `history`; it also moves `graphIndex` to the newest graph (views write `graphIndex` too). It reads no engine state: the engine controller tells it, through the
+    `history`; it also shows the newest graph (`selectGraph(null)`; views pick a graph with `selectGraph(n)`). It reads no engine state: the engine controller tells it, through the
     handlers it gives to `connectRun` (a run began, a chunk of its log, its end, an engine is ready, the engine is gone).
     It clears `results`, `macros`, `data`, `rows`, `memory` and `lastRun` when the engine is gone (a reset, or another tab
     took it: the machine's effect `engine-gone`), and asks for `memory` when an engine is ready. Actions: `runCode(code,
@@ -1099,33 +1113,35 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (`hasFiles`).
   - The page's one store: `web/src/app/store.ts`; views change files through it. It starts `blocked` and is unblocked
     once the tab lock is this tab's (`files.ts` `own()`).
-  - Helpers in `state.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`, `saved`
+  - Helpers in `state/notices.ts`: `say`, `showToast`, `holdToast`, `addBanner`, `dismiss`; `saved` is in `state/saved.ts`
     (localStorage); computed `isPhone` (the layout is the phone's: read it, never pass a `phone` prop) and `hasFiles`
     (the store has a file; folders do not count).
 - **Where each step 4 part goes.** `App.tsx` places the parts; each part edits only its own files. (`App.tsx` was edited
   three times in step 4: the phone ⋯'s file actions and the focus on the tree's row when 4a was
   joined, and the phone's Save off on a .dta tab when 4b and 4d were joined.) A part reads any signal; it writes only those listed for it.
-  - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
+  - **4a** `files/FilesPane.tsx` (`FilesHead`, `FilesBody`), `files/TreeRow.tsx` (a row and its rename field), `files/drop.ts`
+    (the drop listeners), `files/rename.ts` (the inline rename and the draft rows, plain TypeScript), `files/tree-state.ts` (what
+    is folded, the current folder, the focus request), `files/EditorTabs.tsx` (`EditorTabs`, the phone's
     `FileSwitcher`), `files/FileBar.tsx` (`FileBar`: the bars over an open .csv, .tsv or .log), `files/open.ts`
     (`openFile(path)`, the one way a file opens, 3.11; `decodeText(bytes)`, built), `files/dialogs.tsx` (clash, delete,
     delete-all, close-tab; the words of the last two are decided in 3.10), `files/banners.tsx` (not-text). Opens, closes,
-    renames and activates tabs through `editor/documents.ts`; writes `dialog` (its four kinds), `banners` (not-text); `openFile` sets `phoneTab` to "editor" on
-    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `graphFull` (phone); the phone's
-    `FileSwitcher` sets `phoneTab` to "files" ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
-    `editor/documents.ts` `save(path)` and `editorCommands.focus` (after a tab closes), `addFileGraph`,
+    renames and activates tabs through `editor/documents.ts`; opens `dialog`s (its four kinds, `openDialog`) and closes them (`closeDialog`), writes `banners` (not-text); `openFile` calls `showPhone("editor")` on
+    a phone when a text or .dta tab opens, and for a .png `outputTab` "graph" (desktop) or `showFullSize()` (phone); the phone's
+    `FileSwitcher` calls `showPhone("files")` ("Show all files"). Calls `store.*`, `downloadAll`, `saveAs`,
+    `editor/documents.ts` `save(path)` and `focusNow("editor")` (after a tab closes), `addFileGraph`,
     `runCommand` (Import), `addBanner`, `dismiss`, `showToast`, `say`. Its "Download all (.zip)" is disabled while
     `hasFiles` is false. In the file list at 700 to 1199 px, Esc folds the list: a handler of 4a's that uses Esc itself (the
     inline rename) calls `preventDefault()`. The Node tests of the close-tab and reload paths make
     an edit with `editor/documents.ts` `update`, as the view would.
     **As built in step 4a:** the plain logic is in `files/tree.ts` (the rows: in each folder its folders first, then its
     files, by name with numbers in order and case ignored; sizes in decimal units, "41 KB"; free names; what is wrong
-    with a new name; tab labels, the folder added when two open files share a name) and `files/actions.ts` (close,
-    rename, new, delete, a folder's .zip from the store with `engine/zip.ts`, and upload: the files that clash with none
+    with a new name; tab labels, the folder added when two open files share a name), `files/ops.ts` (rename, new,
+    delete, a folder's .zip from the store with `engine/zip.ts`) and `files/upload.ts` (upload: the files that clash with none
     are written first (so is none that holds the uploaded bytes already, unless it is open with unsaved edits), then each clash
     is asked; what the clash dialog shows beyond the `dialog` value, its words included (`upload(items, "sample")` is "Restore
     the sample"), is `clashNow()`, its answer `answerClash()`; uploads run one after the other, a clash waits while another dialog is
     open, another dialog put in its place with no answer counts as Esc, and a clash over an open file with unsaved edits
-    is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), both tested in Node
+    is asked even after "Do the same" with Replace, never after Esc: C 14 of the plan's list), each tested in Node
     (`web/test/files-ui.test.ts`). A rename that changes how a file opens (a .dta renamed .csv) opens its tab again, in
     its place, unless it has unsaved edits; one renamed to a .png closes its tab (a .png opens in no tab). A tab still open at the new name after a run deleted its file closes for the rename, or, with unsaved edits, the rename is refused as if the file were there. After a tab closes (Delete, the close-tab dialog) the focus goes to the tab
     now selected, else the tree's row, else the editor; the close-tab dialog stays open while its Save writes the file,
@@ -1149,13 +1165,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     editor" and "Couldn't create the file", "Couldn't create the folder", "The upload failed". The rename's refusal from the store is "That name isn't allowed.", the same sentence as for `.` and `..` (`NAME_NOT_ALLOWED`).
   - **4b** `editor/Editor.tsx`, `editor/commands.ts` (fills `editorCommands`), `editor/RunControls.tsx`
     (built for the section 5 states, each button at one size, 3.4; 4b adds the timers, and the pill's time goes into
-    its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: the state words; 4b adds the
-    timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px),
+    its `Labels` with a sizer of its widest form), `editor/StatusBar.tsx` (built: draws the status bar; 4b adds the
+    timers, last run, memory, the right side, and the "Not affiliated with StataCorp" line from 1200 px; the words are
+    `editor/status.ts`, one model with a full form for the bar and a short form for the phone's strip),
     `editor/banners.tsx` (save-failed; run-changed, which files.ts adds), `log/LogView.tsx` (the log),
-    `log/CommandLine.tsx` (`CommandLine`, `LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too,
-    `PhoneStrip`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
-    save-failed and run-changed), `graphIndex` and `outputTab` (a graph link; `outputTab` "log" when Find opens with the
-    Output pane unsplit), `graphFull` (a tap on an inline graph, phone), `phoneTab` "log" (a tap on the phone's Break
+    `log/CommandLine.tsx` (`CommandLine`), `log/LogActions.tsx` (`LogActions`: Find and Download log, `logMenuItems` for the phone strip's "Log ⋯" button; "Clear" too),
+    `log/PhoneStrip.tsx` (`PhoneStrip`: draws the short form), `log/find.ts` (Find's signals and `openFind`). The dot is derived (`editor/documents.ts`); writes `banners` (`addBanner` for save-failed; `dismiss` for
+    save-failed and run-changed), `outputTab` (a graph link; `outputTab` "log" when Find opens with the
+    Output pane unsplit), and selects a graph with `selectGraph` (a graph link), and opens the full-size view with `showFullSize` (a tap on an inline graph, phone), `showPhone("log")` (a tap on the phone's Break
     pill). Calls `runCode`, `runCommand` (the command line clears its field only when it answers `how: "started"`), `breakRun`, `reset`
     ("Reset now"), `openFile` (Go to line in a file that is not open), `store.write`, `saveAs` (Download log, the
     save-failed banner's Download), `reloadFromStore` (the run-changed banner's "Reload from the
@@ -1201,7 +1218,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     in `editor/ranover.ts`, Node-tested, on the texts with their line breaks as CodeMirror holds them, `\n`, so a clean
     tab of a `\r\n` file follows a run as any other; Save keeps the file's form, noted when its text is read
     (`formOf`): its line break (`lineBreakOf`: `\r\n` or `\n`, the more common one in a file with both, `\n` on a tie, for
-    a new or empty file and for lone `\r`; the mixed and lone-`\r` cases are for the maintainer to confirm, B 9 of the
+    a new or empty file and for lone `\r`; the mixed and lone-`\r` cases are the maintainer's, 2026-11-23, B 9 of the
     plan's list) and its UTF-8 byte order mark, which the editor never holds (so neither Run nor
     the comparisons see it); Save writes the editor's text in that form (`fileText`), as does the save-failed banner's
     Download, except that a `.do` or `.ado` file (case ignored) is written without its BOM (`dropsBom`), since the engine
@@ -1219,21 +1236,21 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     file removes it, a close or delete of its tab too, and a rename moves it to the new name, as it does `save-failed`).
     A run that writes something that is not text over an open text tab (binary, not UTF-8: a `.dta` saved as `t.csv`)
     keeps the tab's text, edits or not, makes the tab unsaved, and gets the same banner with other words and no reload:
-    "**The run changed t.csv, and it is no longer text.** The editor still shows your text; saving it overwrites the file the run wrote." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost; for the maintainer to confirm, B 7
+    "**The run changed t.csv, and it is no longer text.** The editor still shows your text; saving it overwrites the file the run wrote." / "Dismiss" (chosen over closing a clean tab: one path, and no edits are ever lost; the maintainer, 2026-11-23, B 7
     of the plan's list); a later run that writes
     the editor's own text over it makes the tab clean again and takes the banner away. A file the run deleted
     keeps its tab (not handled): the file leaves the file list, the tab keeps its dot as it was, and Save writes the file
-    again (an open question: C 7 of the plan's list). `editorCommands.focus()` focuses at once and never changes
+    again (an open question: C 7 of the plan's list). The `editor` focus target (`focusNow("editor")`) focuses at once and never changes
     the active tab or the phone's view: CodeMirror's content with a text tab shown, the empty view with no tab (both
     `[data-editor]`); with a .dta tab active, that tab in "Open files" when it is shown, else its view's first enabled
-    button (Load), else the focus does not move (for the maintainer to confirm, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) it makes no check of its own: it focuses the same element, which the browser does not focus under `display: none`, so the focus does not move.
+    button (Load), else the focus does not move (the maintainer, 2026-11-23, B 6 of the plan's list); with the Editor pane hidden (a phone on another view) the target is not shown, so the focus does not move.
     Decisions where this spec is silent: a whole-file run marks no running
     lines (a selection run marks its lines); Break's rc 1 gives no error mark and the note "Stopped by Break before line
     N. The data is as the last complete command left it." with "Go to line N" (a command from the command line: "Stopped
     by Break. The data is as the last complete command left it.", no line); the notes at a run's end (Break's with its
     "Go to line", OQ-10's, the files not kept) wrap in the Log pane at every width; on a phone, a tap on the Break pill also shows
-    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; for the
-    maintainer to confirm, B 2 of the plan's list); a phone's
+    the Log view, where Break's countdown and its outcome are (decided at the step 4b review, from step 4d's; the maintainer,
+    2026-11-23, B 2 of the plan's list); a phone's
     inline graph is on the card of its run's theme; Run with no text tab open runs nothing and
     says so in a toast; Run runs any open text tab, a .csv too; a selection that ends at the start of a line leaves that
     line out; the page load's status words are "Loading"; a selection's last run is "Last run: lines 6–7 · …" and a
@@ -1242,8 +1259,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     numbered in the log's order; on the desktop with the Output pane unsplit, Find shows the Log tab first; Esc and Close
     give the focus back to the Find button, on a phone to the ⋯ button); Download log saves
     `dofile.log`; the phone's "Run command" is a 44 px icon button (`.send`) that keeps the field's focus (`pointerdown` and `mousedown` cancelled, the click refocuses the field; `aria-disabled` while the field is empty); on a phone the command line has a fixed height
-    (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (taken as 61 px and the safe
-    area, from ui.css's `.tabbar`: a figure, not a measure); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` are highlighted with CodeMirror's
+    (`--cmdline-h`, 3.25rem, app.css 4b block) and the toast sits above it and the tab bar (`--tabbar-h`, 61 px and the safe
+    area, app.css: the tab bar takes it as its height, so the toast and the bar agree); the Break pill's time is "3.4 s", "42 s", "12 min"; `.md` and `.json` are highlighted with CodeMirror's
     `@codemirror/lang-markdown` (its `markdownLanguage` alone: `markdown()` would bring the HTML, CSS and JavaScript
     languages, about 160 KB more) and `@codemirror/lang-json`, on the Stata tokens' classes (added when 4b and 4d were
     joined). **Pasted lines** (the maintainer's decision: each line runs in turn): a paste
@@ -1258,10 +1275,10 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     toast says how many were not run, and a line that did not run goes back into the field unless the field is disabled
     by then; with no engine a paste is an ordinary paste and no line runs, and with an engine that is not ready a paste
     of lines is refused whole, the field untouched (`log/pasterun.ts` `pastePlan`, `putBack`)
-    (these stops are for the maintainer to confirm, B 3 of the plan's list). The next line starts in a microtask
+    (these stops: the maintainer, 2026-11-23, B 3 of the plan's list). The next line starts in a microtask
     after the step that ended the one before, so no other Run or Enter is taken between two pasted lines. Load on a phone's
     .dta tab still shows only its toast (4c): the Log view does not open, as a command run from the command line opens
-    nothing either (for the maintainer to confirm, B 4 of the plan's list). Words the spec does not give, decided by the
+    nothing either (the maintainer, 2026-11-23, B 4 of the plan's list). Words the spec does not give, decided by the
     maintainer on 2026-11-13: "No file is open: open one from the file
     list." (the empty editor); "No file is open to run" (toast); a refused Ctrl/Cmd+Enter's toast: "Run is not available until the current run ends" (`running`,
     `breaking`, `waiting`), "The engine is starting. Try again when it is ready." (the page load, `downloading`, `starting-*`; the Run button's own name is "Starting… Run is not available until the engine is ready"), "Run is not available: the engine isn't running in this tab" (a `failed` start that cannot be tried again,
@@ -1282,7 +1299,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   - **4c** `output/tabs.tsx` (`GraphTab`, `DataTab`, `ResultsTab`; they may be mounted again when the layout changes, so
     their state lives in signals), `output/FullSize.tsx` (`FullSize`, placed once over the page for every width, open
     while `graphFull`), `output/DtaView.tsx` (`DtaView({path})`, a .dta tab, shown in the editor's place). Writes
-    `graphIndex`, `graphFull`, `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
+    through `selectGraph`, `selectGraphAt`, `showFullSize`, `closeFullSize`, and `pickedVar`. It does not write `rows` and does not call `browse`: "Show 50 more" calls
     run.ts `moreRows()`, which appends (run.ts is the one writer of `rows`). Calls
     `call("matrix" | "describe_file", ...)`, `moreRows()`, `runCommand` (Load), `showToast` ("Copied").
     As built (step 4c): `tabs.tsx` only re-exports the three tabs, one file each (`GraphTab.tsx`, `DataTab.tsx`,
@@ -1293,7 +1310,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     graph's number; the alt text is "Graph: scatter wage educ", and "Graph 2: scatter wage educ" when another kept graph
     has the same command; the card of a run's graph drawn dark is dark (`--graph-card-dark`, OQ-21: the run's theme), and a
     .png from the files is on the light card; the full-size view is a fixed overlay (not a native modal dialog, whose top
-    layer would hide the toast) with its own focus trap, which leaves the keys to a native dialog opened over it, and a
+    layer would hide the toast) with its own focus trap (`ui/modal-trap.ts`, the dialog's too: the first focus is the view, Tab and Shift+Tab wrap inside it, Esc hands the focus back to the opener or, when that has left the page, to `focusStable`), which leaves the keys to a native dialog opened over it, and a
     move to another graph is said through `say()` (the graph's alt text); the .dta bar's size is the tree's
     (`formatSize` in `app/bytes.ts`, decimal units); picking the picked
     name again clears it; a Browse cell over 60 characters, or with a line break, is cut to one line (a break shows as ↵)
@@ -1312,12 +1329,11 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     `states/ResetDialog.tsx` (`askReset`, which the ⋯ menu calls, and the dialog), `states/banners.tsx` (the engine-state
     banners above the editor and the log, and the reset and storage banners (the unused memory banner view was removed in the post-merge review); `DownloadFailedBanner` was built in
     step 3, "Try again" (`downloadAll`), "Dismiss", an error banner with no role, since the live region says it; 4d
-    reworded it: "Step 4d: decided words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Writes `dialog` (reset; it closes download and other-tab), `banners` (only `dismiss`). Calls `start`,
+    reworded it: "Step 4d: decided words" below). A failed start's `message` is for the visitor and `detail` is the cause (see "Engine controller choices"). Opens the reset dialog (`openDialog`) and closes download and other-tab (`closeDialog(kind)`), `banners` (only `dismiss`). Calls `start`,
     `ask()` (the declined banner's "Start engine" leads back to `asking`, section 5), `decline`,
     `stopDownload`, `takeOver` (while the take-over is in progress the state is `other-tab-taking`, for a few
     milliseconds, and a second press does nothing: 4d may mark "Use dofile in this tab" `aria-disabled` then, with the
-    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `editorCommands.focus` (through
-    `states/focus.ts` `focusStable`), `downloadAll`, and run.ts `refreshData`.
+    same label), `keepWaiting`, `reset`, `editorCommands.runFile` ("Run the file again"), `focusStable` (`ui/focus-targets.ts`), `downloadAll`, and run.ts `refreshData`.
     **As built (4d, to review).** `states/words.ts` holds the logic and the words with no view (Node-tested:
     `test/states.test.ts`), `states/clock.ts` the `useNow` timer of the download dialog (the machine has no clock; a view reads `Date.now()`). Every other elapsed time (the Break pill, the status bar, the running and stopping banners) reads the one `now` of `editor/clock.ts` and the status bar's `ticking` formatter, so they show the same seconds at every tick.
     S 2 and S 3 are one progress dialog: while `downloading` the header row "Downloading  14.2 of 48 MB · 6 s", the bar
@@ -1326,14 +1342,14 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     no bar, done stages keep their time (the download's as "48 MB · 7.1 s"). "Use dofile in this tab" is `aria-disabled`
     and `.off` (same label; ui.css's disabled look, as Run's) in `other-tab-taking`, and a press then does nothing.
     Reset (the maintainer settled it with C 1, 2026-11-13: B 5 and C 1 of the plan's list): `askReset()` is synchronous and
-    resets at once only while the engine is `ready` and nothing has run on it since it started (`state.ts` `engineRuns`, a
+    resets at once only while the engine is `ready` and nothing has run on it since it started (`state/run.ts` `engineRuns`, a
     count of runs begun on the live engine, 0 after a reset; `words.ts` `resetAsks`). Anything that has run asks, so a run
     that left only a global or a scalar asks too; it no longer describes the memory again. The dialog closes itself if the engine can no
     longer be reset. A banner with controls that goes away with the focus inside it (Dismiss, "Try again", the run ending
-    under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (`editorCommands.focus()`, which must focus at once; with a .dta tab
+    under "Don't reset: wait for it"; the editor's save-failed and run-changed banners and the Files pane's not-text banner too) hands the focus to the editor (the `editor` target, which focuses at once; with a .dta tab
     active its own target wins, the tab or Load, in one move), or to the top bar's "More actions" when that moved the
-    focus nowhere (the Editor pane hidden: another phone view) (`states/focus.ts` `focusStable`). `ui/Dialog.tsx` uses
-    the same `focusStable` when a dialog closes and its opener has left the page (a banner's button: another tab took
+    focus nowhere (the Editor pane hidden: another phone view) (`ui/focus-targets.ts` `focusStable`). `ui/modal-trap.ts` (which `ui/Dialog.tsx` and the
+    full-size view use) calls the same `focusStable` when a modal closes and its opener has left the page (a banner's button: another tab took
     the lock during a Break, then "Use dofile in this tab"), after the timers its answer set and only for a focus left on
     `<body>`; the opener lets go of the focus before `showModal()`, so the browser keeps no element to give it back to on
     `close()`, and the dialog gives it back itself, the same way: a focus its answer places (the close-tab dialog's "Don't
@@ -1392,7 +1408,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
     (focused, as Delete all's); the Log head's button "Clear…" (accessible name "Clear log…") and the menus' item "Clear
     log…" (the "…" says it asks first). They are disabled when `canClearLog()` (`run.ts`) is false: no log item but the
     head and the streaming run's text, and no graph. The view is `log/ClearLogDialog.tsx`. The focus goes back to the
-    opener (a menu's item: the menu's button); when the answer disabled the opener (the head's "Clear…"), `ui/Dialog.tsx`
+    opener (a menu's item: the menu's button); when the answer disabled the opener (the head's "Clear…"), `ui/modal-trap.ts`
     gives it to the editor or "More actions" (`focusStable`), as for an opener that has left the page.
   - A dialog kind or banner kind maps to its view in `dialogs.tsx` and `banners.tsx`; a new kind goes there, in
     `types.ts` and here together. A kind's entry there has its place (files, editor, log) and may add `phone: "every"`:
@@ -1416,8 +1432,8 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   it treats that as Cancel.
 - **Primitives** (`web/src/app/ui/`): `Dialog` (a native modal `<dialog>`: `title`, `actions`, `role`, `onCancel` = Esc,
   none = blocking; `data-autofocus` marks the first focus; focus returns to the opener when it unmounts, or, when the
-  opener has left the page, to the editor or "More actions" (`states/focus.ts` `focusStable`), after the timers its answer
-  set and only for a focus left on nothing, so it moves once; a bottom sheet
+  opener has left the page, to the editor or "More actions" (`ui/focus-targets.ts` `focusStable`), after the timers its answer
+  set and only for a focus left on nothing, so it moves once (`ui/modal-trap.ts` `useModalTrap`, which the full-size view uses too); a bottom sheet
   under 700 px); `MenuButton` and `openMenu({label, items, anchor | at})` (one menu at a time, in the top layer, arrows,
   Home, End (the menu owns its active item, a position among all its items; an item takes the focus from its own render), Esc returns focus, Tab closes and moves on from the trigger; an item is `{label, onSelect | href, hint,
   danger, disabled, keepOpen}` or `"rule"`; `keepOpen` leaves the menu open with the focus on the item, as the phone's
@@ -1475,7 +1491,7 @@ export const announce: ReadonlySignal<string>;           // the hidden live regi
   `store_error`), so an older run keeps its own "Go to line". The run-head's `first` is per engine: a reset starts
   again, and the run it cut counts for the old engine. "Clear log" empties the log but its head (the banner and the versions line, as a fresh page shows it; this reverses the first spec, "the head too") and the graphs, keeps
   a running run's text item, and graph numbers start again at 1. `graphs` keeps the last 20, so a graph is found by `n`,
-  never by a kept index. A run's graphs keep the theme it was sent with. Run sets `phoneTab` to "log" on a phone; a
+  never by a kept index. A run's graphs keep the theme it was sent with. Run calls `showPhone("log")` on a phone; a
   command does not. A run cut because another tab took the lock (kind "stopped") does not set `lastRun`.
 - **Layout as built.** One component tree for every width (the editor and the log are never mounted twice), in
   `web/src/app/App.tsx`, each phone piece next to its desktop counterpart (`PhoneTopBar` after `Toolbar`, the phone's ⋯

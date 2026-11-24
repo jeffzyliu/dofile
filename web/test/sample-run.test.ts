@@ -8,9 +8,11 @@ import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
-import { SAMPLE } from "../src/app/sample-files.ts";
+
 import { EngineClient } from "../src/engine/client.ts";
 import { openStore } from "../src/engine/store.ts";
+
+import { SAMPLE } from "../src/app/sample-files.ts";
 import { endWorkers, extraWheels, runOn, startWorker, nodeWorker as storeWorker, wheel } from "./harness.ts";
 
 after(endWorkers);

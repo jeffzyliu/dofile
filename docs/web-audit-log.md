@@ -441,3 +441,118 @@ On audit/2a-moves: the engine checks and N7 at 9f3ff3e, e2e at 10a06f9 (9f3ff3e 
 | `npm run check-pytest` | exit 0: 80 files, 0 timed out |
 | `uv run poe test tests` | 343 passed, 3 xfailed |
 | N7 against c5d7a85 (the phase's start baseline) | 81 shots, 0 px, no near-misses. Each side ran its own spec: c5d7a85 with 98efd19's spec (S1 changed the seed helpers, and the current spec cannot seed the old app), 9f3ff3e with its own |
+
+## Phase 2 (session 4, branch audit/2b-moves)
+
+Cut from `main` b24cbd8 (session 3's merge, #112) on 2026-11-23 and fast-forwarded to `main` 856e5b4 after #119 and
+#120 (the maintainer: the session's branch is fast-forwarded, never merged into). This section is begun before the
+session's items; its last pull request completes it (the pull requests, the gate checks).
+
+### After session 3's log
+
+Into `audit/2a-moves` after its end gate, then to `main` with it in #112 (b24cbd8), each with a fresh-context review:
+#113 (bcd8b96: `callWithTimeout`, `TurnTimeout`, `step` renamed `resume`), #114 (deff4d0: promise-returning functions
+`async`, the file queue; `save.test`'s `hold()` really holds), #115 (5a2d594: a Grit rule keeps every `Promise`-typed
+function `async`; `noFloatingPromises` tried, 36 findings, left off), #116 (0322ed6: `uploadNow`'s names), #117
+(539a4f5: the worker's op table as methods; `PageError`, `StoreError` in `types.ts`; `web/STYLE.md`), #118 (64dc997:
+the phone check's fixes: Upload files in the Files menu, a roomier phone strip, Go to line follows a rename).
+
+Straight to `main`, before the items:
+- #120 (2ab56d1): the e2e upload test split so each upload input's picker opens once per test. Cause found by an
+  investigator (Sonnet, high): on Firefox under load, a second picker from the same hidden input often never fires.
+  Not agent-reviewed; CI passed.
+- #119 (856e5b4): `web/STYLE.md`'s naming and spacing rules and its glossary, this plan's placement of them, two icebox
+  entries, and Biome's `useSingleVarDeclarator` with its fix. Builder and reviewer Sonnet, medium (accept); the commits
+  after the review and the rebase onto #120 were read by the orchestrator only.
+
+### Rule 7: what the re-check found
+
+Four read-only surveyors (Sonnet, medium) checked the lanes against `main` at b24cbd8.
+- **Lane a (R1).** The 22 graphics variables of `worker.ts` are intact; 01-F12 and 02-F5 are gone (C3); 01-F2 and 02-F4
+  hold, with some Node tests now (`waitStep`, `useNative`, the page's hand-over). `docs/lazy-matplotlib.md` is stale.
+- **Lane b (S2's second half, S3, the Run gate).** All open; S1a's nice-to-have (a comment at `actions.ts:55`) is gone.
+- **Lane c.** S5 no longer waits on S4 (`CommandBar` is not in `CommandLine.tsx`); `activeTab` is out of S6 (computed in
+  `documents.ts`); FullSize's timer is fixed. `runMoved` (#118) in `state.ts` imports `files/tree.ts`, against S0.
+- **Lane d (R5).** Untouched; S9a closed the `lib/` drift between the CI lists; the `.md` filter skips the root README.
+
+### The maintainer's decisions of this session (2026-11-23)
+
+The words are the maintainer's, as recorded in the sessions' notes; the plan's tables carry the effect.
+- **Merges.** Each item into `audit/2b-moves` by merge commit once its reviewer accepts and its checks pass: "yes".
+- **R1.** Its condition holds: "exp-e1c is a reference copy--icebox it for after the audit. idle-wait work is done for
+  now ... no other code should be touching graphics for now." Its note on Opus, high, with an Opus reviewer; Fable only
+  for a specific race, asked then. Both threads: "doing both the worker and page side code is fine"; the stale
+  `docs/lazy-matplotlib.md`: "fix it in R1"; the note's path `docs/design/lazy-graphics.md`: "that path is fine".
+- **A2, A3, A6.** "fix A2 in S2 with a failing test first"; A3 to the icebox ("yes"); "fix A6 this session as its own
+  PR". A6's behaviour: the copy is refused when the results changed.
+- **The Run gate.** "one rule for all of them" (the buttons, the banner and Ctrl/Cmd+Enter); on other tabs "greyed out
+  with the reason".
+- **S5.** `runText` as typed parts and a view; the phone strip and the desktop status bar drawn from one model: "add it to
+  S5 with short forms".
+- **S6.** Its registry gets a note first ("A, note first"), written early ("yes, write the S6 note early");
+  `selectGraph(n)`: "keep today's behaviour".
+- **R7r.** The path helpers move, not `runMoved`: "B, move the path helpers during R7r".
+- **Rule 9's files.** `e2e/seed-files.ts`, `e2e/seed-views.ts`: "agree with those names".
+- **Test-only code.** "a + b in a small item": the hook, the seeds and `data-engine` in one module loaded with `?test`
+  only; then `main.tsx` ordered by what depends on what. Not taken: switching them off in production.
+- **R5.** The root README counts in the `.md` filter ("A"); the one cold CI cache: "yes".
+- **Left to phase 3.** The 36 floating promises to W1 to W4 ("leave them to the sweeps"); the Save tests' mutation checks
+  to W5 ("leave them to W5").
+- **Icebox.** The iOS scroll-bar highlight, A3, and a symmetric matrix in the Results tab; the MCP tool's `get_matrix`
+  unchanged ("leave MCP as is and icebox the web display").
+- **The real-phone check at the session's end** adds the phone strip at 393 px and Go to line after a rename.
+- **Not now.** Splitting `check-snapshot` in CI and a shorter e2e timeout: "pass on this for now".
+
+### Flaky tests seen
+
+- `e2e/files.spec.ts:1227` (the upload test before #120's split), Firefox: deploy run 45113314919 attempts 1 and 2,
+  PR #119's run 45119420519. Fixed by #120; not yet run under load since.
+
+### Session 13 (2026-11-23, `audit/2b-moves` 6acd204 to 3dcf8f3)
+
+Into `audit/2b-moves` by merge commit, each after a fresh-context review and with every CI job green (#157 merged by
+the maintainer):
+- **R1c.** #147 (the client's machine, `#writePart` and progress derived), #151 (online once; race 10 checked live; the
+  `again` and damaged replies carry a name copy; a throwing `readPart` is not damage: nothing is posted and the next
+  graph retries, kept by the maintainer after it was asked), #152 (the note's docs), #156 (the note's Decisions entry).
+- **R7r.** #148: `state.ts` split into `app/paths.ts` and `state/{saved,engine,files,run,layout,notices}.ts`; the path
+  helpers moved with it; a fix round added `hookState()` with its test and an import test.
+- **C5.** #149: one `--tabbar-h` source and a fixed-height tab bar (the trade-off: a 300% font spills labels by 5 px, not
+  cut); four phone e2e cases; N7 0 px.
+- **2.21.** #150: the test hook's module; a data-engine poll that was always true removed from `landing.spec`.
+- **Imports.** #157: Biome `useImportType` in the separated style, organised imports in groups from general to
+  specific, and ruff's `I` rules for dofile's own Python.
+- **UI helper contract.** #158: every UI helper's focus hook takes an optional getter, and makes and returns the ref when
+  none is given; `focusStable` and `useFocusOnLeave` moved into `ui/`; the `ui/`-to-`states/` import cycle is gone;
+  `web/STYLE.md` has the contract; Biome rules keep `ui/` from importing `states/` or `files/` and
+  `focus-targets.ts` from importing `preact/hooks`.
+
+Into `main`:
+- #154 (d9078d0, fast-forward): pull requests test Python 3.14 only, on Ubuntu and macOS; `main` runs Ubuntu 3.12 to 3.14
+  and macOS 3.14.
+- #153 (9ffa8c9, rebase merge): each gate (`ci ok`, `web ok`, `lint ok`) fails unless every job of its own workflow's
+  run succeeded or was skipped. The old step passed with two cancelled macOS legs; the cause was legs that never got a
+  runner and were cancelled by GitHub at about 15 minutes. A first run of the gate failed because a job with no checkout
+  has no `web/`; `deploy.yml` needed `actions: read`. The deploys of both PRs succeeded, the second one the first live run
+  of the new gates.
+
+Reviews: R1c and R7r by Opus, high; the rest by Sonnet, medium, except the Biome rules, read by the orchestrator.
+
+### Flaky tests and CI sightings of session 13
+
+- macOS runner starvation: jobs cancelled at about 15 minutes with "not acquired by Runner" (#137 twice, #152, #155
+  twice); each re-run once, the first result recorded. #154 cut the macOS demand.
+- Pyodide could not load a corrupt `scipy` download in the unit tests (#157, run 45274956655); the re-run passed.
+- A Chromium dialog-reset failure once in `shots:baseline` locally (R7r); the re-run passed.
+- Not run locally: Firefox and desktop WebKit e2e, the whole e2e suite, real Safari or iPhone.
+
+### On hold and for later
+
+- Held by the maintainer: #155 (the session's pull request to `main`; a deep review first), the real-phone check, and
+  #137 (the re-vendor draft, green at 1e537fa).
+- The gate step was not exercised against a cancelled job; past 100 jobs a run, its per-page filter would error.
+- **Decisions for later.** A design note is to come, covering the exports' placement (inline against a bottom list or a
+  top block, weighing locality for reading and editing against clarity of the interface), the state modules' shape
+  (read-only exports with one writer object) and a layer-first layout with each view's helpers beside it. Imports are
+  to use named roots `#app/`, `#engine/`, `#stata/` and `#site/` through `package.json` `"imports"`, and the
+  build is in 3.0. Windows CI is the next item after the audit's stage.

@@ -1,15 +1,26 @@
 // The open tabs and their documents (docs/design/workspace.md, section 2): one record per tab, with no DOM; `tabs`,
 // `activeTab`, `selection` and each dot are computed from the records.
 
-import { Compartment, EditorState, type Extension, type StateEffect, type TransactionSpec } from "@codemirror/state";
+import type { Extension, StateEffect, TransactionSpec } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
-import { batch, computed, effect, type ReadonlySignal, type Signal, signal, untracked } from "@preact/signals-core";
+import type { ReadonlySignal, Signal } from "@preact/signals-core";
+import { batch, computed, effect, signal, untracked } from "@preact/signals-core";
 import { minimalSetup } from "codemirror";
-import { baseName, movedPath, within } from "../files/tree.ts";
-import { fileTurn } from "../files/turns.ts";
-import { addBanner, banners, dialog, dismiss, engine, lastRun, say, showToast, wrap } from "../state.ts";
-import { runOn } from "../states/predicates.ts";
+
 import type { OpenTab, RunHead } from "../types.ts";
+
+import { movedPath, within } from "../paths.ts";
+
+import { engine } from "../state/engine.ts";
+import { wrap } from "../state/layout.ts";
+import { addBanner, banners, dismiss, openDialog, say, showToast } from "../state/notices.ts";
+import { lastRun } from "../state/run.ts";
+
+import { baseName } from "../files/tree.ts";
+import { fileTurn } from "../files/turns.ts";
+import { runOn } from "../states/predicates.ts";
+
 import {
   languageOf,
   leaveFileDrops,
@@ -19,8 +30,10 @@ import {
   setRunLines,
   wholeLines,
 } from "./cm.ts";
-import { type MarkChange, onLastRun, onRunStart } from "./errormark.ts";
-import { editorText, type FileForm, fileText, followRun, formOf, savedForm } from "./ranover.ts";
+import type { MarkChange } from "./errormark.ts";
+import { onLastRun, onRunStart } from "./errormark.ts";
+import type { FileForm } from "./ranover.ts";
+import { editorText, fileText, followRun, formOf, savedForm } from "./ranover.ts";
 
 interface TextPart {
   kind: "text";
@@ -195,7 +208,7 @@ export function askClose(path: string): boolean {
   const tab = tabs.peek().find((t) => t.path === path);
   if (!tab) return false;
   if (tab.dirty) {
-    dialog.value = { d: "close-tab", path };
+    openDialog({ d: "close-tab", path });
     return false;
   }
   close(path);

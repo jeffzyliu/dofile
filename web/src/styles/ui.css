@@ -1533,6 +1533,8 @@ dialog.dialog.sheet {
   padding: 10px 16px;
 }
 .tabbar {
+  box-sizing: border-box;
+  height: var(--tabbar-h); /* set by app.css on a phone: the toast is placed against it */
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   background: var(--surface);

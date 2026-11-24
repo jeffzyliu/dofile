@@ -1,0 +1,38 @@
+# The files the memory snapshot is made of and checked by, as git pathspecs (from the repository root), one per line.
+# Read by snapshot-inputs.sh, which web.yml (the snapshot job's trigger) and .github/actions/build-web (the cache key) run;
+# test/snapshot-inputs.test.ts keeps it honest.
+
+# build: what makes the snapshot. The key of the cached snapshot hashes the tracked files these name: the dofile wheel
+# (engine source, README.md and LICENSE, which the wheel carries, dependencies), the extra wheels, the Pyodide version
+# (package-lock.json) and the scripts that build it. A runtime import of make-snapshot.ts must be here.
+[build]
+src/dofile
+pyproject.toml
+uv.lock
+README.md
+LICENSE
+web/package-lock.json
+web/wheels/*.whl
+web/scripts/make-snapshot.ts
+web/scripts/install-engine.ts
+web/scripts/build-id.ts
+web/scripts/lib/*.ts
+web/src/engine/snapshot.ts
+
+# check: the rest the snapshot job reads: the engine code its tests start, the tests that need a snapshot, the checks and
+# their corpus and Stata cases, and this job's own definition.
+[check]
+tests/conformance
+tests_opendta
+web/src/engine
+web/scripts/check-snapshot.ts
+web/scripts/snapshot-node.ts
+web/scripts/snapshot-inputs.txt
+web/scripts/snapshot-inputs.sh
+web/test/engine.test.ts
+web/test/snapshot-native.test.ts
+web/test/harness.ts
+web/test/node-worker.ts
+web/test/lazy-graphics.test.ts
+web/package.json
+.github/workflows/web.yml

@@ -12,12 +12,17 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Transferable as NodeTransferable } from "node:worker_threads";
 import { Worker } from "node:worker_threads";
+
 import { IDBFactory } from "fake-indexeddb";
-import { about, buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
-import { EngineClient } from "../src/engine/client.ts";
-import type { Answer } from "../src/engine/machine.ts";
-import { openStore } from "../src/engine/store.ts";
+
 import type { DataSummary, Matrix, ReadOps } from "../src/engine/types.ts";
+
+import type { Answer } from "../src/engine/machine.ts";
+
+import { EngineClient } from "../src/engine/client.ts";
+import { openStore } from "../src/engine/store.ts";
+
+import { about, buildId, inputs, readManifest, staleness } from "../scripts/build-id.ts";
 import { endWorkers, extraWheels, live, runOn, startWorker, nodeWorker as storeWorker, wheel } from "./harness.ts";
 
 /** An op's answer that is not `{ error }` (the tests read the fields of one they expect to succeed). */
@@ -61,6 +66,7 @@ function pageStore() {
 // values are compared as `list` prints them), and state inside Python that no command shows (a cache, the heap).
 // `graphs`: list the graphs in memory too. Only `graph dir` lists them, and it sets r(list) (as Stata's does), so it is
 // in the probe only once r() is already what it leaves: the test runs `graph dir` first.
+let latestRunId = 0; // the number of the results the last fingerprint's probe left: what a matrix read must name
 async function fingerprint(eng: EngineClient, graphs: boolean) {
   // the variables in order, with type, format and labels; the counts; the file name
   const described = await eng.query("describe");
@@ -79,18 +85,26 @@ async function fingerprint(eng: EngineClient, graphs: boolean) {
     [false, false],
     "the probe leaves r() and e() as they were",
   );
+  const { runId, ...results } = probe.results!; // each probe is a run: its number is not the engine's state
+  latestRunId = runId;
   const matrices: Record<string, Matrix> = {}; // the values of each matrix of r() and e()
   for (const set of ["e", "r"] as const) {
-    for (const name of Object.keys(probe.results![set].matrices))
-      matrices[`${set}(${name})`] = await eng.query("matrix", { name: `${set}(${name})` });
+    for (const name of Object.keys(results[set].matrices))
+      matrices[`${set}(${name})`] = (await eng.query("matrix", { name: `${set}(${name})`, runId })) as Matrix;
   }
-  return { described, rows, macros, data_bytes, files, results: probe.results, matrices, log: probe.log };
+  return { described, rows, macros, data_bytes, files, results, matrices, log: probe.log };
 }
 // Each read op, with arguments other than the defaults. A new read op fails the check until it has a row here.
+// (A matrix's runId is set to the latest results' when it is sent.)
 const READ_ARGS: { [K in keyof ReadOps]: ReadOps[K]["args"][] } = {
   describe: [{ vars: "x s", offset: 1, limit: 1 }, { vars: "nosuchvar" }],
   describe_file: [{ path: "fp.dta" }, { path: "nothing.dta" }],
-  matrix: [{ name: "e(b)" }, { name: "e(V)" }, { name: "M" }, { name: "r(nothing)" }],
+  matrix: [
+    { name: "e(b)", runId: 0 },
+    { name: "e(V)", runId: 0 },
+    { name: "M", runId: 0 },
+    { name: "r(nothing)", runId: 0 },
+  ],
   macros: [undefined],
   browse: [{ vars: "y", offset: 5, limit: 7 }, { limit: 1000 }],
   memory: [undefined],
@@ -100,6 +114,25 @@ const READ_ARGS: { [K in keyof ReadOps]: ReadOps[K]["args"][] } = {
 
 /** The stages a start said, in order, and how it ended. */
 const stagesOf = (said: Answer<"start-worker">[]) => said.map((a) => (a.type === "stage" ? a.stage : a.type));
+
+test("matrix: a run whose op fails after the engine ran has replaced the results too: the old number is refused", {
+  timeout: 120_000,
+}, async () => {
+  const { store } = pageStore();
+  const createWorker = () => storeWorker({ store, failParse: "UNREADABLE" });
+  const eng = new EngineClient({ createWorker, wheel, extraWheels, store });
+  await startWorker(eng);
+  const ask = (runId: number) => eng.query("matrix", { name: "e(b)", runId });
+  const shown = (await runOn(eng, "clear\nset obs 20\ngenerate x = _n\ngenerate y = x + mod(_n, 3)\nregress y x"))
+    .results!;
+
+  // the engine ran the regression and its log came back unreadable: the page keeps `shown`, e(b) is the new one
+  await assert.rejects(runOn(eng, 'quietly regress y\ndisplay "UNREADABLE"'), { kind: "op" });
+  assert.deepEqual(await ask(shown.runId), { changed: true });
+
+  const next = (await runOn(eng, "regress y x")).results!; // the next run's results carry the new number
+  assert.deepEqual(((await ask(next.runId)) as Ok<Matrix>).cols, ["x", "_cons"]);
+});
 
 test("engine worker: files, run, describe, matrix, Break, a new worker after end()", {
   timeout: 180_000,
@@ -154,9 +187,35 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     const reg = await runOn(eng, "regress lwage yrsed, robust");
     assert.equal(reg.rc, 0, reg.log);
     assert.equal(reg.results!.e.macros.vcetype, "Robust");
-    const b = (await eng.query("matrix", { name: "e(b)" })) as Ok<Matrix>;
+    const b = (await eng.query("matrix", { name: "e(b)", runId: reg.results!.runId })) as Ok<Matrix>;
     assert.deepEqual(b.cols, ["yrsed", "_cons"]);
     assert.equal((await runOn(eng, "shell ls")).rc, 199);
+  });
+
+  // The engine answers one op at a time, in the order they came: a run ahead of a matrix request has replaced the
+  // results the request was made for.
+  await t.test("matrix: refused when a later run replaced the results the request names", async () => {
+    const ask = (runId: number) => eng.query("matrix", { name: "e(b)", runId });
+    const cols = async (answer: ReturnType<typeof ask>) => ((await answer) as Ok<Matrix>).cols;
+    const shown = (await runOn(eng, "regress lwage yrsed")).results!;
+
+    const ahead = ask(shown.runId); // before the next run: answered for the results it names
+    const next = runOn(eng, "regress lwage");
+    assert.deepEqual(await cols(ahead), ["yrsed", "_cons"]);
+    const newer = (await next).results!;
+    assert.ok(newer.runId > shown.runId, "each run's results have a number of their own");
+
+    const running = runOn(eng, "regress lwage yrsed"); // a run on its way, then the request: refused, not answered
+    const behind = ask(newer.runId); // with the later run's matrix
+    assert.deepEqual(await behind, { changed: true });
+    const latest = (await running).results!;
+
+    const twice = [runOn(eng, "regress lwage"), runOn(eng, "regress lwage yrsed, robust")]; // two runs ahead
+    const stale = ask(latest.runId);
+    const [, last] = await Promise.all(twice);
+    assert.deepEqual(await stale, { changed: true });
+    assert.deepEqual(await cols(ask(last.results!.runId)), ["yrsed", "_cons"], "the latest results: answered");
+    assert.deepEqual(await ask(shown.runId), { changed: true }, "an earlier run's number");
   });
 
   await t.test("the compiled-in ABOUT (scripts/build-id.ts, about()) is what the engine itself answers at boot", () => {
@@ -201,7 +260,8 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
         assert.deepEqual(await fingerprint(eng, graphs), before, "fingerprint() twice in a row");
         for (const op of Object.keys(READ_ARGS) as (keyof ReadOps)[]) {
           for (const args of READ_ARGS[op]) {
-            const answers = [await eng.query(op, args), await eng.query(op, args)];
+            const sent = op === "matrix" ? { ...args, runId: latestRunId } : args;
+            const answers = [await eng.query(op, sent), await eng.query(op, sent)];
             assert.deepEqual(answers[1], answers[0], `${op}: the same answer twice`);
             assert.deepEqual(await fingerprint(eng, graphs), before, `${op} ${JSON.stringify(args)} changed something`);
           }
@@ -260,6 +320,7 @@ test("engine worker: files, run, describe, matrix, Break, a new worker after end
     assert.equal(r.rc, 1, r.log);
     const after = await runOn(eng, "summarize x");
     assert.equal(after.rc, 0);
+    assert.ok(after.results!.runId > r.results!.runId, "a run stopped by Break has results of its own: it is counted");
     assert.equal(after.nobs, 100);
   });
 

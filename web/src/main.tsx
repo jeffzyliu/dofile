@@ -2,24 +2,27 @@
 // module that constructs or connects anything (test/imports.test.ts checks it).
 import "./styles/ui.css";
 import "./styles/app.css";
+
 import { effect } from "@preact/signals";
 import { render } from "preact";
-import { App } from "./app/App";
-import { activeTab, selection, tabs } from "./app/editor/documents.ts";
-import { documentSeeds } from "./app/editor/seeds.ts";
-import { breakRun, connectEngine, connectRun, drops, lost, open, reset, start } from "./app/engine.ts";
-import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
-import { focusWanted } from "./app/files/FilesPane.tsx";
+
+import * as Layout from "./app/state/layout.ts";
+
+import { connectEngine, connectRun, lost, open } from "./app/engine.ts";
 import { connectFiles } from "./app/files.ts";
-import { handlers, runCode } from "./app/run.ts";
-import * as S from "./app/state.ts";
+import { handlers } from "./app/run.ts";
 import { store } from "./app/store.ts";
-import { applyTheme } from "./app/theme.ts";
-import { watchViewport } from "./app/viewport.ts";
-import { watchWakeLock } from "./app/wakelock.ts";
 import { EngineClient } from "./engine/client.ts";
 import { capLine } from "./engine/memcap.ts";
 import { tabLock } from "./engine/tab.ts";
+
+import { tabs } from "./app/editor/documents.ts";
+
+import { App } from "./app/App";
+import { brotli, kbLog, memcap, snapshotStart, testMode } from "./app/env";
+import { applyTheme } from "./app/theme.ts";
+import { watchViewport } from "./app/viewport.ts";
+import { watchWakeLock } from "./app/wakelock.ts";
 
 const here = (path: string) => new URL(`${import.meta.env.BASE_URL}${path}`, location.href).href;
 
@@ -42,22 +45,20 @@ console.info(capLine(memcap));
 applyTheme();
 const narrow = matchMedia("(max-width: 699.98px)");
 const fit = () => {
-  S.layout.value = narrow.matches ? "phone" : "desktop";
+  Layout.setLayout(narrow.matches ? "phone" : "desktop");
 };
 fit();
 narrow.addEventListener("change", fit);
-// Without ?kblog the overlay's module is not loaded.
-const viewport = watchViewport({ enabled: () => S.isPhone.value });
-if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
+
+const viewport = watchViewport({ enabled: () => Layout.isPhone.value });
 effect(() => {
-  S.isPhone.value;
+  Layout.isPhone.value;
   viewport.update();
 });
+// Without ?kblog the overlay's module is not loaded.
+if (kbLog) void import("./app/kblog.ts").then((m) => m.showKbLog());
+
 watchWakeLock();
-// the engine's state on <html>, for the tests
-effect(() => {
-  document.documentElement.dataset.engine = S.engine.value.s;
-});
 addEventListener("beforeunload", (e) => {
   if (tabs.value.some((t) => t.dirty)) e.preventDefault();
 });
@@ -66,26 +67,9 @@ connectFiles(store);
 connectRun(handlers);
 connectEngine({ client, lock: tabLock({ onLost: lost }), snapshot: snapshotStart, manual: testMode === "manual" });
 
-// The test hook, only with ?test in the URL. With ?test=manual the page starts no engine until the test calls start().
-// The store is blocked until the tab lock answers: wait for `!store.blocked` before writing.
-const testHook = {
-  engine: client,
-  store,
-  start,
-  persisted: () => S.persisted.value,
-  engineBytes: S.engineBytes,
-  state: { ...S, tabs, activeTab }, // one object: the signals, and the tabs from their owner
-  documents: documentSeeds,
-  run: (code: string) => runCode(code, { kind: "file", path: "test.do", fresh_locals: true }),
-  breakRun,
-  reset,
-  selection,
-  drops,
-  focusWanted,
-};
-/** The type of `window.__dofile`, for e2e/hook.ts. */
-export type DofileHook = typeof testHook;
-if (testMode !== null) Object.assign(window, { __dofile: testHook });
+// The test hook and what only it needs (the tab seeds, <html data-engine>): a module loaded only with ?test in the URL.
+// With ?test=manual the page starts no engine until the test calls start().
+if (testMode !== null) (await import("./app/test-hook.ts")).installTestHook(client);
 
 render(<App />, document.getElementById("app")!);
 open();

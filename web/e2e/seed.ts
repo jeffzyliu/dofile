@@ -2,6 +2,7 @@
 // The signals the views may only read are written here through a cast (a test is no view).
 import type { Page } from "@playwright/test";
 import type { Signal } from "@preact/signals";
+
 import type { DofileHook } from "./hook";
 
 type State = DofileHook["state"];
@@ -24,7 +25,7 @@ export const showEngine = (page: Page, engine: EngineSeed, dialog?: Dialog) =>
   page.evaluate(
     (v) => {
       (window.__dofile.state.engine as Writable<"engine">).value = v.engine as EngineState;
-      if (v.dialog) window.__dofile.state.dialog.value = v.dialog;
+      if (v.dialog) window.__dofile.state.openDialog(v.dialog);
     },
     { engine, dialog },
   );
@@ -34,7 +35,7 @@ export const showPhoneTab = (page: Page, tab: PhoneTab, also: { toast?: string; 
   page.evaluate(
     (v) => {
       const S = window.__dofile.state;
-      S.phoneTab.value = v.tab;
+      S.showPhone(v.tab);
       if (v.also.engine) (S.engine as Writable<"engine">).value = v.also.engine as EngineState;
       if (v.also.toast !== undefined) S.showToast(v.also.toast);
     },
@@ -44,7 +45,7 @@ export const showPhoneTab = (page: Page, tab: PhoneTab, also: { toast?: string; 
 /** The theme, as the page sets it (signal and `data-theme`). */
 export const showTheme = (page: Page, theme: "light" | "dark") =>
   page.evaluate((t) => {
-    window.__dofile.state.theme.value = t;
+    window.__dofile.state.setTheme(t);
     document.documentElement.dataset.theme = t;
   }, theme);
 
@@ -57,12 +58,12 @@ export const showUnsplitOutput = (page: Page, tab: "graph" | "log") =>
 
 export const openDialog = (page: Page, dialog: Dialog) =>
   page.evaluate((d) => {
-    window.__dofile.state.dialog.value = d;
+    window.__dofile.state.openDialog(d);
   }, dialog);
 
 export const closeDialog = (page: Page) =>
   page.evaluate(() => {
-    window.__dofile.state.dialog.value = null;
+    window.__dofile.state.closeDialog();
   });
 
 export const showToast = (page: Page, text: string) => page.evaluate((t) => window.__dofile.state.showToast(t), text);
@@ -90,7 +91,7 @@ export const seedGraphs = (page: Page, graphs: Graphs, { full = false } = {}) =>
   page.evaluate(
     (v) => {
       window.__dofile.state.runWriter.graphs.value = v.graphs;
-      if (v.full) window.__dofile.state.graphFull.value = true;
+      if (v.full) window.__dofile.state.showFullSize();
     },
     { graphs, full },
   );
@@ -114,7 +115,7 @@ export const seedLastRun = (page: Page, run: LastRun) =>
 /** Open the full-size graph view. */
 export const showGraphFull = (page: Page) =>
   page.evaluate(() => {
-    window.__dofile.state.graphFull.value = true;
+    window.__dofile.state.showFullSize();
   });
 
 /** Give an open text tab an edit (a space at its end) without typing, so it is unsaved. */
@@ -132,7 +133,7 @@ export const showTabs = (page: Page, tabs: Tabs, active: string | null, phoneTab
   page.evaluate(
     (v) => {
       window.__dofile.documents.showTabs(v.tabs, v.active);
-      if (v.phoneTab) window.__dofile.state.phoneTab.value = v.phoneTab;
+      if (v.phoneTab) window.__dofile.state.showPhone(v.phoneTab);
     },
     { tabs, active, phoneTab },
   );
@@ -146,7 +147,7 @@ export const seedEditorBox = (
   page.evaluate(
     (v) => {
       const d = window.__dofile;
-      d.state.dialog.value = null;
+      d.state.closeDialog();
       (d.state.engine as Writable<"engine">).value = v.engine as EngineState;
       d.documents.showTabs(v.tabs, v.active, v.selection?.[1] ?? 1);
       d.documents.selectLines(v.selection);

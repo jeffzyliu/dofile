@@ -2,10 +2,13 @@
 // Home and End go to the ends. Each tab is `${idPrefix}-tab-${id}`; the selected one controls
 // `${idPrefix}-panel-${id}`: give the panel that id, role="tabpanel" and aria-labelledby the tab (tabpanelProps does
 // it).
-import { type Signal, useSignal } from "@preact/signals";
+import type { Signal } from "@preact/signals";
+import { useSignal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 import { useRef } from "preact/hooks";
+
 import { useFocusRequest } from "./focus-hooks.ts";
+import { roveKey } from "./keys.ts";
 
 export interface TabSpec<T extends string> {
   id: T;
@@ -33,19 +36,15 @@ export function Tablist<T extends string>({
   const list = useRef<HTMLDivElement>(null);
   const asked = useSignal<T | null>(null); // the tab a key moved to: it takes the focus when it is drawn
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.altKey || e.ctrlKey || e.metaKey) return; // Alt+Left is the browser's Back
-    const i = tabs.findIndex((t) => t.id === value);
-    const next = {
-      ArrowRight: i + 1,
-      ArrowDown: i + 1,
-      ArrowLeft: i - 1,
-      ArrowUp: i - 1,
-      Home: 0,
-      End: tabs.length - 1,
-    }[e.key];
-    if (next === undefined) return;
+    const next = roveKey(
+      e,
+      tabs.findIndex((t) => t.id === value),
+      tabs.length,
+      { axis: "both", wrap: true },
+    );
+    if (next === null) return;
     e.preventDefault();
-    const t = tabs[(next + tabs.length) % tabs.length];
+    const t = tabs[next];
     asked.value = t.id;
     onChange(t.id);
   };
@@ -59,7 +58,7 @@ export function Tablist<T extends string>({
           idPrefix={idPrefix}
           tabClass={tabClass}
           asked={asked}
-          list={list}
+          list={() => list.current}
           onSelect={() => onChange(t.id)}
         />
       ))}
@@ -82,18 +81,16 @@ function Tab<T extends string>({
   idPrefix: string;
   tabClass: string;
   asked: Signal<T | null>;
-  list: { current: HTMLElement | null };
+  list: () => HTMLElement | null;
   onSelect: () => void;
 }) {
-  const el = useRef<HTMLButtonElement>(null);
-  useFocusRequest(
-    asked.value === t.id,
-    el,
-    () => {
+  const el = useFocusRequest<HTMLButtonElement>({
+    asked: asked.value === t.id,
+    end: () => {
       asked.value = null;
     },
-    (at) => !!at && !!list.current?.contains(at),
-  );
+    from: (focused) => !!focused && !!list()?.contains(focused),
+  });
   return (
     <button
       ref={el}

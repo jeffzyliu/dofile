@@ -3,11 +3,12 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
+
 import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { effect } from "@preact/signals-core";
 
-const S = await import("../src/app/state.ts");
+const { S } = await import("./state-all.ts");
 const D = await import("../src/app/editor/documents.ts");
 
 const type = (path: string, at: number, insert: string) => D.update(path, { changes: { from: at, insert } });
@@ -15,7 +16,7 @@ const type = (path: string, at: number, insert: string) => D.update(path, { chan
 beforeEach(() => {
   for (const t of D.tabs.value) D.close(t.path);
   for (const b of S.banners.value) S.dismiss(b);
-  S.dialog.value = null;
+  S.closeDialog();
 });
 
 test("addText and addDta open tabs at the end, each text tab with its document from the start; activate makes one active", () => {

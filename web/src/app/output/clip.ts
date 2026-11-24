@@ -1,9 +1,12 @@
 // What the Output tabs do with the clipboard and with a graph's PNG (base64 text): copy text or an image, download the
 // PNG (on a phone, the share sheet). Each says so with a toast.
 
-import { saveAs } from "../files/save.ts";
-import { isPhone, showToast } from "../state.ts";
 import type { Graph } from "../types.ts";
+
+import { isPhone } from "../state/layout.ts";
+import { showToast } from "../state/notices.ts";
+
+import { saveAs } from "../files/save.ts";
 
 /** Copy `text`. The clipboard API where the page may use it, else the old way through a hidden field. A toast says
  *  "Copied", or that the browser refused. Resolves whether it was copied. */

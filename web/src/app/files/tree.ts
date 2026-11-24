@@ -1,7 +1,9 @@
 // The file tree's plain logic (docs/design/SPEC.md, section 3.1), with no DOM and no store, so the Node tests run it:
-// the rows of the tree, sizes, names and paths. FilesPane.tsx draws the rows; actions.ts changes files and tabs.
-import { CONTROL } from "../../stata/quote.ts";
+// the rows of the tree, sizes, names and paths. TreeRow.tsx draws the rows; ops.ts and upload.ts change files.
+
 import type { FileInfo } from "../types.ts";
+
+import { CONTROL } from "../../stata/quote.ts";
 
 export interface Row {
   path: string;
@@ -18,11 +20,6 @@ export const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 export const parentOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
 /** `name` inside the folder `dir` ("" is the top). */
 export const joinPath = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
-/** Whether `path` is `top` or lies under it. */
-export const within = (path: string, top: string) => path === top || path.startsWith(`${top}/`);
-/** `path` after `from` was renamed to `to` (a path not under `from` stays). */
-export const movedPath = (path: string, from: string, to: string) =>
-  within(path, from) ? to + path.slice(from.length) : path;
 /** `dir` if the list has it as a folder, else the nearest folder above it that it has, else "" (the top): what a folder
  *  that has gone counts as. A folder with no record of its own counts when a path lies under it (as treeRows). */
 export function folderOrAbove(dir: string, files: readonly FileInfo[]): string {

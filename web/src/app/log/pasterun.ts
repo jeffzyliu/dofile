@@ -1,12 +1,19 @@
 // The command line's runner for pasted lines (paste.ts runInTurn takes it): one line run as Enter would run it, and the
 // wait for its end.
 import { effect } from "@preact/signals-core";
+
 import type { RunResult } from "../../engine/types.ts";
+
+import { engine } from "../state/engine.ts";
+import { lastRun } from "../state/run.ts";
+
 import { runCommand } from "../run.ts";
 import { noEngine } from "../start.ts";
-import { engine, lastRun } from "../state.ts";
+
 import { takesRun } from "../states/predicates.ts";
-import { type InTurn, inTurnWords, pastedLines, type RunOne } from "./paste.ts";
+
+import type { InTurn, RunOne } from "./paste.ts";
+import { inTurnWords, pastedLines } from "./paste.ts";
 
 /** What a paste into the command line does, decided before anything is changed:
  *   "ordinary"  the browser pastes it: text with no line break (pastedLines), and any text while there is no engine.

@@ -1,14 +1,18 @@
 // The build's identity. buildId() makes the id on both sides: the page (vite.config.ts compiles in the id of the files
 // it is built from) and the list (start-files.json carries the id of what the snapshot was built from). The client
 // compares them (checkBuild). One stamp per `vite build` is given to both.
+// staged() is the same for the files scripts/stage.ts copies into public/ (stage.json). Both records are compared with
+// inputs(), and each message names its fix.
 // `node scripts/build-id.ts [--warn]` exits 0 when public/snapshot/ is of this checkout's wheels and Pyodide, else 1
 // with the reason (SNAPSHOT_QUALITY and the other SNAPSHOT_ settings, when set, must be what the snapshot was built with;
 // `--warn` prefixes "warning: ", for `npm run dev`, which starts anyway). Imported by the tests, so .ts.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import type { About, SnapshotManifest } from "../src/engine/types.ts";
+
 import { extraWheelsDir, wheels } from "./lib/wheels.ts";
 
 /** What a snapshot is built from, and what the page is built against. `extraWheels`: file name -> SHA-256. */
@@ -58,7 +62,8 @@ export function askedKnobs(env: NodeJS.ProcessEnv = process.env): Partial<Snapsh
 }
 
 const web = new URL("..", import.meta.url);
-export const snapshotDir = fileURLToPath(new URL("public/snapshot", web));
+export const publicDir = fileURLToPath(new URL("public", web));
+export const snapshotDir = `${publicDir}/snapshot`;
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 /** The inputs of this checkout: the newest wheel in web/.wheel (`npm run wheel`), web/wheels/*.whl, the pyodide npm package. */
@@ -102,6 +107,30 @@ export function buildId(
     .digest("hex");
 }
 
+/** How a record's wheels and Pyodide version differ from `current`, one sentence each; `what` names the record ("snapshot",
+ *  "staged"). */
+function differences(what: string, record: Partial<BuildInputs>, current: BuildInputs): string[] {
+  const why: string[] = [];
+  if (record.wheelHash !== current.wheelHash)
+    why.push(
+      `the dofile wheel differs (${what} ${record.wheelHash?.slice(0, 12)}, build ${current.wheelHash.slice(0, 12)})`,
+    );
+  if (!record.extraWheels) why.push(`the ${what} has no record of the extra wheels`);
+  else {
+    const names = [...new Set([...Object.keys(record.extraWheels), ...Object.keys(current.extraWheels)])].sort();
+    for (const n of names) {
+      if (record.extraWheels[n] !== current.extraWheels[n]) {
+        why.push(
+          `the extra wheel ${n} differs (${what} ${record.extraWheels[n]?.slice(0, 12) ?? "none"}, build ${current.extraWheels[n]?.slice(0, 12) ?? "none"})`,
+        );
+      }
+    }
+  }
+  if (record.pyodide !== current.pyodide)
+    why.push(`the Pyodide version differs (${what} ${record.pyodide}, build ${current.pyodide})`);
+  return why;
+}
+
 /** Why the snapshot whose manifest is `record` is not of `current`, with what to run; null: it is. `asked`: settings the
  *  caller wants it built with (`askedKnobs()`): each is compared with the record's, and only those; none asked, none checked. */
 export function staleness(
@@ -109,28 +138,36 @@ export function staleness(
   current: BuildInputs,
   asked: Partial<SnapshotKnobs> = {},
 ): string | null {
-  const why: string[] = [];
-  if (record.wheelHash !== current.wheelHash)
-    why.push(
-      `the dofile wheel differs (snapshot ${record.wheelHash?.slice(0, 12)}, build ${current.wheelHash.slice(0, 12)})`,
-    );
-  if (!record.extraWheels) why.push("the snapshot has no record of the extra wheels (built before they were recorded)");
-  else {
-    const names = [...new Set([...Object.keys(record.extraWheels), ...Object.keys(current.extraWheels)])].sort();
-    for (const n of names) {
-      if (record.extraWheels[n] !== current.extraWheels[n]) {
-        why.push(
-          `the extra wheel ${n} differs (snapshot ${record.extraWheels[n]?.slice(0, 12) ?? "none"}, build ${current.extraWheels[n]?.slice(0, 12) ?? "none"})`,
-        );
-      }
-    }
-  }
-  if (record.pyodide !== current.pyodide)
-    why.push(`the Pyodide version differs (snapshot ${record.pyodide}, build ${current.pyodide})`);
+  const why = differences("snapshot", record, current);
   for (const k of Object.keys(asked) as (keyof SnapshotKnobs)[])
     if (record[k] !== asked[k])
       why.push(`the snapshot was built with ${k} ${record[k] ?? "(not recorded)"}, ${asked[k]} was asked for`);
   return why.length ? `the snapshot is stale: ${why.join("; ")}. Run \`npm run snapshot\` in web/` : null;
+}
+
+/** public/stage.json (scripts/stage.ts): the inputs the staged files are of, and each file's size in bytes by its path under
+ *  public/. Written last, so a stage that died half-way leaves none. */
+export interface StageRecord extends BuildInputs {
+  files: Record<string, number>;
+}
+
+/** Why the files in `dir` (public/) are not the staging of `current`, with what to run; null: they are. Reads only. Every
+ *  file the record names must exist with the recorded size, so a deleted or cut-short file is told too. */
+export function staged(current: BuildInputs, dir: string = publicDir): string | null {
+  const fix = "Run `npm run stage` in web/";
+  let record: Partial<StageRecord>;
+  try {
+    record = JSON.parse(readFileSync(`${dir}/stage.json`, "utf8"));
+  } catch {
+    return `nothing is staged in ${dir} (no readable stage.json). ${fix}`;
+  }
+  const why = differences("staged", record, current);
+  for (const [path, size] of Object.entries(record.files ?? {})) {
+    const have = existsSync(`${dir}/${path}`) ? statSync(`${dir}/${path}`).size : null;
+    if (have === null) why.push(`${path} is missing`);
+    else if (have !== size) why.push(`${path} is ${have} bytes, staged as ${size}`);
+  }
+  return why.length ? `the staged files are stale: ${why.join("; ")}. ${fix}` : null;
 }
 
 /** public/snapshot/manifest.json, the snapshot's build record; null: no snapshot. */

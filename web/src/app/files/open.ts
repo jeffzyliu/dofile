@@ -1,8 +1,13 @@
 // Opening a file (docs/design/SPEC.md, section 3.11): every way to open one (the tree, the phone's file switcher, "Go
 // to line") goes through openFile. Plain TypeScript (no JSX), so the Node tests can run it.
+
+import { isPhone, outputTab, showPhone } from "../state/layout.ts";
+import { addBanner, banners, dismiss, say, showToast } from "../state/notices.ts";
+import { showFullSize } from "../state/run.ts";
+
 import { activate, addDta, addText, tabs } from "../editor/documents.ts";
+
 import { addFileGraph } from "../graphs.ts";
-import { addBanner, banners, dismiss, graphFull, isPhone, outputTab, phoneTab, say, showToast } from "../state.ts";
 import { baseName, extOf } from "./tree.ts";
 import { fileTurn } from "./turns.ts";
 
@@ -27,7 +32,7 @@ export function toBase64(bytes: Uint8Array): string {
 /** Make `path` the active tab; on a phone show the Editor view. */
 function show(path: string) {
   activate(path);
-  if (isPhone.value) phoneTab.value = "editor";
+  if (isPhone.value) showPhone("editor");
 }
 
 /** Open `path` from the store as section 3.11 says. Resolves once it is shown; a file
@@ -53,7 +58,7 @@ export async function openFile(path: string): Promise<void> {
     }
     if (ext === ".png") {
       addFileGraph(path, toBase64(bytes));
-      if (isPhone.value) graphFull.value = true;
+      if (isPhone.value) showFullSize();
       else outputTab.value = "graph";
       return;
     }

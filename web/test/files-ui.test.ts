@@ -1,21 +1,24 @@
 // The plain logic of src/app/files/*.ts on the real store module over fake-indexeddb, no DOM: tree rows and names
-// (tree.ts), opening a file (open.ts), and the file panel and tab actions (actions.ts). The tabs and their documents
-// are the real editor/documents.ts, with no view.
+// (tree.ts), opening a file (open.ts), rename, new and delete (ops.ts), and upload (upload.ts). The tabs and their
+// documents are the real editor/documents.ts, with no view.
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import "fake-indexeddb/auto";
 import { effect } from "@preact/signals-core";
-import type { ClashAnswer, ClashNow } from "../src/app/files/actions.ts";
 
-const S = await import("../src/app/state.ts");
+import type { ClashAnswer, ClashFacts, Incoming } from "../src/app/files/upload.ts";
+
+const { S } = await import("./state-all.ts");
 const { store } = await import("../src/app/store.ts");
 const { connectFiles, refresh } = await import("../src/app/files.ts");
 const D = await import("../src/app/editor/documents.ts");
 const { openFile, toBase64 } = await import("../src/app/files/open.ts");
-const A = await import("../src/app/files/actions.ts");
+const Ops = await import("../src/app/files/ops.ts");
+const Up = await import("../src/app/files/upload.ts");
 const { fileTurn } = await import("../src/app/files/turns.ts");
 const T = await import("../src/app/files/tree.ts");
+const P = await import("../src/app/paths.ts");
 const { formatSize } = await import("../src/app/bytes.ts");
 const { fileCommand } = await import("../src/stata/quote.ts");
 
@@ -35,11 +38,11 @@ async function reset(files: Record<string, string | Uint8Array> = {}) {
     await store.write(path, typeof data === "string" ? enc(data) : data);
   await refresh();
   for (const t of D.tabs.value) D.close(t.path);
-  S.dialog.value = null;
-  S.layout.value = "desktop";
-  S.phoneTab.value = "files";
+  S.closeDialog();
+  S.setLayout("desktop");
+  S.showPhone("files");
   S.outputTab.value = "data";
-  S.graphFull.value = false;
+  S.closeFullSize();
   for (const b of S.banners.value) S.dismiss(b);
 }
 beforeEach(() => reset());
@@ -132,8 +135,8 @@ test("names and paths: sizes, a free name, what is wrong with a new name (a cont
   assert.equal(T.rowCount("x"), "1 row");
   assert.match(T.nameProblem("a\nb.do", "", taken) ?? "", /line break/);
   assert.match(T.nameProblem("a\tb.do", "", taken) ?? "", /line break/);
-  assert.equal(T.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
-  assert.equal(T.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
+  assert.equal(P.movedPath("data/raw/a.csv", "data", "input"), "input/raw/a.csv");
+  assert.equal(P.movedPath("database.do", "data", "input"), "database.do", "a name that only starts the same stays");
   const info = (path: string, dir = false) => ({ path, dir, size: 0, mtime: 0 });
   const kept = [info("a.do"), info("data", true), info("data/c.do"), info("pkg/m.do")];
   assert.equal(T.folderOrAbove("data", kept), "data");
@@ -173,23 +176,23 @@ test("openFile: a text file gets a tab with its document, made active; opened ag
 test("openFile on a phone shows the Editor view for a text or .dta tab; a .png goes to the graphs (desktop: the Graph tab; phone: full size)", async () => {
   const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 250]);
   await reset({ "a.do": "x", "data/w.dta": Uint8Array.from([0x72, 0xff]), "out/g.png": png });
-  S.layout.value = "phone";
+  S.setLayout("phone");
   await openFile("a.do");
   assert.equal(S.phoneTab.value, "editor");
-  S.phoneTab.value = "files";
+  S.showPhone("files");
   await openFile("data/w.dta");
   assert.equal(S.phoneTab.value, "editor");
   assert.deepEqual(D.tabs.value.at(-1), { path: "data/w.dta", kind: "dta", dirty: false });
   assert.equal(D.activeTab.value, "data/w.dta");
   assert.equal(D.stateOf("data/w.dta"), undefined, "a .dta tab has no document");
-  S.phoneTab.value = "files";
+  S.showPhone("files");
   await openFile("out/g.png");
   assert.equal(S.graphFull.value, true);
   assert.equal(S.phoneTab.value, "files", "a graph is no tab");
   const g = S.graphs.value.at(-1)!;
   assert.deepEqual([g.from, g.path, g.png], ["file", "out/g.png", Buffer.from(png).toString("base64")]);
-  S.layout.value = "desktop";
-  S.graphFull.value = false;
+  S.setLayout("desktop");
+  S.closeFullSize();
   await openFile("out/g.png");
   assert.equal(S.outputTab.value, "graph");
   assert.equal(S.graphFull.value, false);
@@ -215,7 +218,7 @@ test("openFile: a file that isn't UTF-8 opens no tab and shows the not-text bann
   assert.deepEqual(D.tabs.value, []);
 });
 
-// ---- actions.ts: tabs ----
+// ---- tabs ----
 
 test("closing a tab: one with no edits closes (the next tab becomes active; its document goes); one with unsaved edits asks", async () => {
   await reset({ "a.do": "1", "b.do": "2", "c.do": "3" });
@@ -239,13 +242,13 @@ test("closing a tab: one with no edits closes (the next tab becomes active; its 
   assert.equal(D.stateOf("a.do"), undefined);
 });
 
-// ---- actions.ts: rename, new, delete ----
+// ---- ops.ts: rename, new, delete ----
 
 test("rename: an open file, and a folder with open files under it: the tabs follow, each with its document", async () => {
   await reset({ "a.do": "1", "data/x.do": "2", "data/raw/y.csv": "3", "database.do": "4" });
   for (const p of ["a.do", "data/x.do", "data/raw/y.csv", "database.do"]) await openFile(p);
   D.activate("data/raw/y.csv");
-  await A.renameEntry("data", "input");
+  await Ops.renameEntry("data", "input");
   assert.deepEqual(
     D.tabs.value.map((t) => t.path),
     ["a.do", "input/x.do", "input/raw/y.csv", "database.do"],
@@ -255,9 +258,9 @@ test("rename: an open file, and a folder with open files under it: the tabs foll
     ["input/x.do", "input/raw/y.csv", "data/x.do", "data/raw/y.csv"].map((p) => D.textOf(p)),
     ["2", "3", null, null],
   );
-  await A.renameEntry("a.do", "b.do");
+  await Ops.renameEntry("a.do", "b.do");
   assert.equal(D.tabs.value[0].path, "b.do");
-  await assert.rejects(A.renameEntry("b.do", "database.do"), /already exists/);
+  await assert.rejects(Ops.renameEntry("b.do", "database.do"), /already exists/);
   assert.equal(D.tabs.value[0].path, "b.do", "a refused rename changes no tab");
   await refresh();
   assert.ok(S.files.value.some((f) => f.path === "input/raw/y.csv"));
@@ -281,12 +284,12 @@ test("rename: the last run and the log's run heads follow the file (Go to line o
     { t: "runhead", run: { kind: "file", path: "a.do", fresh_locals: true }, first: false },
     { t: "runhead", run: { kind: "command", fresh_locals: false }, first: false },
   ];
-  await A.renameEntry("data", "input");
+  await Ops.renameEntry("data", "input");
   assert.equal(S.lastRun.value?.path, "input/x.do");
   const paths = () => S.log.value.map((i) => (i.t === "runhead" ? i.run.path : i.t === "text" ? i.end?.path : null));
   assert.deepEqual(paths(), [null, "input/x.do", "input/x.do", "a.do", undefined]);
   S.runWriter.lastRun.value = run("a.do");
-  await A.renameEntry("a.do", "b.do");
+  await Ops.renameEntry("a.do", "b.do");
   assert.equal(S.lastRun.value?.path, "b.do");
   await openFile("b.do");
   assert.equal(D.activeTab.value, "b.do");
@@ -300,7 +303,7 @@ test("fileTurn (the editor's Save): a turn taken while a rename or a delete is i
   await reset({ "a.do": "1", "b.do": "2" });
   for (const p of ["a.do", "b.do"]) await openFile(p);
   const tabsNow = () => D.tabs.value.map((t) => t.path);
-  const renaming = A.renameEntry("a.do", "c.do");
+  const renaming = Ops.renameEntry("a.do", "c.do");
   // a turn that reads the tabs after a store call of its own (a body with no yield is a lint error)
   const turnOf = <T>(f: () => T) =>
     fileTurn(function* (io) {
@@ -310,10 +313,10 @@ test("fileTurn (the editor's Save): a turn taken while a rename or a delete is i
   const seen = turnOf(tabsNow);
   await renaming;
   assert.deepEqual(await seen, ["c.do", "b.do"], "the tab has its new name when the turn comes");
-  const deleting = A.deleteEntries(["b.do"]);
+  const deleting = Ops.deleteEntries(["b.do"]);
   assert.deepEqual(await turnOf(tabsNow), ["c.do"], "and the deleted file's tab is closed");
   await deleting;
-  const refused = A.renameEntry("c.do", "c.do/x");
+  const refused = Ops.renameEntry("c.do", "c.do/x");
   const after = turnOf(() => "next");
   await assert.rejects(refused);
   assert.equal(await after, "next");
@@ -321,20 +324,20 @@ test("fileTurn (the editor's Save): a turn taken while a rename or a delete is i
 
 test("a new .do file and a new folder take the name asked for or the first free one, and never replace a file; delete closes the tabs under the path; delete all empties the store", async () => {
   await reset({ "untitled.do": "keep", "a.do": "mine" });
-  assert.equal(await A.createEntry("file"), "untitled-2.do");
-  assert.equal(await A.createEntry("folder"), "folder");
-  assert.equal(await A.createEntry("folder"), "folder-2");
-  assert.equal(await A.createEntry("file", "", "clean.do"), "clean.do");
-  assert.equal(await A.createEntry("folder", "", "data"), "data");
-  assert.equal(await A.createEntry("file", "data", "b.do"), "data/b.do");
-  await assert.rejects(A.createEntry("file", "", "a.do"), /already exists/);
-  await assert.rejects(A.createEntry("folder", "", "a.do"), /already exists/);
+  assert.equal(await Ops.createEntry("file"), "untitled-2.do");
+  assert.equal(await Ops.createEntry("folder"), "folder");
+  assert.equal(await Ops.createEntry("folder"), "folder-2");
+  assert.equal(await Ops.createEntry("file", "", "clean.do"), "clean.do");
+  assert.equal(await Ops.createEntry("folder", "", "data"), "data");
+  assert.equal(await Ops.createEntry("file", "data", "b.do"), "data/b.do");
+  await assert.rejects(Ops.createEntry("file", "", "a.do"), /already exists/);
+  await assert.rejects(Ops.createEntry("folder", "", "a.do"), /already exists/);
   assert.equal(
     new TextDecoder().decode(await store.read("a.do")),
     "mine",
     "a name in use is refused, not written over",
   );
-  const both = await Promise.all([A.createEntry("file"), A.createEntry("file")]);
+  const both = await Promise.all([Ops.createEntry("file"), Ops.createEntry("file")]);
   assert.deepEqual(
     both,
     ["untitled-3.do", "untitled-4.do"],
@@ -346,7 +349,7 @@ test("a new .do file and a new folder take the name asked for or the first free 
   await store.write("survey.xlsx", Uint8Array.from([0xff]));
   for (const p of ["data/x.do", "untitled.do", "data/y.do"]) await openFile(p);
   await openFile("survey.xlsx");
-  await A.deleteEntries(["data"]);
+  await Ops.deleteEntries(["data"]);
   assert.deepEqual(
     D.tabs.value.map((t) => t.path),
     ["untitled.do"],
@@ -355,37 +358,37 @@ test("a new .do file and a new folder take the name asked for or the first free 
     ["data/x.do", "data/y.do"].map((p) => D.stateOf(p)),
     [undefined, undefined],
   );
-  await A.deleteEntries(["survey.xlsx"]);
+  await Ops.deleteEntries(["survey.xlsx"]);
   assert.deepEqual(S.banners.value, [], "a deleted file's not-text banner goes");
-  await A.deleteAll();
+  await Ops.deleteAll();
   assert.deepEqual(await store.list(), []);
   assert.deepEqual(D.tabs.value, []);
 });
 
 test("a folder's Download (.zip): every file and folder under it, named under the folder, nothing else", async () => {
   await reset({ "data/raw/a.csv": "1,2\n", "data/w.dta": "x", "other.do": "y" });
-  const zip = await A.zipFolder("data/raw");
+  const zip = await Ops.zipFolder("data/raw");
   assert.equal(zip.name, "raw.zip");
   const text = Buffer.from(await zip.arrayBuffer()).toString("latin1");
   assert.ok(text.includes("raw/a.csv") && text.includes("raw/"));
   assert.ok(!text.includes("data/") && !text.includes("other.do") && !text.includes("w.dta"));
-  const all = Buffer.from(await (await A.zipFolder("data")).arrayBuffer()).toString("latin1");
+  const all = Buffer.from(await (await Ops.zipFolder("data")).arrayBuffer()).toString("latin1");
   assert.ok(all.includes("data/raw/a.csv") && all.includes("data/w.dta") && !all.includes("other.do"));
 });
 
-// ---- actions.ts: upload and its clashes ----
+// ---- upload.ts: upload and its clashes ----
 
 /** Answer each clash dialog as it opens, in order; records what each showed. */
 function answering(answers: ClashAnswer[]) {
-  const seen: { dialog: unknown; now: ClashNow | null; inStore: string[] }[] = [];
+  const seen: { dialog: unknown; now: ClashFacts | null; inStore: string[] }[] = [];
   const stop = effect(() => {
     const d = S.dialog.value;
     if (d?.d !== "clash") return;
-    const now = A.clashNow();
+    const now = Up.clashNow();
     store.list().then((l) => {
       seen.push({ dialog: d, now, inStore: l.map((f) => f.path).sort() });
-      S.dialog.value = null;
-      A.answerClash(answers.shift() ?? "stop");
+      S.closeDialog();
+      Up.answerClash(answers.shift() ?? "stop");
     });
   });
   return { seen, stop };
@@ -393,13 +396,13 @@ function answering(answers: ClashAnswer[]) {
 const textOf = async (path: string) => new TextDecoder().decode(await store.read(path));
 
 test("upload with no clash: every file written, folders kept, then the toast", async () => {
-  const written = await A.upload([
+  const written = await Up.upload([
     { path: "a.do", data: enc("1") },
     { path: "pkg/data/b.csv", data: enc("2") },
   ]);
   assert.deepEqual(written, ["a.do", "pkg/data/b.csv"]);
   assert.equal(S.toast.value, "2 files uploaded");
-  await A.upload([{ path: "c.do", data: enc("3") }]);
+  await Up.upload([{ path: "c.do", data: enc("3") }]);
   assert.equal(S.toast.value, "1 file uploaded");
   assert.equal(S.dialog.value, null);
 });
@@ -407,11 +410,11 @@ test("upload with no clash: every file written, folders kept, then the toast", a
 test("upload with clashes: the others are written first; each clash asks, Keep mine, Replace, and Do the same for the rest", async () => {
   await reset({ "a.do": "old a", "b.do": "old b", "c.do": "old c", "d.do": "old d" });
   const { seen, stop } = answering([
-    { replace: false, same: false }, // a: keep (Enter)
-    { replace: true, same: false }, // b: replace
-    { replace: true, same: true }, // c: replace, and d the same without asking
+    { replace: false, isForRest: false }, // a: keep (Enter)
+    { replace: true, isForRest: false }, // b: replace
+    { replace: true, isForRest: true }, // c: replace, and d the same without asking
   ]);
-  await A.upload(["a", "b", "new", "c", "d"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  await Up.upload(["a", "b", "new", "c", "d"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   stop();
   assert.deepEqual(
     seen.map((s) => s.dialog),
@@ -427,12 +430,12 @@ test("upload with clashes: the others are written first; each clash asks, Keep m
     {
       path: "a.do",
       yours: { size: 5, mtime: 0 },
-      uploaded: 5,
-      others: 1,
-      left: 3,
-      unsaved: false,
-      changed: false,
-      words: A.WORDS.upload,
+      uploadedBytes: 5,
+      unaskedCount: 1,
+      remainingCount: 3,
+      hasUnsavedEdits: false,
+      changedWhileAsked: false,
+      words: Up.WORDS.upload,
     },
   );
   assert.deepEqual(await Promise.all(["a", "b", "c", "d", "new"].map((n) => textOf(`${n}.do`))), [
@@ -444,17 +447,17 @@ test("upload with clashes: the others are written first; each clash asks, Keep m
   ]);
   assert.equal(S.toast.value, "4 files uploaded");
   assert.equal(S.dialog.value, null);
-  assert.equal(A.clashNow(), null);
+  assert.equal(Up.clashNow(), null);
 });
 
 test("upload: a clash with the same bytes is not asked and not written, and counts as uploaded; the clashes left are numbered without it", async () => {
   await reset({ "a.do": "same a", "b.do": "old b", "c.do": "old c" });
   const before = (await store.list()).find((f) => f.path === "a.do")!;
   const { seen, stop } = answering([
-    { replace: true, same: false },
-    { replace: false, same: false },
+    { replace: true, isForRest: false },
+    { replace: false, isForRest: false },
   ]);
-  const written = await A.upload([
+  const written = await Up.upload([
     { path: "a.do", data: enc("same a") },
     { path: "b.do", data: enc("new b") },
     { path: "new.do", data: enc("n") },
@@ -468,12 +471,16 @@ test("upload: a clash with the same bytes is not asked and not written, and coun
       { d: "clash", path: "c.do", index: 2, total: 2 },
     ],
   );
-  assert.deepEqual([seen[0].now?.others, seen[0].now?.left], [2, 1], "the same file is one of the others: in place");
+  assert.deepEqual(
+    [seen[0].now?.unaskedCount, seen[0].now?.remainingCount],
+    [2, 1],
+    "the same file is one of the others: in place",
+  );
   assert.deepEqual(written.sort(), ["b.do", "new.do"], "only what was written");
   assert.equal((await store.list()).find((f) => f.path === "a.do")!.mtime, before.mtime, "a.do was not written");
   assert.equal(S.toast.value, "3 files uploaded", "a.do counts: the store holds what was uploaded");
   // all identical: nothing asked, the toast still says so
-  await A.upload([{ path: "a.do", data: enc("same a") }]);
+  await Up.upload([{ path: "a.do", data: enc("same a") }]);
   assert.equal(S.toast.value, "1 file uploaded");
   assert.equal(S.dialog.value, null);
 });
@@ -484,11 +491,11 @@ test("upload: a clash with the same bytes but open with unsaved edits is still a
   await openFile("b.do");
   edit("a.do");
   const b = D.stateOf("b.do");
-  const { seen, stop } = answering([{ replace: true, same: false }]);
-  await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`same ${n}`) })));
+  const { seen, stop } = answering([{ replace: true, isForRest: false }]);
+  await Up.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`same ${n}`) })));
   stop();
   assert.deepEqual(
-    seen.map((s) => [s.dialog, s.now?.unsaved]),
+    seen.map((s) => [s.dialog, s.now?.hasUnsavedEdits]),
     [[{ d: "clash", path: "a.do", index: 1, total: 1 }, true]],
   );
   assert.deepEqual(
@@ -500,27 +507,27 @@ test("upload: a clash with the same bytes but open with unsaved edits is still a
 
 test("upload with the sample's words: the dialog's words, 'Sample restored', 'The sample is already here' when nothing was written or asked, and nothing said when all asked were kept", async () => {
   await reset({ "a.do": "old a", "b.do": "same b" });
-  const { seen, stop } = answering([{ replace: false, same: false }]);
+  const { seen, stop } = answering([{ replace: false, isForRest: false }]);
   S.showToast("sentinel"); // the toast is not cleared by hand: what an upload says replaces it
-  await A.upload(
+  await Up.upload(
     [
       { path: "a.do", data: enc("new a") },
       { path: "b.do", data: enc("same b") },
     ],
     "sample",
   );
-  assert.equal(seen[0].now?.words, A.WORDS.sample);
+  assert.equal(seen[0].now?.words, Up.WORDS.sample);
   assert.equal(seen.length, 1, "b.do holds the sample's bytes: not asked");
   assert.equal(S.toast.value, "sentinel", "everything asked was kept, and nothing was written: no toast");
   assert.equal(await textOf("a.do"), "old a");
   // the visitor replaces
   stop();
-  const again = answering([{ replace: true, same: false }]);
-  await A.upload([{ path: "a.do", data: enc("new a") }], "sample");
+  const again = answering([{ replace: true, isForRest: false }]);
+  await Up.upload([{ path: "a.do", data: enc("new a") }], "sample");
   again.stop();
   assert.equal(S.toast.value, "Sample restored");
   // nothing to write, nothing to ask
-  await A.upload(
+  await Up.upload(
     [
       { path: "a.do", data: enc("new a") },
       { path: "b.do", data: enc("same b") },
@@ -532,7 +539,7 @@ test("upload with the sample's words: the dialog's words, 'Sample restored', 'Th
   const warn = console.warn;
   console.warn = () => {};
   try {
-    await A.upload([{ path: "a.do/x", data: enc("1") }], "sample");
+    await Up.upload([{ path: "a.do/x", data: enc("1") }], "sample");
   } finally {
     console.warn = warn;
   }
@@ -542,7 +549,7 @@ test("upload with the sample's words: the dialog's words, 'Sample restored', 'Th
 test("upload: Esc keeps yours for every clash left and asks no more; Keep mine with Do the same keeps the rest too", async () => {
   await reset({ "a.do": "old a", "b.do": "old b", "c.do": "old c" });
   let { seen, stop } = answering(["stop"]);
-  await A.upload(["a", "b", "c", "x"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  await Up.upload(["a", "b", "c", "x"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   stop();
   assert.equal(seen.length, 1);
   assert.deepEqual(await Promise.all(["a", "b", "c", "x"].map((n) => textOf(`${n}.do`))), [
@@ -552,8 +559,8 @@ test("upload: Esc keeps yours for every clash left and asks no more; Keep mine w
     "new x",
   ]);
   assert.equal(S.toast.value, "1 file uploaded");
-  ({ seen, stop } = answering([{ replace: false, same: true }]));
-  await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  ({ seen, stop } = answering([{ replace: false, isForRest: true }]));
+  await Up.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   stop();
   assert.equal(seen.length, 1);
   assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
@@ -565,16 +572,16 @@ test("upload over an open file: the clash says it has unsaved edits; Replace rel
   await openFile("b.do");
   edit("a.do"); // no editor here: the test makes the edits
   const { seen, stop } = answering([
-    { replace: true, same: false },
-    { replace: true, same: false },
+    { replace: true, isForRest: false },
+    { replace: true, isForRest: false },
   ]);
-  await A.upload([
+  await Up.upload([
     { path: "a.do", data: enc("new a") },
     { path: "b.do", data: Uint8Array.from([0xff, 0xfe]) },
   ]);
   stop();
-  assert.equal(seen[0].now?.unsaved, true);
-  assert.equal(seen[1].now?.unsaved, false);
+  assert.equal(seen[0].now?.hasUnsavedEdits, true);
+  assert.equal(seen[1].now?.hasUnsavedEdits, false);
   assert.deepEqual([D.textOf("a.do"), D.tabs.value[0].dirty, D.stateOf("b.do")], ["new a", false, undefined]);
   assert.deepEqual(
     D.tabs.value.map((t) => t.path),
@@ -587,7 +594,7 @@ test("upload: a file the store refuses is counted in the toast; a path given twi
   const warn = console.warn;
   console.warn = () => {};
   try {
-    await A.upload([
+    await Up.upload([
       { path: "data", data: enc("a file where a folder is") },
       { path: "y.do", data: enc("first") },
       { path: "y.do", data: enc("second") },
@@ -616,7 +623,33 @@ test("a path in the use and import commands: quoted, compound quotes for a doubl
   assert.equal("problem" in made && made.problem, "Its name has a character a command can't use: rename the file.");
 });
 
-// ---- actions.ts: the clash flow with other dialogs and other uploads ----
+test("uploads apply in the order of the calls, a read that ends later included (two quick drops of one path); a failed read rejects its upload and the next goes on", async () => {
+  await reset({});
+  let endFirstRead = (_items: Incoming[]) => {};
+  const firstRead = new Promise<Incoming[]>((resolve) => {
+    endFirstRead = resolve;
+  });
+  const { seen, stop } = answering([{ replace: true, isForRest: false }]);
+
+  const first = Up.upload(firstRead);
+  const second = Up.upload(Promise.resolve([{ path: "a.do", data: enc("second drop") }]));
+  endFirstRead([{ path: "a.do", data: enc("first") }]);
+  await Promise.all([first, second]);
+  stop();
+
+  assert.deepEqual(
+    seen.map((s) => s.now?.uploadedBytes),
+    [11],
+    "the second upload is the one asked about",
+  );
+  assert.equal(await textOf("a.do"), "second drop");
+
+  await assert.rejects(Up.upload(Promise.reject(new Error("unreadable"))), /unreadable/);
+  await Up.upload([{ path: "b.do", data: enc("b") }]);
+  assert.equal(await textOf("b.do"), "b");
+});
+
+// ---- upload.ts: the clash flow with other dialogs and other uploads ----
 
 const until = async (ok: () => boolean, what: string) => {
   for (let i = 0; i < 200 && !ok(); i++) await sleep(5);
@@ -625,25 +658,25 @@ const until = async (ok: () => boolean, what: string) => {
 const clashOf = () => (S.dialog.value?.d === "clash" ? S.dialog.value.path : null);
 /** The clash dialog's answer, as ClashDialog gives it: it closes, then answers. */
 const give = (a: ClashAnswer) => {
-  S.dialog.value = null;
-  A.answerClash(a);
+  S.closeDialog();
+  Up.answerClash(a);
 };
 
 test("a second upload waits for the first: it writes nothing and asks nothing until the first has ended", async () => {
   await reset({ "a.do": "old a", "b.do": "old b" });
-  const first = A.upload([{ path: "a.do", data: enc("new a") }]);
+  const first = Up.upload([{ path: "a.do", data: enc("new a") }]);
   await until(() => clashOf() === "a.do", "the first upload asks");
-  const second = A.upload([
+  const second = Up.upload([
     { path: "b.do", data: enc("new b") },
     { path: "z.do", data: enc("z") },
   ]);
   await sleep(30);
   assert.equal(clashOf(), "a.do", "the second does not replace the first's question");
   assert.ok(!(await store.list()).some((f) => f.path === "z.do"), "nor write anything before the first has ended");
-  give({ replace: true, same: false });
+  give({ replace: true, isForRest: false });
   assert.deepEqual(await first, ["a.do"]);
   await until(() => clashOf() === "b.do", "then the second asks");
-  give({ replace: false, same: false });
+  give({ replace: false, isForRest: false });
   assert.deepEqual(await second, ["z.do"]);
   assert.equal(S.toast.value, "1 file uploaded");
   assert.deepEqual(await Promise.all(["a.do", "b.do"].map(textOf)), ["new a", "old b"]);
@@ -652,11 +685,11 @@ test("a second upload waits for the first: it writes nothing and asks nothing un
 
 test("a clash never replaces another dialog: it waits until that one has closed", async () => {
   await reset({ "a.do": "old a" });
-  S.dialog.value = { d: "download" };
-  const done = A.upload([{ path: "a.do", data: enc("new a") }]);
+  S.openDialog({ d: "download" });
+  const done = Up.upload([{ path: "a.do", data: enc("new a") }]);
   await sleep(30);
   assert.deepEqual(S.dialog.value, { d: "download" });
-  S.dialog.value = null;
+  S.closeDialog();
   await until(() => clashOf() === "a.do", "the clash is asked once the other dialog has closed");
   give("stop");
   assert.deepEqual(await done, []);
@@ -665,14 +698,14 @@ test("a clash never replaces another dialog: it waits until that one has closed"
 
 test("another dialog put in the clash's place with no answer keeps yours for every clash left, and the next upload runs", async () => {
   await reset({ "a.do": "old a", "b.do": "old b" });
-  const done = A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  const done = Up.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "the clash is asked");
-  S.dialog.value = { d: "other-tab" }; // as the engine controller does when another tab takes the engine
+  S.openDialog({ d: "other-tab" }); // as the engine controller does when another tab takes the engine
   assert.deepEqual(await done, ["y.do"]);
   assert.deepEqual(S.dialog.value, { d: "other-tab" }, "the upload's end leaves the other dialog open");
   assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
-  S.dialog.value = null;
-  assert.deepEqual(await A.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload is not held up");
+  S.closeDialog();
+  assert.deepEqual(await Up.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload is not held up");
 });
 
 test("after Do the same with Replace, a clash over an open file with unsaved edits is still asked", async () => {
@@ -680,13 +713,13 @@ test("after Do the same with Replace, a clash over an open file with unsaved edi
   await openFile("b.do");
   edit("b.do"); // no editor here: the test makes the edits
   const { seen, stop } = answering([
-    { replace: true, same: true }, // a: replace, and the rest the same
-    { replace: false, same: false }, // b: asked all the same, as it has unsaved edits: keep it
+    { replace: true, isForRest: true }, // a: replace, and the rest the same
+    { replace: false, isForRest: false }, // b: asked all the same, as it has unsaved edits: keep it
   ]);
-  await A.upload(["a", "b", "c"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  await Up.upload(["a", "b", "c"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   stop();
   assert.deepEqual(
-    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.unsaved]),
+    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.hasUnsavedEdits]),
     [
       ["a.do", false],
       ["b.do", true],
@@ -696,12 +729,12 @@ test("after Do the same with Replace, a clash over an open file with unsaved edi
 });
 
 test("after Esc, or Do the same with Keep mine, a clash over a file with unsaved edits is not asked: it is kept", async () => {
-  for (const first of ["stop", { replace: false, same: true }] as ClashAnswer[]) {
+  for (const first of ["stop", { replace: false, isForRest: true }] as ClashAnswer[]) {
     await reset({ "a.do": "old a", "b.do": "old b" });
     await openFile("b.do");
     edit("b.do");
-    const { seen, stop } = answering([first, { replace: true, same: false }]);
-    const done = await A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+    const { seen, stop } = answering([first, { replace: true, isForRest: false }]);
+    const done = await Up.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
     stop();
     assert.deepEqual(
       seen.map((x) => (x.dialog as { path: string }).path),
@@ -720,13 +753,13 @@ test("another dialog put in the place of a clash, with an unsaved file's clash a
   await reset({ "a.do": "old a", "b.do": "old b" });
   await openFile("b.do");
   edit("b.do");
-  const done = A.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  const done = Up.upload(["a", "b", "y"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "the clash is asked");
-  S.dialog.value = { d: "other-tab" }; // another tab took the engine
+  S.openDialog({ d: "other-tab" }); // another tab took the engine
   assert.deepEqual(await done, ["y.do"], "it does not wait for the other dialog to ask about b.do");
   assert.deepEqual(S.dialog.value, { d: "other-tab" });
-  assert.deepEqual(await A.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload runs");
-  S.dialog.value = null;
+  assert.deepEqual(await Up.upload([{ path: "z.do", data: enc("z") }]), ["z.do"], "a later upload runs");
+  S.closeDialog();
   await sleep(30);
   assert.equal(S.dialog.value, null, "no clash is asked once the other dialog has closed");
   assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["old a", "old b"]);
@@ -737,7 +770,7 @@ test("upload: a name with a control character is refused and counted", async () 
   console.warn = () => {};
   try {
     assert.deepEqual(
-      await A.upload([
+      await Up.upload([
         { path: "ok.do", data: enc("1") },
         { path: "x.csv\nerase ok.do", data: enc("2") },
       ]),
@@ -753,7 +786,7 @@ test("upload: a name with a control character is refused and counted", async () 
   );
 });
 
-// ---- actions.ts: an upload against the other file changes (each of its writes takes a turn) ----
+// ---- upload.ts: an upload against the other file changes (each of its writes takes a turn) ----
 
 test("a new file and an upload of the same name: the new file's turn comes first and the upload asks, so neither replaces the other unasked", async () => {
   const { list, write } = store;
@@ -773,10 +806,10 @@ test("a new file and an upload of the same name: the new file's turn comes first
     await Promise.race([uploadWrote, sleep(100)]);
     return l;
   };
-  const { seen, stop } = answering([{ replace: true, same: false }]);
+  const { seen, stop } = answering([{ replace: true, isForRest: false }]);
   try {
-    const made = A.createEntry("file", "", "a.do");
-    const up = A.upload([{ path: "a.do", data: enc("uploaded") }]);
+    const made = Ops.createEntry("file", "", "a.do");
+    const up = Up.upload([{ path: "a.do", data: enc("uploaded") }]);
     await Promise.allSettled([made, up]);
   } finally {
     stop();
@@ -793,29 +826,29 @@ test("a new file and an upload of the same name: the new file's turn comes first
 
 test("a clash whose file was saved again while its dialog was open: Replace writes nothing and asks again, with the file's new size; a later clash shows its file as it is when asked; one deleted while asked is written unasked", async () => {
   await reset({ "a.do": "old a", "b.do": "old b", "c.do": "old c" });
-  const done = A.upload(["a", "b", "c"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  const done = Up.upload(["a", "b", "c"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "a is asked");
   await fileTurn(function* (io) {
     yield* io.write("a.do", enc("saved again a")); // 13 bytes
     yield* io.write("b.do", enc("saved again, b")); // 14 bytes
   });
-  give({ replace: true, same: false });
-  await until(() => clashOf() === "a.do" && A.clashNow()?.changed === true, "a is asked again");
+  give({ replace: true, isForRest: false });
+  await until(() => clashOf() === "a.do" && Up.clashNow()?.changedWhileAsked === true, "a is asked again");
   assert.equal(await textOf("a.do"), "saved again a", "nothing written before the second answer");
-  assert.equal(A.clashNow()?.yours?.size, 13);
-  assert.equal(A.WORDS.upload.changedTitle("data/wages.dta"), "data/wages.dta changed while you were deciding");
+  assert.equal(Up.clashNow()?.yours?.size, 13);
+  assert.equal(Up.WORDS.upload.changedTitle("data/wages.dta"), "data/wages.dta changed while you were deciding");
   assert.equal(
-    A.WORDS.upload.changedQuestion,
+    Up.WORDS.upload.changedQuestion,
     "It was saved again since you were asked. Keep yours, or replace it with the uploaded one?",
   );
-  give({ replace: true, same: false });
+  give({ replace: true, isForRest: false });
   await until(() => clashOf() === "b.do", "then b is asked");
-  assert.equal(A.clashNow()?.yours?.size, 14, "b as it is now, not as the upload first listed it");
-  assert.equal(A.clashNow()?.changed, false);
-  give({ replace: false, same: false });
+  assert.equal(Up.clashNow()?.yours?.size, 14, "b as it is now, not as the upload first listed it");
+  assert.equal(Up.clashNow()?.changedWhileAsked, false);
+  give({ replace: false, isForRest: false });
   await until(() => clashOf() === "c.do", "then c is asked");
   await store.remove("c.do");
-  give({ replace: true, same: false });
+  give({ replace: true, isForRest: false });
   assert.deepEqual(await done, ["a.do", "c.do"]);
   assert.equal(S.dialog.value, null);
   assert.deepEqual(await Promise.all(["a", "b", "c"].map((n) => textOf(`${n}.do`))), [
@@ -827,14 +860,14 @@ test("a clash whose file was saved again while its dialog was open: Replace writ
 
 test("after Do the same with Replace, a clash whose file was saved again while asked is asked again; the clashes after it are replaced unasked", async () => {
   await reset({ "a.do": "old a", "b.do": "old b" });
-  const done = A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  const done = Up.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "a is asked");
   await fileTurn(function* (io) {
     yield* io.write("a.do", enc("saved again a"));
   });
-  give({ replace: true, same: true });
-  await until(() => clashOf() === "a.do" && A.clashNow()?.changed === true, "a is asked again");
-  give({ replace: true, same: false });
+  give({ replace: true, isForRest: true });
+  await until(() => clashOf() === "a.do" && Up.clashNow()?.changedWhileAsked === true, "a is asked again");
+  give({ replace: true, isForRest: false });
   assert.deepEqual(await done, ["a.do", "b.do"]);
   assert.deepEqual(await Promise.all(["a", "b"].map((n) => textOf(`${n}.do`))), ["new a", "new b"]);
 });
@@ -862,18 +895,18 @@ test("after Do the same with Replace, a clash over an open file edited before it
     return write.apply(store, args);
   };
   const { seen, stop } = answering([
-    { replace: true, same: true },
-    { replace: false, same: false },
+    { replace: true, isForRest: true },
+    { replace: false, isForRest: false },
   ]);
   try {
-    assert.deepEqual(await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) }))), ["a.do"]);
+    assert.deepEqual(await Up.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) }))), ["a.do"]);
   } finally {
     stop();
     store.write = write;
     store.read = read;
   }
   assert.deepEqual(
-    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.unsaved]),
+    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.hasUnsavedEdits]),
     [
       ["a.do", false],
       ["b.do", true],
@@ -898,11 +931,11 @@ test("after Do the same with Replace, a clash whose file is saved again before i
     return w;
   };
   const { seen, stop } = answering([
-    { replace: true, same: true },
-    { replace: true, same: false },
+    { replace: true, isForRest: true },
+    { replace: true, isForRest: false },
   ]);
   try {
-    assert.deepEqual(await A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) }))), [
+    assert.deepEqual(await Up.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) }))), [
       "a.do",
       "b.do",
     ]);
@@ -911,7 +944,7 @@ test("after Do the same with Replace, a clash whose file is saved again before i
     store.write = write;
   }
   assert.deepEqual(
-    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.changed, x.now?.yours?.size]),
+    seen.map((x) => [(x.dialog as { path: string }).path, x.now?.changedWhileAsked, x.now?.yours?.size]),
     [
       ["a.do", false, 5],
       ["b.do", true, 13],
@@ -922,7 +955,7 @@ test("after Do the same with Replace, a clash whose file is saved again before i
 
 test("an upload's Replace of a file whose opening reads the store: the tab ends with what the store ends with", async () => {
   await reset({ "a.do": "old a" });
-  const done = A.upload([{ path: "a.do", data: enc("new a") }]);
+  const done = Up.upload([{ path: "a.do", data: enc("new a") }]);
   await until(() => clashOf() === "a.do", "a is asked");
   let ended = false;
   done.then(() => {
@@ -940,7 +973,7 @@ test("an upload's Replace of a file whose opening reads the store: the tab ends 
   };
   try {
     const opening = openFile("a.do");
-    give({ replace: true, same: false });
+    give({ replace: true, isForRest: false });
     await Promise.all([done, opening]);
   } finally {
     store.read = read;
@@ -954,14 +987,14 @@ test("a clash whose file left the store while its tab kept unsaved edits is aske
   await reset({ "a.do": "old a", "b.do": "old b" });
   await openFile("b.do");
   edit("b.do");
-  const done = A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  const done = Up.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "a is asked");
   await store.remove("b.do"); // as a run's erase b.do does: the dirty tab stays (files.ts afterRun)
-  give({ replace: true, same: true });
+  give({ replace: true, isForRest: true });
   await until(() => clashOf() === "b.do", "b is asked, not written or tried again without end");
-  assert.equal(A.clashNow()?.unsaved, true);
-  assert.equal(A.clashNow()?.yours, null);
-  give({ replace: false, same: false });
+  assert.equal(Up.clashNow()?.hasUnsavedEdits, true);
+  assert.equal(Up.clashNow()?.yours, null);
+  give({ replace: false, isForRest: false });
   assert.deepEqual(await done, ["a.do"]);
   assert.deepEqual(
     (await store.list()).map((f) => f.path),
@@ -972,7 +1005,7 @@ test("a clash whose file left the store while its tab kept unsaved edits is aske
 
 test("a clash waits again for a dialog opened while its file was read: it never replaces one", async () => {
   await reset({ "a.do": "old a", "b.do": "old b" });
-  const done = A.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
+  const done = Up.upload(["a", "b"].map((n) => ({ path: `${n}.do`, data: enc(`new ${n}`) })));
   await until(() => clashOf() === "a.do", "a is asked");
   const { read } = store;
   let release = () => {};
@@ -984,29 +1017,29 @@ test("a clash waits again for a dialog opened while its file was read: it never 
     yield* io.read("held"); // b.do's read of its file waits behind this turn
   });
   try {
-    give({ replace: false, same: false });
+    give({ replace: false, isForRest: false });
     await sleep(10);
-    S.dialog.value = { d: "delete", paths: ["x.do"] };
+    S.openDialog({ d: "delete", paths: ["x.do"] });
     release();
     await sleep(30);
     assert.deepEqual(S.dialog.value, { d: "delete", paths: ["x.do"] }, "the other dialog stays");
   } finally {
     store.read = read;
   }
-  S.dialog.value = null;
+  S.closeDialog();
   await until(() => clashOf() === "b.do", "b is asked once it has closed");
   give("stop");
   assert.deepEqual(await done, []);
 });
 
-// ---- actions.ts: a rename that changes how the file opens ----
+// ---- ops.ts: a rename that changes how the file opens ----
 
 test("rename: a .dta tab renamed to .csv opens again as text in its place; an unsaved text tab renamed to .dta stays text", async () => {
   await reset({ "a.do": "1", "w.dta": "a,b\n1,2\n", "c.do": "3" });
   for (const p of ["a.do", "w.dta", "c.do"]) await openFile(p);
   D.activate("a.do");
-  S.phoneTab.value = "files";
-  await A.renameEntry("w.dta", "w.csv");
+  S.showPhone("files");
+  await Ops.renameEntry("w.dta", "w.csv");
   assert.deepEqual(
     D.tabs.value.map((t) => [t.path, t.kind]),
     [
@@ -1019,17 +1052,17 @@ test("rename: a .dta tab renamed to .csv opens again as text in its place; an un
   assert.equal(S.phoneTab.value, "files");
   assert.equal(D.textOf("w.csv"), "a,b\n1,2\n", "the store's text, read in the rename's turn");
   edit("c.do");
-  await A.renameEntry("c.do", "c.dta");
+  await Ops.renameEntry("c.do", "c.dta");
   assert.deepEqual(D.tabs.value.at(-1), { path: "c.dta", kind: "text", dirty: true }, "the editor keeps the edits");
 });
 
 test("rename: a .dta tab renamed to .png closes, and the Graph tab and the full-size view are left alone (a phone too)", async () => {
   for (const layout of ["desktop", "phone"] as const) {
     await reset({ "a.do": "1", "w.dta": "x" });
-    S.layout.value = layout;
+    S.setLayout(layout);
     for (const p of ["a.do", "w.dta"]) await openFile(p);
     const graphs = S.graphs.value.length;
-    await A.renameEntry("w.dta", "w.png");
+    await Ops.renameEntry("w.dta", "w.png");
     assert.deepEqual(
       D.tabs.value.map((t) => t.path),
       ["a.do"],
@@ -1049,7 +1082,7 @@ test("rename: a .dta tab renamed to a text name is read before its tab moves, so
   const stop = effect(() => {
     seen.push(D.tabs.value.map((t) => `${t.path} ${t.kind}`));
   });
-  await A.renameEntry("w.dta", "w.csv");
+  await Ops.renameEntry("w.dta", "w.csv");
   stop();
   assert.ok(!seen.some((tabs) => tabs.includes("w.csv dta")), JSON.stringify(seen));
   assert.deepEqual(seen.at(-1), ["v.dta dta", "w.csv text"]);
@@ -1059,7 +1092,7 @@ test("rename: a .dta tab renamed to a text name is read before its tab moves, so
 test("rename to a text name: a file that is not text closes its tab with the not-text banner; one the store cannot give closes it with none", async () => {
   await reset({ "a.do": "1", "v.dta": Uint8Array.from([0xff, 0xfe, 0x00]), "w.dta": "x" });
   for (const p of ["a.do", "v.dta", "w.dta"]) await openFile(p);
-  await A.renameEntry("v.dta", "v.csv");
+  await Ops.renameEntry("v.dta", "v.csv");
   assert.deepEqual(
     D.tabs.value.map((t) => t.path),
     ["a.do", "w.dta"],
@@ -1072,7 +1105,7 @@ test("rename to a text name: a file that is not text closes its tab with the not
     return read.call(store, path);
   };
   try {
-    await A.renameEntry("w.dta", "w.csv");
+    await Ops.renameEntry("w.dta", "w.csv");
   } finally {
     store.read = read;
   }
@@ -1095,7 +1128,7 @@ test("rename to a text name: the new name opened while the store is read keeps o
     return bytes;
   };
   try {
-    await A.renameEntry("w.dta", "w.csv");
+    await Ops.renameEntry("w.dta", "w.csv");
     await opened;
   } finally {
     store.read = read;
@@ -1118,7 +1151,7 @@ test("rename onto the name of a file a run deleted, its tab still open: a clean 
   for (const p of ["a.do", "w.csv", "w.dta"]) await openFile(p);
   await store.remove("w.csv"); // a run's erase: files.ts afterRun keeps the tab
   await refresh();
-  await A.renameEntry("w.dta", "w.csv");
+  await Ops.renameEntry("w.dta", "w.csv");
   assert.deepEqual(tabsNow(), [
     ["a.do", "text", false],
     ["w.csv", "text", false],
@@ -1130,7 +1163,7 @@ test("rename onto the name of a file a run deleted, its tab still open: a clean 
   edit("w.csv");
   await store.remove("w.csv");
   await refresh();
-  await assert.rejects(A.renameEntry("w.dta", "w.csv"), /already exists/);
+  await assert.rejects(Ops.renameEntry("w.dta", "w.csv"), /already exists/);
   assert.deepEqual(tabsNow(), [
     ["a.do", "text", false],
     ["w.csv", "text", true],

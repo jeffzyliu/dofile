@@ -5,7 +5,10 @@
 // Events come in by two doors: dispatch() for an action or lost() (no ticket), and reply() for an answer to an effect
 // (the one place a ticket is put on an event). Both enqueue, then transition, then the signal, then perform.
 
-import type { Builds, Lifecycle, Reader } from "../engine/client.ts";
+import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
+import { BREAK_GRACE_MS } from "../engine/types.ts";
+import type { EngineState, RunHead } from "./types.ts";
+
 import type {
   Answered,
   AnyAnswer,
@@ -22,14 +25,18 @@ import type {
   TicketedEffect,
 } from "../engine/machine.ts";
 import { initial, RC_RESET, transition } from "../engine/machine.ts";
-import type { ClientError, ReadOps, RunResult, ViewOp } from "../engine/types.ts";
-import { BREAK_GRACE_MS } from "../engine/types.ts";
-import { editorAsked } from "./editor/commands.ts";
+
+import { engineBytes, engineWriter, graphicsWriter } from "./state/engine.ts";
+import * as Notices from "./state/notices.ts";
+
+import type { Builds, Lifecycle, Reader } from "../engine/client.ts";
 import { block, own } from "./files.ts";
-import * as S from "./state.ts";
-import { engineWriter, graphicsWriter } from "./state.ts";
+
+import { ask as askFocus, fromAnywhere } from "./ui/focus-targets.ts";
+
 import { FAILED, FAILED_TWICE, SAY, stageNow } from "./states/words.ts";
-import type { EngineState, RunHead } from "./types.ts";
+
+import { resolvedTheme } from "./theme.ts";
 
 // ---- the wiring ----
 
@@ -106,7 +113,7 @@ export function connectEngine({
       }) ?? null,
   };
   wiring = {
-    env: { snapshot, canInterrupt, graceMs, engineBytes: S.engineBytes, manual },
+    env: { snapshot, canInterrupt, graceMs, engineBytes, manual },
     reader: client,
     perform: performer(client, client, lock, handles),
     handles,
@@ -278,7 +285,7 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock, handles: Ha
   }
   /** A run whose worker was ended says nothing: the machine has cut it already. */
   function sendRun({ n, code, head }: Extract<Effect, { do: "send-run" }>, say: Reply<"send-run">) {
-    const theme = S.resolvedTheme.value;
+    const theme = resolvedTheme.value;
     runs.began(head, theme);
     lifecycle
       .run(n, { code, fresh_locals: head.fresh_locals, plot_theme: theme }, (text) => runs.log(text))
@@ -349,21 +356,20 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock, handles: Ha
         return runs.ended(effect.result);
       case "engine-ready":
         // this start has its store (banners match by kind, whatever the cause); a start that has none adds it again next
-        S.dismiss({ b: "store-failed", cause: "open" });
+        Notices.dismiss({ b: "store-failed", cause: "open" });
         return runs.engineReady();
       case "engine-gone":
         return runs.engineGone();
       case "show-dialog":
-        S.dialog.value = { d: effect.dialog };
+        Notices.openDialog({ d: effect.dialog });
         return;
       case "close-dialog":
-        if (S.dialog.value?.d !== effect.dialog) return;
-        S.dialog.value = null;
+        if (!Notices.closeDialog(effect.dialog)) return;
         // the page is inert while a dialog is open: the editor takes the focus from the render that removed it
-        if (effect.focusEditor) editorAsked.value = {};
+        if (effect.focusEditor) askFocus("editor", { from: fromAnywhere });
         return;
       case "add-reset-banner":
-        return S.addBanner({
+        return Notices.addBanner({
           b: "reset",
           reason: effect.reason,
           kind: effect.kind,
@@ -371,9 +377,9 @@ function performer(lifecycle: Lifecycle, builds: Builds, lock: Lock, handles: Ha
           run: effect.run,
         });
       case "add-store-banner":
-        return S.addBanner({ b: "store-failed", cause: effect.cause });
+        return Notices.addBanner({ b: "store-failed", cause: effect.cause });
       case "say":
-        return S.say(typeof effect.line === "string" ? SAY[effect.line] : stageNow[effect.line.stage]);
+        return Notices.say(typeof effect.line === "string" ? SAY[effect.line] : stageNow[effect.line.stage]);
       case "warn":
         return console.warn(`[dofile] ${effect.text}`);
       default:

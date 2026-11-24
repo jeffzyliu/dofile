@@ -4,7 +4,9 @@
 // dialog's Save saves through the editor and closes the tab (editor.spec.ts types real edits).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import type { Page } from "@playwright/test";
+
 import { bannerOf, expect, isPhone, putFiles, settle, storedText, test, toastOf } from "./fixtures"; // storage kept by default (fixtures.ts)
 import type { DofileHook } from "./hook";
 import { markDirty, openDialog } from "./seed";
@@ -68,6 +70,14 @@ test("the tree: folders first with their levels, sizes, folding by keyboard; Ent
   await expect(row(page, /^raw\//)).toBeFocused();
   await page.keyboard.press("End");
   await expect(row(page, /^a\.do/)).toBeFocused();
+  await page.keyboard.press("ArrowDown"); // the last row: the tree stops, it does not wrap
+  await expect(row(page, /^a\.do/)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(items.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp"); // nor at the first
+  await expect(items.nth(0)).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(row(page, /^a\.do/)).toBeFocused();
   await page.keyboard.press("Enter");
   await expect.poll(() => openTabs(page)).toEqual(["a.do"]);
   if (isPhone(page)) {
@@ -118,6 +128,13 @@ test("tabs: a second file opens a second tab; a tab with no edits closes at once
     await tabs.getByRole("tab", { name: "c.do" }).focus();
     await page.keyboard.press("Delete"); // no edits: closes, and the tab to its left is selected and focused
     await expect.poll(() => openTabs(page)).toEqual(["a.do", "b.do"]);
+    await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused();
+    await page.keyboard.press("ArrowDown"); // the file tabs take Left and Right only
+    await page.keyboard.press("ArrowUp");
+    await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused();
+    await page.keyboard.press("ArrowRight"); // wraps to the first
+    await expect(tabs.getByRole("tab", { name: /^a\.do/ })).toBeFocused();
+    await page.keyboard.press("ArrowLeft"); // and back round to the last
     await expect(tabs.getByRole("tab", { name: "b.do" })).toBeFocused();
     await page.keyboard.press("ArrowLeft");
     await expect(tabs.getByRole("tab", { name: /^a\.do/ })).toHaveAttribute("aria-selected", "true");
@@ -213,7 +230,7 @@ test("rename in place: F2; a name in use keeps the field open with the reason; E
   await page.keyboard.type("b");
   await page.keyboard.press("Enter");
   await expect(field).toHaveAttribute("aria-invalid", "true");
-  // in the tree: the live region says the same words 50 ms later (state.ts say), and two matches fail the locator
+  // in the tree: the live region says the same words 50 ms later (state/notices.ts say), and two matches fail the locator
   await expect(tree(page).getByText("b.do already exists here.")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(field).toBeHidden();
@@ -316,6 +333,12 @@ test("a menu's arrow keys skip a disabled item in the middle or at the end, and 
   await page.keyboard.press("ArrowUp"); // and back round to the last
   await expect(item("Restore the sample")).toBeFocused();
   await page.keyboard.press("Home");
+  await expect(item("New .do file")).toBeFocused();
+  await page.keyboard.press("ArrowRight"); // a menu's keys are Up and Down: Left and Right leave the focus
+  await settle(page);
+  await expect(item("New .do file")).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await settle(page);
   await expect(item("New .do file")).toBeFocused();
 });
 
@@ -1194,6 +1217,29 @@ test("a clash dialog that follows another (Keep mine, then the next clash at onc
   expect(await Promise.all(["a.do", "b.do"].map((p) => storedText(page, p)))).toEqual(["old a", "old b"]);
 });
 
+test("a clash asked again because the file changed while the dialog was open: the new dialog has the focus on Keep mine, and its answer hands the focus back to what had it before the first", async ({
+  page,
+}) => {
+  await setUp(page, { "a.do": "old a" });
+  const opener = row(page, /^a\.do/);
+  await opener.focus();
+  await page
+    .locator('input[data-upload="files"]')
+    .setInputFiles({ name: "a.do", mimeType: "text/plain", buffer: Buffer.from("uploaded") });
+  const first = page.getByRole("alertdialog", { name: "a.do is already here" });
+  await expect(first.getByRole("button", { name: "Keep mine" })).toBeFocused();
+  await putFiles(page, { "a.do": "saved again" }); // saved while the dialog is open
+  await first.getByRole("button", { name: "Replace with uploaded" }).click();
+  const again = page.getByRole("alertdialog", { name: "a.do changed while you were deciding" });
+  await expect(again).toContainText("It was saved again since you were asked.");
+  await expect(again.getByRole("button", { name: "Keep mine" })).toBeFocused();
+  expect(await storedText(page, "a.do")).toBe("saved again"); // nothing written without the answer
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  expect(await storedText(page, "a.do")).toBe("saved again");
+});
+
 test("the clash over an open file with unsaved edits says so", async ({ page }) => {
   await setUp(page, { "a.do": "old a" });
   await row(page, /^a\.do/).click();
@@ -1364,6 +1410,40 @@ test("a drop anywhere on the page: the Files pane is marked while a drag is over
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(row(page, /^x\.do/)).toBeVisible(); // the capture-phase drop above was uploaded
   await expect(row(page, /^later\.do/)).toHaveCount(0);
+});
+
+test("two quick drops of one path apply in drop order, whichever read ends first: the second is asked about, and Replace leaves its bytes", async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  await setUp(page, {});
+  // the first drop's read (6 bytes) is held until the second one's has ended, so the reads end in the other order
+  await page.evaluate(() => {
+    const read = File.prototype.arrayBuffer;
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    File.prototype.arrayBuffer = function (this: File) {
+      const bytes = read.call(this);
+      return this.size === 6 ? held.then(() => bytes) : bytes.finally(release);
+    };
+  });
+  const drop = (text: string) =>
+    page.evaluate((text) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([text], "a.do", { type: "text/plain" }));
+      document
+        .querySelector(".editor-pane")!
+        .dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, text);
+  await drop("first\n");
+  await drop("second drop\n");
+  const clash = page.getByRole("alertdialog");
+  await expect(clash).toContainText("a.do is already here");
+  await expect(clash).toContainText("uploaded: 12 B");
+  await clash.getByRole("button", { name: "Replace with uploaded" }).click();
+  await expect.poll(() => storedText(page, "a.do")).toBe("second drop\n");
 });
 
 test("a drag that began in the page (a graph image, which Chromium and WebKit list as Files) uploads nothing; after its end a drop of files does", async ({

@@ -7,6 +7,7 @@
 // when a banner that holds it goes away is checked as `activeElement.closest("[data-editor]")`, so it holds for the
 // stand-in and for CodeMirror (whose focused `.cm-content` carries the attribute or sits inside it).
 import type { Locator, Page } from "@playwright/test";
+
 import {
   bannerOf,
   engineState,
@@ -19,18 +20,8 @@ import {
   toastOf,
   toolbarOf,
 } from "./fixtures"; // storage kept by default (fixtures.ts)
-import {
-  addBanner,
-  type Banner,
-  clearToast,
-  closeDialog,
-  dismissBanner,
-  type EngineSeed,
-  type PhoneTab,
-  seedLog,
-  showEngine,
-  showPhoneTab,
-} from "./seed";
+import type { Banner, EngineSeed, PhoneTab } from "./seed";
+import { addBanner, clearToast, closeDialog, dismissBanner, seedLog, showEngine, showPhoneTab } from "./seed";
 
 /** The focus is in the editor: on `[data-editor]` or inside it (4b's CodeMirror focuses its `.cm-content`). */
 const inEditor = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest("[data-editor]")));
@@ -337,6 +328,30 @@ test("the editor's and the Files pane's banners hand the focus on too: save-fail
     // on a phone the Files view hides the editor: More actions takes the focus there
     if (ph && view !== "editor") await expect(more, `${banner.b}: ${button}`).toBeFocused();
     else await expect.poll(() => inEditor(page), `${banner.b}: ${button}`).toBe(true);
+  }
+});
+
+test("the storage, store-failed and download-failed banners hand the focus on too, dismissed by keyboard", async ({
+  page,
+}) => {
+  const ph = isPhone(page);
+  const more = page.getByRole("button", { name: "More actions" });
+  const cases: { banner: Banner; words: string; view: PhoneTab }[] = [
+    { banner: { b: "store-failed", cause: "open" }, words: "Your files couldn't be opened:", view: "log" },
+    { banner: { b: "storage" }, words: "This browser may clear your files", view: "editor" },
+    { banner: { b: "download-failed" }, words: "Your files couldn't be downloaded.", view: "log" },
+  ];
+  for (const { banner, words, view } of cases) {
+    // on a phone the log is its own view, so the editor is hidden there: More actions takes the focus
+    if (ph) await showPhoneTab(page, view);
+    await addBanner(page, banner);
+    // on a phone every view draws these banners; the hidden views' copies are display: none
+    const dismiss = page.locator(".banner:visible", { hasText: words }).getByRole("button", { name: "Dismiss" });
+    await dismiss.focus(); // the keyboard's way: a click does not focus a button in Safari
+    await page.keyboard.press("Enter");
+    await expect(dismiss).toHaveCount(0);
+    if (ph && view !== "editor") await expect(more, banner.b).toBeFocused();
+    else await expect.poll(() => inEditor(page), banner.b).toBe(true);
   }
 });
 

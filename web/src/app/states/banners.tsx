@@ -2,22 +2,28 @@
 // ui/Live.tsx's <Banner>. The engine-state banners above the editor have no role="alert": the machine's `say` says each
 // once, since a banner in the editor slot is display:none on a phone's other views, where an alert is never announced.
 // Focus: docs/web-page-flows.md, section 1.
-import { useRef } from "preact/hooks";
-import { megabytes } from "../bytes.ts";
+import type { BannerOf, EngineStateOf } from "../types.ts";
+
+import { engine, engineBytes, isolated } from "../state/engine.ts";
+import { hasFiles } from "../state/files.ts";
+import { dismiss } from "../state/notices.ts";
+
+import * as eng from "../engine.ts";
+import { downloadAll } from "../files.ts";
+
+import { DismissibleBanner } from "../ui/DismissibleBanner";
+import { useFocusOnLeave, useFocusOnMount } from "../ui/focus-hooks.ts";
+import { focusStable } from "../ui/focus-targets.ts";
+import { Banner } from "../ui/Live";
+
 import { breakPending, resetsIn, since } from "../editor/clock.ts";
 import { editorCommands } from "../editor/commands.ts";
 import { tabs } from "../editor/documents.ts";
+import { canRunFile } from "../editor/runnable.ts";
 import { ticking } from "../editor/words.ts";
-import * as eng from "../engine.ts";
+
+import { megabytes } from "../bytes.ts";
 import { LANDING_URL } from "../env";
-import { downloadAll } from "../files.ts";
-import { dismiss, engine, engineBytes, hasFiles, isolated } from "../state.ts";
-import type { BannerOf, EngineStateOf } from "../types.ts";
-import { DismissibleBanner } from "../ui/DismissibleBanner";
-import { useFocusOnMount } from "../ui/focus-hooks.ts";
-import { Banner } from "../ui/Live";
-import { focusStable, useFocusOnLeave } from "./focus.ts";
-import { takesRun } from "./predicates.ts";
 import {
   FAILED_HEAD,
   FILES_SAFE,
@@ -66,7 +72,7 @@ function FailedBanner({
   return (
     <Banner
       kind="error"
-      bannerRef={ref}
+      ref={ref}
       actions={actions.map((a) => {
         switch (a) {
           case "browsers":
@@ -173,8 +179,7 @@ function RunningBanner({ t0, run }: { t0: number; run: Parameters<typeof running
 
 /** "Don't reset: wait for it". It takes the focus when it appears (useFocusOnMount). */
 function KeepWaitingButton() {
-  const button = useRef<HTMLButtonElement>(null);
-  useFocusOnMount(button);
+  const button = useFocusOnMount<HTMLButtonElement>();
   return (
     <button
       ref={button}
@@ -195,7 +200,7 @@ function KeepWaitingButton() {
 function StoppingBanner({ st }: { st: EngineStateOf<"breaking"> }) {
   const ref = useFocusOnLeave<HTMLDivElement>();
   return (
-    <Banner kind="warn" bannerRef={ref} actions={breakPending(st) >= STOPPING_AFTER_S && <KeepWaitingButton />}>
+    <Banner kind="warn" ref={ref} actions={breakPending(st) >= STOPPING_AFTER_S && <KeepWaitingButton />}>
       <b>Stopping…</b> This command can't stop until it ends. <b>{resetIn(resetsIn(st))}</b> the data in memory is lost;
       your files are kept.
     </Banner>
@@ -204,9 +209,9 @@ function StoppingBanner({ st }: { st: EngineStateOf<"breaking"> }) {
 
 function WaitingBanner() {
   const box = useFocusOnLeave<HTMLDivElement>();
-  useFocusOnMount(box);
+  useFocusOnMount({ get: () => box.current });
   return (
-    <Banner focusable bannerRef={box}>
+    <Banner focusable ref={box}>
       <b>Waiting for this command to end.</b> The Break is still pending: the run stops after this command, with the
       data kept. If it never ends, <b>Reset now</b> resets the engine: the data in memory is lost; your files are kept.
     </Banner>
@@ -224,7 +229,7 @@ export function LogStateBanners() {
 export function ResetBanner({ banner }: { banner: BannerOf<"reset"> }) {
   const w = resetWords(banner.kind, banner.cause, banner.reason, isolated.value);
   const path = rerunPath(banner.kind, banner.run);
-  const canRun = takesRun(engine.value) && tabs.value.some((t) => t.path === path && t.kind === "text");
+  const canRun = canRunFile(engine.value, path) && tabs.value.some((t) => t.path === path && t.kind === "text");
   return (
     <DismissibleBanner
       banner={banner}

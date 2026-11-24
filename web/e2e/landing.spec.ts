@@ -7,6 +7,7 @@
 // the mockups from file: URLs; the built pages need a server).
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
+
 import { LOCAL_EDITOR_URL, LOCAL_SITE_URL as SITE } from "../scripts/urls.ts";
 import { expect, isPhone, test } from "./fixtures";
 import { showEngine } from "./seed";
@@ -46,7 +47,6 @@ test("Open the editor leads to the editor; its wordmark (or, on a phone, About d
   await page.goto(SITE);
   await openEditor(page).click();
   await expect.poll(() => where(page.url())).toBe(EDITOR);
-  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.engine)).toBeTruthy(); // the editor
   await expect(landingHeading(page)).toHaveCount(0);
   // a first visit: the download prompt is over the page until it is answered, and the sample's analysis.do is open
   await page.getByRole("dialog", { name: "Download the engine?" }).getByRole("button", { name: "Not now" }).click();

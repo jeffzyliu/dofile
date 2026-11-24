@@ -45,7 +45,7 @@ Worker, and the dofile interpreter runs inside that Python. As a kitchen behind 
 flowchart TD
   M["Wiring, the only place that constructs<br/>main.tsx"]
   V["Views: buttons, editor, log<br/>app/*.tsx"]
-  ST["State: one module of signals<br/>app/state.ts"]
+  ST["State: one module of signals per owner<br/>app/state/"]
   RUN["Run controller<br/>app/run.ts"]
   ENG["Engine controller<br/>app/engine.ts"]
   MCH["State machine, pure<br/>engine/machine.ts"]
@@ -117,8 +117,8 @@ What each file owns and talks to: section 2.2.
 | Layer | File | Owns | Talks to |
 |---|---|---|---|
 | Wiring | `main.tsx` | nothing durable; builds the one transport and tab lock, connects the controllers (`connectFiles`, `connectRun`, `connectEngine`) and calls `open()`. Nothing else constructs or connects | everything, once, at load |
-| Views | `app/**/*.tsx` | nothing durable | controllers, `state.ts`, `store` |
-| State | `app/state.ts` | all signals | nobody |
+| Views | `app/**/*.tsx` | nothing durable | controllers, `state/`, `store` |
+| State | `app/state/` | all signals | nobody |
 | Run controller | `app/run.ts`: runs code, stores what a run leaves; reads no engine state | `log`, `lastRun`, `results`, `macros`, `data`, `rows`, `memory`, `graphs`, `history` | engine controller (`run`, `call`), `files.ts` |
 | Engine controller | `app/engine.ts`: the machine's one caller; feeds events in, performs the effects, writes `engine` from the machine's state | `engine`, the reset banner, the Break timer and the download's abort handle | machine, transport, tab lock, `files.ts`, `run.ts` (through its handlers) |
 | Machine | `engine/machine.ts` | the state, the tickets, the crash count | nobody: it is a function |
@@ -126,6 +126,7 @@ What each file owns and talks to: section 2.2.
 | Transport | `engine/client.ts`: numbered messages, the interrupt buffer, the cache (`cached`, `download`, `build`, `forgetDownload`); decides nothing | the `Worker`, its pending calls, the interrupt buffer | worker (messages), store (`attach`), Cache |
 | Worker | `engine/worker.ts`: the table of op handlers; answers one message at a time | Pyodide, the `/work` mirror | its start, its dispatch, Python, the mirror |
 | Worker's dispatch | `engine/worker-dispatch.ts`: the worker's `onmessage` over the table (`OpTable`, typed from `Ops`): the queue, the answer `{id, result}` or `{id, error, name, type?}`; given `post` by the worker | the op queue | nobody |
+| Worker's graphics part | `engine/worker-graphics.ts`: the record of a lazy snapshot's graphics part (where it is, the idle clock, the unpack as one state with its copy, damage, this run's ask) and its work: a waiting graph (`waitGraphics`), the browser's decoder, the idle steps; its decisions are `lazy-part.ts`'s pure functions; given Pyodide, the engine and `post` by the worker | the record | the shared region (read only), Python |
 | Worker's start | `engine/worker-boot.ts`: Python from the snapshot or the normal boot (`mount`), the wheels and the engine (`boot`); given the stage callback and the startup record by the worker, posts nothing | nothing | Cache (read only), the network, Python |
 | `/work` mirror | `engine/work-mirror.ts`: copies the store into `/work` at `mount`, takes the journal on `sync`, writes a run's changes back; given Pyodide's file system by the worker | `/work`, `unsaved` | store (its own connection) |
 | Python | `src/dofile/browser.py`: the functions the worker calls; each returns JSON text | one `Engine` | `engine.py`, OpenDTA |
@@ -458,7 +459,7 @@ What Part 3 listed before step 3.5 was answered by its steps A to D. What remain
 7. **JSON text with base64 images.** Simple and one parse, but every graph is encoded in Python, embedded in a string,
    parsed, and held as base64 in page state (up to 20).
 8. **The controller reaches into the UI.** The effects `show-dialog` and `close-dialog` write the `dialog` signal, and
-   `close-dialog` asks the editor for focus through the `editorAsked` signal (`app/editor/commands.ts`).
+   `close-dialog` asks the editor for focus through the focus registry's `ask("editor")` (`app/ui/focus-targets.ts`).
 9. **Module-level state in the controllers.** `connectEngine`, `connectRun` and `connectFiles` set module variables; the tests
    reconnect them (a second `connectEngine` replaces the wiring, one record that holds the performer and its handles, and
    clears the machine, the queue and the drop record). One engine per page is held by a
