@@ -33,7 +33,7 @@ jobs:
       UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       - run: uv sync --extra mcp
       - run: uv run poe test
 
@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the tag-is-on-main check needs history
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
 
       - name: The tag is on main and matches pyproject.toml
         run: |
@@ -99,5 +99,5 @@ jobs:
         with:
           name: dist
           path: dist/
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       - run: uv publish --trusted-publishing always dist/*

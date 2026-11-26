@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       # pinned, so a new rule cannot fail an unrelated pull request; bump it on purpose
       - run: uvx --from actionlint-py==1.7.12.25 actionlint
       - run: shellcheck .github/scripts/*.sh   # the scripts the workflows call (actionlint checks only the inline ones)
