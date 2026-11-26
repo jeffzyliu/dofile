@@ -60,7 +60,7 @@ jobs:
       UV_PYTHON: "3.14"
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       - run: uv sync --extra mcp
       - run: uv run poe lint   # ruff format --check, then ruff check
 
@@ -82,7 +82,7 @@ jobs:
       UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       - run: uv sync --extra mcp
       - run: uv run poe ci   # everything, including the slow Stata comparison
 
