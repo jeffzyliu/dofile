@@ -17,7 +17,7 @@ inputs:   # the addresses the two builds link each other by (web/scripts/urls.ts
 runs:
   using: composite
   steps:
-    - uses: astral-sh/setup-uv@v10.3.3
+    - uses: astral-sh/setup-uv@v10.4.0
     - uses: actions/setup-node@v7
       with:
         node-version: 26
